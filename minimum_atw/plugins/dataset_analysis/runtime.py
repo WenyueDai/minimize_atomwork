@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -8,6 +9,14 @@ import pyarrow.parquet as pq
 
 from . import DATASET_ANALYSIS_REGISTRY, DEFAULT_DATASET_ANALYSES, DatasetAnalysisContext
 from ...core.registry import instantiate_unit
+
+
+def _read_dataset_metadata(out_dir: Path) -> dict[str, object]:
+    for filename in ("run_metadata.json", "dataset_metadata.json"):
+        path = out_dir / filename
+        if path.exists():
+            return json.loads(path.read_text())
+    return {}
 
 
 def _read_output_table(
@@ -49,12 +58,18 @@ def analyze_dataset_outputs(
         raise FileNotFoundError(f"Missing interfaces table: {interfaces_path}")
 
     analysis_dir = out_dir / "dataset_analysis"
+    if analysis_dir.exists():
+        shutil.rmtree(analysis_dir)
     analysis_dir.mkdir(parents=True, exist_ok=True)
 
     analysis_names = tuple(dataset_analyses or DEFAULT_DATASET_ANALYSES)
-    interface_counts = _read_output_table(out_dir, "interfaces", columns=["path"])
+    metadata = _read_dataset_metadata(out_dir)
+    metadata_counts = metadata.get("counts") if isinstance(metadata.get("counts"), dict) else {}
+    n_interfaces = metadata_counts.get("interfaces")
+    if n_interfaces is None:
+        n_interfaces = len(_read_output_table(out_dir, "interfaces", columns=["path"]))
     summary: dict[str, int | str] = {
-        "n_interfaces": int(len(interface_counts)),
+        "n_interfaces": int(n_interfaces),
         "dataset_analyses": ",".join(analysis_names),
     }
     cache: dict[tuple[str, tuple[str, ...]], pd.DataFrame] = {}

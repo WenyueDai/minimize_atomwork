@@ -51,6 +51,7 @@ class IntegrationSmokeTests(unittest.TestCase):
                         "roles": {"binder": ["A"], "target": ["B"]},
                         "interface_pairs": [["binder", "target"]],
                         "plugins": ["identity"],
+                        "keep_intermediate_outputs": True,
                     },
                     sort_keys=False,
                 )
@@ -83,6 +84,12 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(metadata["merge_compatibility"]["plugins"], ["identity"])
             self.assertIn("structures", metadata["table_columns"])
             self.assertIn("id__n_atoms_total", metadata["table_columns"]["structures"])
+
+            identity_plugin_dir = out_dir / "_plugins" / "identity"
+            self.assertTrue((identity_plugin_dir / "structures.parquet").exists())
+            self.assertTrue((identity_plugin_dir / "chains.parquet").exists())
+            self.assertTrue((identity_plugin_dir / "roles.parquet").exists())
+            self.assertFalse((identity_plugin_dir / "interfaces.parquet").exists())
 
 
 if __name__ == "__main__":

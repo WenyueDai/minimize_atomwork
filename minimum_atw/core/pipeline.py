@@ -56,8 +56,10 @@ def _write_stage_outputs(
     tables: dict[str, pd.DataFrame],
     status_rows: list[dict[str, Any]],
     bad_rows: list[dict[str, Any]],
+    *,
+    skip_empty_tables: bool = False,
 ) -> dict[str, int]:
-    _write_tables(out_dir, tables)
+    _write_tables(out_dir, tables, skip_empty=skip_empty_tables)
     _write_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
     _write_frame(out_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
     return {
@@ -342,6 +344,7 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
             plugin_tables.finalize(),
             status_rows.finalize().to_dict(orient="records"),
             bad_rows.finalize().to_dict(orient="records"),
+            skip_empty_tables=True,
         )
     finally:
         plugin_tables.close()

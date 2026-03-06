@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -99,6 +100,55 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             self.assertEqual(summary["dataset_analyses"], "interface_summary")
             self.assertEqual(len(result), 1)
             self.assertEqual(result.iloc[0]["pair"], "vh__antigen")
+
+    def test_runtime_clears_stale_outputs_and_uses_metadata_counts(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
+            out_dir = Path(tmp_dir)
+            analysis_dir = out_dir / "dataset_analysis"
+            analysis_dir.mkdir()
+            (analysis_dir / "stale.parquet").write_text("old")
+
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "pair": "vh__antigen",
+                        "role_left": "vh",
+                        "role_right": "antigen",
+                    }
+                ]
+            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "role": "vh",
+                        "abseq__cdr1_sequence": "AAA",
+                        "abseq__cdr2_sequence": "BBB",
+                        "abseq__cdr3_sequence": "CCC",
+                        "rolseq__sequence": "AAABBBCCC",
+                    }
+                ]
+            ).to_parquet(out_dir / "roles.parquet", index=False)
+            (out_dir / "run_metadata.json").write_text(
+                json.dumps(
+                    {
+                        "output_kind": "run",
+                        "counts": {"interfaces": 7},
+                    }
+                )
+            )
+
+            summary = analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=("cdr_entropy",),
+            )
+
+            self.assertEqual(summary["n_interfaces"], 7)
+            self.assertFalse((analysis_dir / "stale.parquet").exists())
+            self.assertTrue((analysis_dir / "cdr_entropy.parquet").exists())
 
 
 if __name__ == "__main__":

@@ -129,10 +129,18 @@ def stack_table_frames(frames: list[pd.DataFrame], table_name: str) -> pd.DataFr
     return sort_frame(combined, table_name)
 
 
-def write_tables(dir_path: Path, tables: dict[str, pd.DataFrame]) -> None:
+def write_tables(
+    dir_path: Path,
+    tables: dict[str, pd.DataFrame],
+    *,
+    skip_empty: bool = False,
+) -> None:
     dir_path.mkdir(parents=True, exist_ok=True)
     for table_name in TABLE_NAMES:
-        tables[table_name].to_parquet(dir_path / f"{table_name}{TABLE_SUFFIX}", index=False)
+        frame = tables[table_name]
+        if skip_empty and frame.empty:
+            continue
+        frame.to_parquet(dir_path / f"{table_name}{TABLE_SUFFIX}", index=False)
 
 
 def write_frame(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
