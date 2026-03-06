@@ -54,6 +54,19 @@ def prepare_chunk_input_dir(chunk_input_dir: Path, chunk_paths: list[Path]) -> N
 
 
 def prepare_context(source_path: Path, structure_path: Path, cfg: Config) -> Context:
+    """Create a Context from a structure file.
+    
+    Args:
+        source_path: Original source PDB/CIF file path (for provenance tracking).
+            This is recorded in the context and database rows.
+        structure_path: Actual file to load (may be same as source_path or a cached prepared file).
+            If keep_prepared_structures=True, this may point to a cached prepared structure.
+            If keep_prepared_structures=False, this equals source_path (load each time).
+        cfg: Config with assembly_id and role mappings
+        
+    Returns:
+        Context with loaded AtomArray and role views built from cfg
+    """
     aa = load_structure(structure_path)
     ctx = Context(
         path=str(source_path.resolve()),

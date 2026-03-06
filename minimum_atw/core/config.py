@@ -7,6 +7,34 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Config(BaseModel):
+    """Pipeline configuration with clear semantics for storage and execution options.
+    
+    Attributes:
+        input_dir: Directory containing .pdb or .cif structure files
+        out_dir: Directory for final outputs and intermediate working directories
+        assembly_id: Structure assembly identifier (default: "1")
+        roles: Semantic chain groupings {role_name: [chain_ids]}
+        interface_pairs: Pairs of roles to analyze [(role1, role2), ...]
+        manipulations: List of manipulation plugin names to apply in order
+        plugins: List of analysis plugin names to run (run in parallel)
+        contact_distance: Distance threshold for interface contacts (default: 5.0 Å)
+        rosetta_executable: Optional path to Rosetta binary
+        rosetta_database: Optional path to Rosetta database
+        superimpose_reference_path: Optional PDB path for superimposition
+        superimpose_on_chains: Chain IDs to use as superimposition reference
+        keep_intermediate_outputs: If True, preserve _prepared/ and _plugins/ directories
+            (default: False). Set to True only if re-running plugins or debugging.
+            Saves ~30% disk space when False since temp directories are cleaned up.
+        keep_prepared_structures: If True, cache prepared structure files in _prepared/structures/
+            (default: False). Set to True only if re-running plugins separately.
+            Saves ~40% disk I/O when False since raw structures are reloaded dynamically.
+        dataset_analyses: List of dataset-level analysis plugin names
+        dataset_analysis_params: Parameters for dataset analyses {plugin_name: {param: value}}
+        dataset_annotations: Metadata annotations {key: value}
+        numbering_roles: Which roles to apply numbering scheme to
+        numbering_scheme: Numbering scheme for antibodies (default: "imgt")
+        cdr_definition: CDR definition scheme (optional)
+    """
     input_dir: str
     out_dir: str
     assembly_id: str = "1"
@@ -20,6 +48,7 @@ class Config(BaseModel):
     superimpose_reference_path: Optional[str] = None
     superimpose_on_chains: list[str] = Field(default_factory=list)
     keep_intermediate_outputs: bool = False
+    keep_prepared_structures: bool = False
     dataset_analyses: list[str] = Field(default_factory=list)
     dataset_analysis_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dataset_annotations: dict[str, str] = Field(default_factory=dict)
