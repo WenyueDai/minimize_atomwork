@@ -16,6 +16,26 @@ python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_anti
 python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 ```
 
+Staged manual chunk workflow:
+
+```bash
+python -m minimum_atw.cli prepare --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin identity
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin chain_stats
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin role_sequences
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin role_stats
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin interface_contacts
+python -m minimum_atw.cli merge --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+
+python -m minimum_atw.cli prepare --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin identity
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin chain_stats
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin role_sequences
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin role_stats
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin interface_contacts
+python -m minimum_atw.cli merge --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+```
+
 Merge the finished chunk outputs:
 
 ```bash
@@ -56,3 +76,88 @@ python -m minimum_atw.cli run-chunked \
 ```
 
 That command creates temporary chunks internally, runs them, merges the chunk outputs into the final `out_dir`, and removes the temporary chunk workspace afterward.
+
+Slurm manual chunk example:
+
+```bash
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk-01
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /path/to/minimum_atomworks
+source .venv/bin/activate
+
+python -m minimum_atw.cli run \
+  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+EOF
+
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk-02
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /path/to/minimum_atomworks
+source .venv/bin/activate
+
+python -m minimum_atw.cli run \
+  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+EOF
+```
+
+Slurm merge job:
+
+```bash
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk-merge
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=01:00:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /path/to/minimum_atomworks
+source .venv/bin/activate
+
+python -m minimum_atw.cli merge-datasets \
+  --out-dir /path/to/out_antibody_antigen_merged \
+  --source-out-dir /path/to/out_chunk_antibody_antigen_01 \
+  --source-out-dir /path/to/out_chunk_antibody_antigen_02
+EOF
+```
+
+Slurm staged chunk example:
+
+```bash
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk-01-staged
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=04:00:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /path/to/minimum_atomworks
+source .venv/bin/activate
+
+CONFIG=minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+
+python -m minimum_atw.cli prepare --config "$CONFIG"
+python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin identity
+python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin chain_stats
+python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
+python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
+python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
+python -m minimum_atw.cli merge --config "$CONFIG"
+EOF
+```

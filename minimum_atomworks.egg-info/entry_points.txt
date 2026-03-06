@@ -1,0 +1,3 @@
+[console_scripts]
+minimum-atomworks = minimum_atw.cli:main
+minimum_atw = minimum_atw.cli:main

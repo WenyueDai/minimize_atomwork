@@ -6,7 +6,17 @@ build-backend = "setuptools.build_meta"
 name = "minimum-atomworks"
 version = "0.1.0"
 description = "Minimal plugin-style structural metadata framework inspired by atw_pp"
+readme = "README.md"
 requires-python = ">=3.11"
+keywords = ["protein", "structure", "antibody", "vhh", "parquet", "bioinformatics"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "License :: Other/Proprietary License",
+  "Operating System :: OS Independent",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
 dependencies = [
   "biotite",
   "numpy",
@@ -16,5 +26,22 @@ dependencies = [
   "pyyaml",
 ]
 
+[project.optional-dependencies]
+antibody = ["abnumber"]
+
 [project.scripts]
 minimum-atomworks = "minimum_atw.cli:main"
+minimum_atw = "minimum_atw.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["minimum_atw*"]
+
+[tool.setuptools.package-data]
+minimum_atw = [
+  "examples/**/*.yaml",
+  "examples/**/*.md",
+  "examples/**/*.ipynb",
+]

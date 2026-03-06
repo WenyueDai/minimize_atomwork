@@ -1,3 +1,25 @@
+Metadata-Version: 2.1
+Name: minimum-atomworks
+Version: 0.1.0
+Summary: Minimal plugin-style structural metadata framework inspired by atw_pp
+Keywords: protein,structure,antibody,vhh,parquet,bioinformatics
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: License :: Other/Proprietary License
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Bio-Informatics
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: biotite
+Requires-Dist: numpy
+Requires-Dist: pandas
+Requires-Dist: pydantic>=2.0
+Requires-Dist: pyarrow
+Requires-Dist: pyyaml
+Provides-Extra: antibody
+Requires-Dist: abnumber; extra == "antibody"
+
 # minimum_atomworks
 
 `minimum_atomworks` is a small structural-analysis package built around four normalized tables:

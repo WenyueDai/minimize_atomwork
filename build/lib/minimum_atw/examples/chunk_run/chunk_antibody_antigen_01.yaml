@@ -1,0 +1,50 @@
+input_dir: "/home/eva/chunks/antibody_antigen/chunk_01"
+out_dir: "/home/eva/minimum_atomworks/out_chunk_antibody_antigen_01"
+assembly_id: "1"
+
+roles:
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
+  antibody: ["B", "C"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+manipulations:
+  - "center_on_origin"
+  - "superimpose_homology"
+
+plugins:
+  - "identity"
+  - "chain_stats"
+  - "role_sequences"
+  - "role_stats"
+  - "interface_contacts"
+  - "antibody_cdr_lengths"
+  - "antibody_cdr_sequences"
+
+contact_distance: 5.0
+rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
+rosetta_database: "/opt/rosetta/main/database"
+superimpose_reference_path: "/home/eva/chunks/antibody_antigen/reference/7e9b_reference_rank_001.pdb"
+superimpose_on_chains: ["A", "B", "C"]
+# Chunk runs keep only final outputs in each chunk out_dir.
+keep_intermediate_outputs: false
+
+dataset_analysis: false
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cdr_entropy"
+
+numbering_roles:
+  - "vh"
+  - "vl"
+
+dataset_annotations:
+  project: "atomworks_chunked_example"
+  dataset_name: "antibody_antigen_chunk_01"
+  modality: "antibody_antigen"
+  chunk_id: "01"
+  source: "local chunked input"
