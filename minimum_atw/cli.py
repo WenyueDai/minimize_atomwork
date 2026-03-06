@@ -17,6 +17,7 @@ from .core.pipeline import (
     run_chunked_pipeline,
     run_pipeline,
     run_plugin,
+    run_plugins,
 )
 from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
 
@@ -32,6 +33,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Prepare, run all configured plugins, then merge outputs")
     run_parser.add_argument("--config", required=True, help="Path to YAML config")
+    run_parser.add_argument("--checkpoint-enabled", dest="checkpoint_enabled", action="store_true",
+                            help="Enable checkpointing (overrides config file)")
 
     run_chunked_parser = subparsers.add_parser("run-chunked", help="Split one input_dir into chunks, run them in parallel, then merge final outputs")
     run_chunked_parser.add_argument("--config", required=True, help="Path to YAML config")
@@ -49,13 +52,25 @@ def _build_parser() -> argparse.ArgumentParser:
 
     prepare_parser = subparsers.add_parser("prepare", help="Apply manipulations once, cache prepared structures, and write base tables")
     prepare_parser.add_argument("--config", required=True, help="Path to YAML config")
+    prepare_parser.add_argument("--checkpoint-enabled", dest="checkpoint_enabled", action="store_true",
+                                help="Enable checkpointing (overrides config file)")
 
     plugin_parser = subparsers.add_parser("run-plugin", help="Run one plugin against prepared structures")
     plugin_parser.add_argument("--config", required=True, help="Path to YAML config")
     plugin_parser.add_argument("--plugin", required=True, help="Plugin name to run")
+    plugin_parser.add_argument("--checkpoint-enabled", dest="checkpoint_enabled", action="store_true",
+                                help="Enable checkpointing (overrides config file)")
+
+    plugins_parser = subparsers.add_parser("run-plugins", help="Run multiple plugins against prepared structures (incremental development workflow)")
+    plugins_parser.add_argument("--config", required=True, help="Path to YAML config")
+    plugins_parser.add_argument("--plugins", required=True, nargs="+", help="Plugin names to run (space separated)")
+    plugins_parser.add_argument("--checkpoint-enabled", dest="checkpoint_enabled", action="store_true",
+                                help="Enable checkpointing (overrides config file)")
 
     merge_parser = subparsers.add_parser("merge", help="Merge prepared tables with plugin outputs")
     merge_parser.add_argument("--config", required=True, help="Path to YAML config")
+    merge_parser.add_argument("--checkpoint-enabled", dest="checkpoint_enabled", action="store_true",
+                              help="Enable checkpointing (only affects run-plugin/prepare runs when invoked later)")
 
     merge_datasets_parser = subparsers.add_parser("merge-datasets", help="Merge multiple completed out_dirs into one final dataset")
     merge_datasets_parser.add_argument("--out-dir", required=True, help="Output directory for the merged dataset")
@@ -115,6 +130,8 @@ def main() -> None:
 
     if args.command == "prepare":
         cfg = _load_config(args.config)
+        if getattr(args, "checkpoint_enabled", False):
+            cfg = cfg.model_copy(update={"checkpoint_enabled": True})
         counts = prepare_outputs(cfg)
         _print_counts("Prepare complete", counts)
         return
@@ -142,12 +159,24 @@ def main() -> None:
 
     if args.command == "run-plugin":
         cfg = _load_config(args.config)
+        if getattr(args, "checkpoint_enabled", False):
+            cfg = cfg.model_copy(update={"checkpoint_enabled": True})
         counts = run_plugin(cfg, args.plugin)
         _print_counts(f"Plugin run complete: {args.plugin}", counts)
         return
 
+    if args.command == "run-plugins":
+        cfg = _load_config(args.config)
+        if getattr(args, "checkpoint_enabled", False):
+            cfg = cfg.model_copy(update={"checkpoint_enabled": True})
+        counts = run_plugins(cfg, args.plugins)
+        _print_counts(f"Plugins run complete: {', '.join(args.plugins)}", counts)
+        return
+
     if args.command == "merge":
         cfg = _load_config(args.config)
+        if getattr(args, "checkpoint_enabled", False):
+            cfg = cfg.model_copy(update={"checkpoint_enabled": True})
         counts = merge_outputs(cfg)
         _print_counts("Merge complete", counts)
         return
@@ -173,6 +202,8 @@ def main() -> None:
         return
 
     cfg = _load_config(args.config)
+    if getattr(args, "checkpoint_enabled", False):
+        cfg = cfg.model_copy(update={"checkpoint_enabled": True})
     counts = run_pipeline(cfg)
     _print_counts("Run complete", counts)
 

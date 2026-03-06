@@ -75,6 +75,62 @@ def _write_stage_outputs(
     }
 
 
+def _append_stage_outputs(
+    out_dir: Path,
+    tables: dict[str, pd.DataFrame],
+    status_rows: list[dict[str, Any]],
+    bad_rows: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Merge the given rows into existing outputs inside *out_dir*.
+
+    This helper is used by the checkpointing logic. For each table it reads any
+    preexisting file and concatenates the new rows, dropping duplicates by the
+    appropriate key columns. Status and bad rows are handled similarly. The
+    caller may pass the same data multiple times; duplicates are removed.
+
+    Returns the updated overall counts (after merging), mirroring the
+    ``_write_stage_outputs`` return value.
+    """
+    # ensure directory exists before touching files
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # tables
+    for table_name, new_frame in tables.items():
+        if new_frame.empty:
+            continue
+        path = out_dir / f"{table_name}{TABLE_SUFFIX}"
+        if path.exists():
+            existing = _read_table_parquet(path, table_name)
+            combined = pd.concat([existing, new_frame], ignore_index=True, sort=False)
+            # drop duplicates on identity keys
+            combined = combined.drop_duplicates(subset=KEY_COLS[table_name])
+        else:
+            combined = new_frame
+        combined.to_parquet(path, index=False)
+
+    # status and bad
+    def _append_frame_to(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
+        if not rows:
+            return
+        if path.exists():
+            existing = _read_frame(path, columns)
+            combined = pd.concat([existing, pd.DataFrame(rows, columns=columns)], ignore_index=True, sort=False)
+            combined = combined.drop_duplicates()
+        else:
+            combined = pd.DataFrame(rows, columns=columns)
+        combined.to_parquet(path, index=False)
+
+    _append_frame_to(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+    _append_frame_to(out_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
+
+    # compute counts from resulting files
+    final_tables = {table_name: _read_table_parquet(out_dir / f"{table_name}{TABLE_SUFFIX}", table_name)
+                    for table_name in TABLE_NAMES}
+    final_status = _read_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)
+    final_bad = _read_frame(out_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS)
+    return {**_count_tables(final_tables), "status": len(final_status), "bad": len(final_bad)}
+
+
 def _merge_tracking_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
@@ -216,6 +272,132 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
     manipulation_units = [instantiate_unit(MANIPULATION_REGISTRY[name]) for name in cfg.manipulations]
     plugins_dir = _plugins_dir(out_dir)
 
+    # determine previously processed paths when checkpointing
+    done_paths: set[str] = set()
+    manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
+    if cfg.checkpoint_enabled and manifest_ckpt.exists():
+        import json
+
+        with manifest_ckpt.open() as fh:
+            for line in fh:
+                if not line.strip():
+                    continue
+                row = json.loads(line)
+                done_paths.add(row["path"])
+    
+    # if not checkpointing we start from a clean slate
+    if not cfg.checkpoint_enabled:
+        if prepared_dir.exists():
+            shutil.rmtree(prepared_dir)
+        if plugins_dir.exists():
+            shutil.rmtree(plugins_dir)
+    else:
+        # ensure output dirs exist but keep their previous contents
+        prepared_dir.mkdir(parents=True, exist_ok=True)
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        if cfg.keep_prepared_structures:
+            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+
+    # helper to append results on the fly when checkpointing
+    def _flush_single(
+        base_rows: dict[str, list[dict[str, Any]]],
+        manip_rows: dict[str, list[dict[str, Any]]],
+        status_list: list[dict[str, Any]],
+        bad_list: list[dict[str, Any]],
+    ) -> None:
+        # combine base + manipulation data
+        all_tables: dict[str, pd.DataFrame] = {}
+        for table in TABLE_NAMES:
+            rows = list(base_rows.get(table, []))
+            rows.extend(manip_rows.get(table, []))
+            all_tables[table] = pd.DataFrame(rows) if rows else pd.DataFrame()
+        _append_stage_outputs(prepared_dir, all_tables, status_list, bad_list)
+
+    # if we are resuming, we may already have some existing outputs; counts will
+    # be calculated from disk at the end, so we don't track during the loop.
+
+    # when checkpointing we don't use buffers -- we flush every structure
+    if cfg.checkpoint_enabled:
+        # ensure structures dir exists if caching
+        if cfg.keep_prepared_structures:
+            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+
+        for source_path in _discover(input_dir):
+            src_str = str(source_path.resolve())
+            if src_str in done_paths:
+                continue
+
+            try:
+                ctx = _prepare_context(source_path, source_path, cfg)
+            except Exception as exc:
+                _append_stage_outputs(
+                    prepared_dir,
+                    {t: pd.DataFrame() for t in TABLE_NAMES},
+                    [],
+                    [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}],
+                )
+                done_paths.add(src_str)
+                continue
+
+            manipulation_ok = True
+            manip_tables: dict[str, list[dict[str, Any]]] = {t: [] for t in TABLE_NAMES}
+            status_list: list[dict[str, Any]] = []
+            bad_list: list[dict[str, Any]] = []
+            for unit in manipulation_units:
+                manipulation_ok = _run_unit(ctx, unit, manip_tables, status_list) and manipulation_ok
+            if not manipulation_ok:
+                bad_list.append({"path": ctx.path, "error": "prepare_failed"})
+                _append_stage_outputs(prepared_dir, {t: pd.DataFrame() for t in TABLE_NAMES}, status_list, bad_list)
+                done_paths.add(src_str)
+                continue
+
+            base_rows = _base_rows_for_context(ctx)
+
+            # record manifest row
+            prepared_path = (
+                prepared_structures_dir / _prepared_filename(source_path)
+                if cfg.keep_prepared_structures
+                else None
+            )
+            manifest_entry = {
+                "path": ctx.path,
+                "prepared_path": str(prepared_path.resolve()) if prepared_path else src_str,
+            }
+            # append to checkpoint log
+            prepared_dir.mkdir(parents=True, exist_ok=True)
+            with manifest_ckpt.open("a") as fh:
+                fh.write(json.dumps(manifest_entry) + "\n")
+
+            # write structure file
+            if cfg.keep_prepared_structures:
+                save_structure(prepared_path, ctx.aa)
+
+            # flush results for this source
+            _flush_single(base_rows, manip_tables, status_list, bad_list)
+            done_paths.add(src_str)
+
+        # after loop convert manifest log to final parquet manifest
+        if manifest_ckpt.exists():
+            import json
+            import pandas as pd
+
+            records: list[dict[str, str]] = []
+            with manifest_ckpt.open() as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        records.append(json.loads(line))
+            _write_frame(_prepared_manifest_path(out_dir), records, MANIFEST_COLS)
+
+        # compute final counts by reading files
+        counts = {}
+        for table in TABLE_NAMES:
+            counts[table] = len(_read_table_parquet(prepared_dir / f"{table}{TABLE_SUFFIX}", table))
+        counts["status"] = len(_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
+        counts["bad"] = len(_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
+        return counts
+
+    # non-checkpointing original behavior
     if prepared_dir.exists():
         shutil.rmtree(prepared_dir)
     if plugins_dir.exists():
@@ -349,35 +531,149 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
     plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
     manifest = _load_prepared_manifest(out_dir)
 
-    if plugin_dir.exists():
-        shutil.rmtree(plugin_dir)
+    # checkpointing logic: if enabled, read existing results and avoid
+    # deleting the plugin directory so that work can be resumed.
+    processed: set[str] = set()
+    counts: dict[str, int]
+    if cfg.checkpoint_enabled and plugin_dir.exists():
+        # build processed set from previous status log
+        status_path = plugin_dir / f"plugin_status{TABLE_SUFFIX}"
+        if status_path.exists():
+            df = pd.read_parquet(status_path)
+            processed = set(df["path"].tolist())
+        # prepopulate counts from existing files
+        counts = {table: 0 for table in TABLE_NAMES}
+        for table in TABLE_NAMES:
+            path = plugin_dir / f"{table}{TABLE_SUFFIX}"
+            if path.exists():
+                counts[table] = len(pd.read_parquet(path))
+        counts["status"] = len(pd.read_parquet(status_path)) if status_path.exists() else 0
+        bad_path = plugin_dir / f"bad_files{TABLE_SUFFIX}"
+        counts["bad"] = len(pd.read_parquet(bad_path)) if bad_path.exists() else 0
+    else:
+        # fresh start
+        if plugin_dir.exists():
+            shutil.rmtree(plugin_dir)
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        processed = set()
+        counts = {table: 0 for table in TABLE_NAMES}
+        counts.update(status=0, bad=0)
 
-    plugin_tables = TableBuffer()
-    status_rows = FrameBuffer(columns=STATUS_COLS)
-    bad_rows = FrameBuffer(columns=BAD_COLS)
+    # helper to append to parquet tables for each structure
+    def _append_rows(path: Path, rows: list[dict[str, Any]], columns: list[str] | None = None) -> None:
+        if not rows:
+            return
+        if columns:
+            df = pd.DataFrame(rows, columns=columns)
+        else:
+            df = pd.DataFrame(rows)
+        if path.exists():
+            existing = pd.read_parquet(path)
+            df = pd.concat([existing, df], ignore_index=True, sort=False)
+            df = df.drop_duplicates()
+        df.to_parquet(path, index=False)
 
-    try:
-        for row in manifest.itertuples(index=False):
-            source_path = Path(row.path)
-            prepared_path = Path(row.prepared_path)
-            try:
-                ctx = _prepare_context(source_path, prepared_path, cfg)
-            except Exception as exc:
-                bad_rows.add({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
-                continue
-            _run_unit(ctx, plugin, plugin_tables, status_rows)
+    # iterate only unprocessed structures
+    for row in manifest.itertuples(index=False):
+        source_path = Path(row.path)
+        if str(source_path) in processed:
+            continue
+        prepared_path = Path(row.prepared_path)
+        try:
+            ctx = _prepare_context(source_path, prepared_path, cfg)
+        except Exception as exc:
+            _append_rows(plugin_dir / f"bad_files{TABLE_SUFFIX}", [{"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"}], BAD_COLS)
+            counts["bad"] += 1
+            processed.add(str(source_path))
+            continue
 
-        return _write_stage_outputs(
-            plugin_dir,
-            plugin_tables.finalize(),
-            status_rows.finalize().to_dict(orient="records"),
-            bad_rows.finalize().to_dict(orient="records"),
-            skip_empty_tables=True,
-        )
-    finally:
-        plugin_tables.close()
-        status_rows.close()
-        bad_rows.close()
+        # collect output for this structure
+        local_tables: dict[str, list[dict[str, Any]]] = {t: [] for t in TABLE_NAMES}
+        local_status: list[dict[str, Any]] = []
+        local_bad: list[dict[str, Any]] = []
+        _run_unit(ctx, plugin, local_tables, local_status)
+
+        # flush results to disk immediately
+        for table_name, rows in local_tables.items():
+            if rows:
+                _append_rows(plugin_dir / f"{table_name}{TABLE_SUFFIX}", rows, None)
+                counts[table_name] += len(rows)
+        _append_rows(plugin_dir / f"plugin_status{TABLE_SUFFIX}", local_status, STATUS_COLS)
+        counts["status"] += len(local_status)
+        if local_bad:
+            _append_rows(plugin_dir / f"bad_files{TABLE_SUFFIX}", local_bad, BAD_COLS)
+            counts["bad"] += len(local_bad)
+
+        processed.add(str(source_path))
+
+    return counts
+
+
+def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
+    """
+    Run multiple plugins against prepared structures.
+    
+    Phase 2a (incremental) of the pipeline. Requires prepare_outputs to have been called first.
+    
+    This is the incremental plugin development workflow - run multiple plugins efficiently
+    against the same prepared structures without re-preparation. Each plugin runs in sequence
+    but shares the expensive structure loading and preparation work.
+    
+    1. Loads prepared structures from _prepared/ once
+    2. For each plugin in sequence:
+       - Iterates through each prepared structure
+       - Runs plugin, collecting output rows
+       - Records status (ok/skipped/failed)
+       - Writes plugin-specific tables
+    3. Returns combined counts across all plugins
+    
+    Can be called during plugin development to test multiple plugins quickly.
+    
+    Args:
+        cfg: Config with out_dir, superimpose/rosetta/interface settings
+        plugin_names: List of plugin names to run (must exist in PLUGIN_REGISTRY)
+        
+    Returns:
+        dict with combined row counts across all plugins:
+            {
+                "structures": int,     # total structures rows across all plugins
+                "chains": int,         # total chains rows across all plugins
+                "roles": int,          # total roles rows across all plugins
+                "interfaces": int,     # total interfaces rows across all plugins
+                "status": int,         # all status entries (across all plugins)
+                "bad": int,            # structures that failed for any plugin
+            }
+            
+    Raises:
+        KeyError: If any plugin_name not found in PLUGIN_REGISTRY
+        FileNotFoundError: If prepared outputs don't exist
+        
+    Outputs:
+        - _plugins/<plugin_name>/{structures,chains,roles,interfaces}.parquet for each plugin
+        - _plugins/<plugin_name>/plugin_status.parquet for each plugin
+        - _plugins/<plugin_name>/bad_files.parquet for each plugin
+    """
+    # Validate all plugins exist
+    missing_plugins = [name for name in plugin_names if name not in PLUGIN_REGISTRY]
+    if missing_plugins:
+        raise KeyError(f"Unknown plugins: {', '.join(missing_plugins)}")
+
+    out_dir = Path(cfg.out_dir).resolve()
+    manifest = _load_prepared_manifest(out_dir)
+    
+    # Track combined counts across all plugins
+    total_counts = {table: 0 for table in TABLE_NAMES}
+    total_counts.update(status=0, bad=0)
+    
+    # Run each plugin in sequence
+    for plugin_name in plugin_names:
+        print(f"Running plugin: {plugin_name}")
+        plugin_counts = run_plugin(cfg, plugin_name)
+        # Accumulate counts
+        for key, value in plugin_counts.items():
+            total_counts[key] += value
+    
+    return total_counts
 
 
 def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path) -> dict[str, int]:

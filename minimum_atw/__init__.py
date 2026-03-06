@@ -3,6 +3,7 @@ from __future__ import annotations
 __all__ = [
     "prepare_outputs",
     "run_plugin",
+    "run_plugins",
     "merge_outputs",
     "merge_dataset_outputs",
     "plan_chunked_pipeline",
@@ -17,6 +18,7 @@ def __getattr__(name: str):
     if name in {
         "prepare_outputs",
         "run_plugin",
+        "run_plugins",
         "merge_outputs",
         "merge_dataset_outputs",
         "plan_chunked_pipeline",
@@ -33,11 +35,13 @@ def __getattr__(name: str):
             run_chunked_pipeline,
             run_pipeline,
             run_plugin,
+            run_plugins,
         )
 
         namespace = {
             "prepare_outputs": prepare_outputs,
             "run_plugin": run_plugin,
+            "run_plugins": run_plugins,
             "merge_outputs": merge_outputs,
             "merge_dataset_outputs": merge_dataset_outputs,
             "plan_chunked_pipeline": plan_chunked_pipeline,

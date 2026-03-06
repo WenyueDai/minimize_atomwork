@@ -47,6 +47,15 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.numbering_scheme, "chothia")
         self.assertEqual(cfg.cdr_definition, "north")
 
+    def test_checkpoint_defaults_and_validation(self) -> None:
+        cfg = Config(input_dir="/tmp/in", out_dir="/tmp/out")
+        self.assertFalse(cfg.checkpoint_enabled)
+        self.assertEqual(cfg.checkpoint_interval, 100)
+
+        # interval must be positive
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", checkpoint_interval=0)
+
     def test_aho_requires_cdr_definition(self) -> None:
         with self.assertRaises(ValueError):
             Config(

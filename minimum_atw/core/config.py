@@ -34,6 +34,13 @@ class Config(BaseModel):
         numbering_roles: Which roles to apply numbering scheme to
         numbering_scheme: Numbering scheme for antibodies (default: "imgt")
         cdr_definition: CDR definition scheme (optional)
+        checkpoint_enabled: Whether to enable write-ahead checkpoints during long runs
+            (default: False). When True the pipeline persists each record as it is
+            produced so a subsequent invocation can continue after a failure instead
+            of starting over.
+        checkpoint_interval: Number of structures to process between checkpoint
+            flushes when checkpointing is enabled (default: 100). Smaller values
+            improve recovery granularity at the cost of additional I/O.
     """
     input_dir: str
     out_dir: str
@@ -55,6 +62,10 @@ class Config(BaseModel):
     numbering_roles: list[str] = Field(default_factory=list)
     numbering_scheme: str = "imgt"
     cdr_definition: Optional[str] = None
+
+    # checkpoint options
+    checkpoint_enabled: bool = False
+    checkpoint_interval: int = 100
 
     @field_validator(
         "manipulations",
@@ -168,4 +179,8 @@ class Config(BaseModel):
             )
         if self.numbering_scheme == "aho" and self.cdr_definition is None:
             raise ValueError("cdr_definition is required when numbering_scheme is 'aho'")
+
+        # checkpoint interval sanity
+        if self.checkpoint_interval < 1:
+            raise ValueError("checkpoint_interval must be at least 1")
         return self

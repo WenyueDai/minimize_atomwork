@@ -212,10 +212,35 @@ def prepared_filename(source_path: Path) -> str:
 
 
 def load_prepared_manifest(out_dir: Path) -> pd.DataFrame:
+    """Load the prepared manifest, with checkpoint fallback.
+
+    Normally the manifest is stored as a Parquet file. When the user enables
+    checkpointing, rows are also appended to a JSONL file (`manifest_checkpoint.jsonl`)
+    as each structure is prepared. If the Parquet manifest is missing (for
+    example, because a run crashed before it could be written), this helper will
+    read the JSONL log instead so downstream stages can start immediately.
+    """
     manifest_path = prepared_manifest_path(out_dir)
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"Prepared outputs not found: {prepared_dir(out_dir)}")
-    manifest = read_frame(manifest_path, MANIFEST_COLS)
+    if manifest_path.exists():
+        manifest = read_frame(manifest_path, MANIFEST_COLS)
+    else:
+        # fallback to JSON line log used during checkpointing
+        log_path = prepared_dir(out_dir) / "manifest_checkpoint.jsonl"
+        if not log_path.exists():
+            raise FileNotFoundError(f"Prepared outputs not found: {prepared_dir(out_dir)}")
+        import json
+
+        records: list[dict[str, str]] = []
+        with log_path.open() as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                records.append(json.loads(line))
+        import pandas as pd
+
+        manifest = pd.DataFrame(records)
+
     if manifest.duplicated(["path"]).any():
         raise ValueError("Prepared manifest contains duplicate source paths")
     return manifest
