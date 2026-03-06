@@ -9,8 +9,10 @@ import yaml
 from .core.config import Config
 from .core.extensions import EXTENSION_CLASSES, extension_catalog, extension_catalog_by_category
 from .core.pipeline import (
+    merge_planned_chunks,
     merge_dataset_outputs,
     merge_outputs,
+    plan_chunked_pipeline,
     prepare_outputs,
     run_chunked_pipeline,
     run_pipeline,
@@ -35,6 +37,15 @@ def _build_parser() -> argparse.ArgumentParser:
     run_chunked_parser.add_argument("--config", required=True, help="Path to YAML config")
     run_chunked_parser.add_argument("--chunk-size", required=True, type=int, help="Maximum number of structures per chunk")
     run_chunked_parser.add_argument("--workers", type=int, default=1, help="Number of chunk workers to run in parallel")
+
+    plan_chunks_parser = subparsers.add_parser("plan-chunks", help="Create deterministic chunk configs and inputs for scheduler-driven chunk execution")
+    plan_chunks_parser.add_argument("--config", required=True, help="Path to YAML config")
+    plan_chunks_parser.add_argument("--chunk-size", required=True, type=int, help="Maximum number of structures per chunk")
+    plan_chunks_parser.add_argument("--plan-dir", required=True, help="Output directory for the generated chunk plan")
+
+    merge_planned_parser = subparsers.add_parser("merge-planned-chunks", help="Merge outputs from a previously generated chunk plan")
+    merge_planned_parser.add_argument("--plan-dir", required=True, help="Directory created by plan-chunks")
+    merge_planned_parser.add_argument("--out-dir", help="Optional override for merged final output directory")
 
     prepare_parser = subparsers.add_parser("prepare", help="Apply manipulations once, cache prepared structures, and write base tables")
     prepare_parser.add_argument("--config", required=True, help="Path to YAML config")
@@ -112,6 +123,21 @@ def main() -> None:
         cfg = _load_config(args.config)
         counts = run_chunked_pipeline(cfg, chunk_size=args.chunk_size, workers=args.workers)
         _print_counts("Chunked run complete", counts)
+        return
+
+    if args.command == "plan-chunks":
+        cfg = _load_config(args.config)
+        counts = plan_chunked_pipeline(cfg, chunk_size=args.chunk_size, plan_dir=args.plan_dir)
+        _print_counts("Chunk plan complete", counts)
+        print(f"  plan_dir: {args.plan_dir}")
+        return
+
+    if args.command == "merge-planned-chunks":
+        counts = merge_planned_chunks(args.plan_dir, out_dir=args.out_dir)
+        _print_counts("Planned chunk merge complete", counts)
+        print(f"  plan_dir: {args.plan_dir}")
+        if args.out_dir:
+            print(f"  merged_to: {args.out_dir}")
         return
 
     if args.command == "run-plugin":

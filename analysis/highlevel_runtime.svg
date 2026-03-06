@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+  <title id="title">minimum_atomworks High-Level Runtime</title>
+  <desc id="desc">Runtime flow showing prepare, plugins, merge, dataset analyses, merge-datasets, and run-chunked.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#233042"/>
+    </marker>
+    <style>
+      .bg { fill: #f6f4ee; }
+      .title { font: 700 28px Helvetica, Arial, sans-serif; fill: #16202a; }
+      .subtitle { font: 400 15px Helvetica, Arial, sans-serif; fill: #4e5d6b; }
+      .stage { fill: #fffdf8; stroke: #233042; stroke-width: 2.5; rx: 16; ry: 16; }
+      .artifact { fill: #eef4fb; stroke: #4c6a88; stroke-width: 2; rx: 14; ry: 14; }
+      .compose { fill: #f2efe4; stroke: #786247; stroke-width: 2; rx: 14; ry: 14; }
+      .label { font: 700 20px Helvetica, Arial, sans-serif; fill: #16202a; }
+      .body { font: 400 15px Helvetica, Arial, sans-serif; fill: #22313f; }
+      .small { font: 400 14px Helvetica, Arial, sans-serif; fill: #4e5d6b; }
+      .line { stroke: #233042; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .softline { stroke: #4c6a88; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 8 8; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="900"/>
+
+  <text class="title" x="60" y="60">minimum_atomworks High-Level Runtime</text>
+  <text class="subtitle" x="60" y="88">prepare -> plugins -> merge -> dataset analyses, with chunked and dataset composition paths</text>
+
+  <rect class="artifact" x="80" y="150" width="250" height="90"/>
+  <text class="label" x="110" y="190">Input Structures</text>
+  <text class="body" x="110" y="218">PDB/CIF files</text>
+
+  <rect class="stage" x="420" y="130" width="290" height="150"/>
+  <text class="label" x="450" y="172">1. Prepare</text>
+  <text class="body" x="450" y="202">- load raw structures</text>
+  <text class="body" x="450" y="225">- apply manipulations once</text>
+  <text class="body" x="450" y="248">- write canonical base tables</text>
+  <text class="body" x="450" y="271">- cache prepared structures</text>
+
+  <rect class="artifact" x="810" y="105" width="360" height="120"/>
+  <text class="label" x="840" y="145">Prepared Workspace</text>
+  <text class="body" x="840" y="175">_prepared/structures.parquet</text>
+  <text class="body" x="840" y="198">_prepared/chains.parquet / roles.parquet / interfaces.parquet</text>
+  <text class="body" x="840" y="221">prepared_manifest.parquet + cached prepared structures</text>
+
+  <rect class="stage" x="420" y="355" width="290" height="130"/>
+  <text class="label" x="450" y="397">2. Plugins</text>
+  <text class="body" x="450" y="427">- read prepared structures</text>
+  <text class="body" x="450" y="450">- run record plugins</text>
+  <text class="body" x="450" y="473">- emit prefixed normalized-table columns</text>
+
+  <rect class="artifact" x="810" y="340" width="360" height="110"/>
+  <text class="label" x="840" y="380">Plugin Workspace</text>
+  <text class="body" x="840" y="410">_plugins/&lt;plugin&gt;/...</text>
+  <text class="body" x="840" y="433">only non-empty table parquet files are written</text>
+
+  <rect class="stage" x="420" y="560" width="290" height="120"/>
+  <text class="label" x="450" y="602">3. Merge</text>
+  <text class="body" x="450" y="632">- left-join plugin outputs into base tables</text>
+  <text class="body" x="450" y="655">- consolidate status and bad-file tracking</text>
+
+  <rect class="artifact" x="810" y="530" width="360" height="160"/>
+  <text class="label" x="840" y="570">Final Dataset</text>
+  <text class="body" x="840" y="600">structures.parquet / chains.parquet</text>
+  <text class="body" x="840" y="623">roles.parquet / interfaces.parquet</text>
+  <text class="body" x="840" y="646">plugin_status.parquet / bad_files.parquet</text>
+  <text class="body" x="840" y="669">run_metadata.json</text>
+
+  <rect class="stage" x="420" y="745" width="290" height="95"/>
+  <text class="label" x="450" y="785">4. Dataset Analyses</text>
+  <text class="body" x="450" y="815">aggregate analyses over final tables</text>
+
+  <rect class="artifact" x="810" y="745" width="360" height="95"/>
+  <text class="label" x="840" y="785">Analysis Outputs</text>
+  <text class="body" x="840" y="815">dataset_analysis/*.parquet + summary.json</text>
+
+  <rect class="compose" x="80" y="560" width="250" height="140"/>
+  <text class="label" x="110" y="600">run-chunked</text>
+  <text class="body" x="110" y="630">- split one input dataset</text>
+  <text class="body" x="110" y="653">- run chunks in parallel</text>
+  <text class="body" x="110" y="676">- merge completed chunk outputs</text>
+
+  <rect class="compose" x="80" y="760" width="250" height="90"/>
+  <text class="label" x="110" y="800">merge-datasets</text>
+  <text class="body" x="110" y="828">stack completed datasets after compatibility checks</text>
+
+  <path class="line" d="M 330 195 L 420 195"/>
+  <path class="line" d="M 710 195 L 810 165"/>
+  <path class="line" d="M 565 280 L 565 355"/>
+  <path class="line" d="M 710 420 L 810 395"/>
+  <path class="line" d="M 565 485 L 565 560"/>
+  <path class="line" d="M 710 620 L 810 620"/>
+  <path class="line" d="M 565 680 L 565 745"/>
+  <path class="line" d="M 710 792 L 810 792"/>
+
+  <path class="softline dashed" d="M 330 630 L 420 620"/>
+  <path class="softline dashed" d="M 330 805 L 420 792"/>
+  <path class="softline dashed" d="M 330 805 L 810 705"/>
+
+  <text class="small" x="80" y="880">Normalized tables remain stable across the runtime; plugins widen rows, dataset merges stack rows.</text>
+</svg>

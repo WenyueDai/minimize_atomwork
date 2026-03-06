@@ -41,7 +41,16 @@ Because `numbering_roles` is configured, `interfaces.parquet` also includes anti
   --workers 2
 ```
 
-4. Manual chunk example for debugging or staged execution
+4. Planned chunk workflow for Slurm arrays
+
+```bash
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli plan-chunks \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --chunk-size 5 \
+  --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan
+```
+
+5. Manual chunk example for debugging or staged execution
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \

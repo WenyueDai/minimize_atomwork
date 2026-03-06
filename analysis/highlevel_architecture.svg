@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+  <title id="title">minimum_atomworks High-Level Architecture</title>
+  <desc id="desc">Architecture diagram showing public entrypoints, core, runtime, plugins, examples, and tests.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#20313f"/>
+    </marker>
+    <style>
+      .bg { fill: #f5f7f2; }
+      .title { font: 700 28px Helvetica, Arial, sans-serif; fill: #16202a; }
+      .subtitle { font: 400 15px Helvetica, Arial, sans-serif; fill: #526371; }
+      .public { fill: #fffdf7; stroke: #20313f; stroke-width: 2.5; rx: 16; ry: 16; }
+      .core { fill: #edf5ff; stroke: #3c6388; stroke-width: 2.5; rx: 16; ry: 16; }
+      .runtime { fill: #eef5ea; stroke: #4e7655; stroke-width: 2.5; rx: 16; ry: 16; }
+      .plugins { fill: #fff3e8; stroke: #9a6843; stroke-width: 2.5; rx: 16; ry: 16; }
+      .support { fill: #f4eef8; stroke: #6c5d89; stroke-width: 2.5; rx: 16; ry: 16; }
+      .label { font: 700 20px Helvetica, Arial, sans-serif; fill: #16202a; }
+      .body { font: 400 15px Helvetica, Arial, sans-serif; fill: #22313f; }
+      .small { font: 400 14px Helvetica, Arial, sans-serif; fill: #526371; }
+      .line { stroke: #20313f; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .softline { stroke: #526371; stroke-width: 2.4; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="900"/>
+
+  <text class="title" x="60" y="60">minimum_atomworks High-Level Architecture</text>
+  <text class="subtitle" x="60" y="88">Public API on top, internal execution layers below: core, runtime, plugins, examples, and tests</text>
+
+  <rect class="public" x="120" y="130" width="1040" height="110"/>
+  <text class="label" x="150" y="172">Public Entrypoints</text>
+  <text class="body" x="150" y="202">minimum_atw/__init__.py</text>
+  <text class="body" x="430" y="202">minimum_atw/cli.py</text>
+  <text class="body" x="690" y="202">CLI commands: run, prepare, run-plugin, merge, analyze-dataset, merge-datasets, run-chunked</text>
+
+  <rect class="core" x="120" y="300" width="340" height="280"/>
+  <text class="label" x="150" y="340">core/</text>
+  <text class="body" x="150" y="372">config.py</text>
+  <text class="body" x="150" y="395">tables.py</text>
+  <text class="body" x="150" y="418">registry.py</text>
+  <text class="body" x="150" y="441">extensions.py</text>
+  <text class="body" x="150" y="464">pipeline.py</text>
+  <text class="body" x="150" y="505">Owns:</text>
+  <text class="body" x="175" y="528">- config model</text>
+  <text class="body" x="175" y="551">- normalized table identity rules</text>
+  <text class="body" x="175" y="574">- registries and orchestration</text>
+
+  <rect class="runtime" x="500" y="300" width="320" height="280"/>
+  <text class="label" x="530" y="340">runtime/</text>
+  <text class="body" x="530" y="372">workspace.py</text>
+  <text class="body" x="530" y="395">stage_buffer.py</text>
+  <text class="body" x="530" y="418">chunked.py</text>
+  <text class="body" x="530" y="459">Owns:</text>
+  <text class="body" x="555" y="482">- prepared workspace layout</text>
+  <text class="body" x="555" y="505">- bounded spill buffers</text>
+  <text class="body" x="555" y="528">- chunk execution</text>
+  <text class="body" x="555" y="551">- structure/context loading helpers</text>
+
+  <rect class="plugins" x="860" y="300" width="300" height="280"/>
+  <text class="label" x="890" y="340">plugins/</text>
+  <text class="body" x="890" y="372">manipulation/</text>
+  <text class="body" x="890" y="395">structure_analysis/</text>
+  <text class="body" x="890" y="418">interface_analysis/</text>
+  <text class="body" x="890" y="441">antibody_analysis/</text>
+  <text class="body" x="890" y="464">dataset_analysis/</text>
+  <text class="body" x="890" y="505">Owns:</text>
+  <text class="body" x="915" y="528">- extension implementations</text>
+  <text class="body" x="915" y="551">- prefixed output logic</text>
+  <text class="body" x="915" y="574">- dataset-level aggregate logic</text>
+
+  <rect class="support" x="180" y="670" width="380" height="150"/>
+  <text class="label" x="210" y="710">examples/</text>
+  <text class="body" x="210" y="740">machine-specific sample configs and READMEs</text>
+  <text class="body" x="210" y="763">simple_run/ chunk_run/ large_run/</text>
+  <text class="body" x="210" y="786">used for real pipeline invocation patterns</text>
+
+  <rect class="support" x="710" y="670" width="380" height="150"/>
+  <text class="label" x="740" y="710">tests/</text>
+  <text class="body" x="740" y="740">unittest-based suite under minimum_atw/tests</text>
+  <text class="body" x="740" y="763">unit tests, smoke tests, merge tests, runtime tests</text>
+  <text class="body" x="740" y="786">documents current behavior and protects refactors</text>
+
+  <path class="line" d="M 320 240 L 290 300"/>
+  <path class="line" d="M 640 240 L 660 300"/>
+  <path class="line" d="M 960 240 L 1010 300"/>
+
+  <path class="line" d="M 460 440 L 500 440"/>
+  <path class="line" d="M 820 440 L 860 440"/>
+  <path class="softline" d="M 1010 300 L 660 580"/>
+  <path class="softline" d="M 290 580 L 370 670"/>
+  <path class="softline" d="M 1010 580 L 900 670"/>
+
+  <text class="small" x="120" y="865">Public surface stays small; internal coordination lives in core/, execution mechanics in runtime/, and extension logic in plugins/.</text>
+</svg>

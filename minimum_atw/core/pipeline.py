@@ -14,7 +14,11 @@ from biotite.structure.io import save_structure
 from ..plugins import PLUGIN_REGISTRY
 from ..plugins.dataset_analysis.runtime import analyze_dataset_outputs
 from ..plugins.manipulation import MANIPULATION_REGISTRY
-from ..runtime.chunked import run_chunked_pipeline as _run_chunked_pipeline
+from ..runtime.chunked import (
+    merge_planned_chunks as _merge_planned_chunks,
+    plan_chunked_pipeline as _plan_chunked_pipeline,
+    run_chunked_pipeline as _run_chunked_pipeline,
+)
 from ..runtime.stage_buffer import FrameBuffer, TableBuffer
 from ..runtime.workspace import (
     base_rows_for_context as _base_rows_for_context,
@@ -431,6 +435,23 @@ def run_chunked_pipeline(
     workers: int = 1,
 ) -> dict[str, int]:
     return _run_chunked_pipeline(cfg, chunk_size=chunk_size, workers=workers)
+
+
+def plan_chunked_pipeline(
+    cfg: Config,
+    *,
+    chunk_size: int,
+    plan_dir: str | Path,
+) -> dict[str, int]:
+    return _plan_chunked_pipeline(cfg, chunk_size=chunk_size, plan_dir=plan_dir)
+
+
+def merge_planned_chunks(
+    plan_dir: str | Path,
+    *,
+    out_dir: str | Path | None = None,
+) -> dict[str, int]:
+    return _merge_planned_chunks(plan_dir, out_dir=out_dir)
 
 
 def merge_outputs(cfg: Config) -> dict[str, int]:

@@ -2,6 +2,29 @@
 
 This folder shows the manual chunk workflow.
 
+This is the example set to use when you want scheduler-level parallelism across
+chunks, for example:
+
+- one Slurm job per chunk
+- many chunk jobs running at the same time
+- one follow-up merge job after all chunk jobs finish
+
+Your input structures do not need to follow any filename numbering convention.
+
+`chunk_run` only cares that:
+
+- each chunk config points at a real `input_dir`
+- each chunk `input_dir` contains valid `.pdb` or `.cif` files
+- each chunk writes to its own `out_dir`
+
+The structure filenames inside a chunk can be arbitrary, for example:
+
+- `binder_A_model_final.pdb`
+- `7xyz_relaxed_decoy_alpha.pdb`
+- `candidate_nanobody_redo_2026_03_01.cif`
+
+No shared numeric index in the input filenames is required.
+
 For the preferred automatic workflow, use `run-chunked` on one config instead of creating chunk YAML files yourself.
 
 Files:
@@ -73,6 +96,7 @@ How this is intended to work:
 - chunk configs keep the same extension inventory as one-shot configs, but you can still trim the active plugin list per chunk if needed
 - `merge-datasets` merges those final chunk outputs row by row into one new final `out_dir`
 - dataset analysis is a separate step on the merged dataset
+- this is the right pattern when you want external scheduler parallelism across chunks
 
 These manual chunk YAMLs now point at real data on this machine:
 
@@ -90,6 +114,13 @@ Automatic alternative:
 ```
 
 That command creates temporary chunks internally, runs them, merges the chunk outputs into the final `out_dir`, and removes the temporary chunk workspace afterward.
+
+Parallelism model summary:
+
+- `chunk_run`
+  manual chunking, best for many independent scheduler jobs
+- `run-chunked`
+  one orchestrated command, best for internal parallel workers inside one allocation
 
 Slurm manual chunk example:
 
@@ -124,6 +155,66 @@ cd /home/eva/minimum_atomworks
   --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 EOF
 ```
+
+Slurm array-style chunk example:
+
+```bash
+sbatch --array=1-2 <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+set -euo pipefail
+
+cd /home/eva/minimum_atomworks
+
+CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_0${SLURM_ARRAY_TASK_ID}.yaml
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config "$CONFIG"
+EOF
+```
+
+Then submit the merge job after the chunk jobs complete.
+
+Slurm array example for arbitrary chunk config names:
+
+If your chunk config filenames are not a simple numeric pattern, build a manifest
+file and let the array task read one line from it.
+
+Example manifest:
+
+```text
+/home/eva/minimum_atomworks/path/to/chunk_alpha.yaml
+/home/eva/minimum_atomworks/path/to/chunk_beta.yaml
+/home/eva/minimum_atomworks/path/to/chunk_gamma.yaml
+```
+
+Then run:
+
+```bash
+sbatch --array=1-3 <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk
+#SBATCH --cpus-per-task=4
+#SBATCH --mem=16G
+#SBATCH --time=02:00:00
+#SBATCH --output=logs/%x-%A_%a.out
+set -euo pipefail
+
+cd /home/eva/minimum_atomworks
+
+MANIFEST=/home/eva/minimum_atomworks/path/to/chunk_config_manifest.txt
+CONFIG=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config "$CONFIG"
+EOF
+```
+
+This pattern is usually the safest choice when chunk config names are arbitrary.
 
 Slurm merge job:
 

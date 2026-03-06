@@ -1,143 +1,158 @@
 # minimum_atomworks
 
-`minimum_atomworks` is a small structural-analysis package built around four normalized tables:
+`minimum_atomworks` is a structural data-processing package for large collections
+of protein complexes.
+
+It is built around four normalized tables:
 
 - `structures`
 - `chains`
 - `roles`
 - `interfaces`
 
-The package has three runtime concepts only:
-
-- `prepare`: load raw structures, apply manipulations once, write canonical base tables, and cache prepared structures
-- `plugins`: read prepared structures and emit prefixed columns into the normalized tables
-- `dataset analyses`: run after merge on the final tables (controlled by the `dataset_analyses` list in config)
-
-It also supports one dataset-composition step for chunked runs:
-
-- `merge-datasets`: stack multiple completed `out_dir` results into one final dataset
-- `run-chunked`: split one large dataset into chunks, run them in parallel, and merge the final outputs
-
-It is intended to work with:
+The package is intended for:
 
 - antibody-antigen complexes
 - VHH or nanobody binders
 - generic protein-protein complexes
 
+Its design goals are:
+
+- simple architecture
+- normalized tabular outputs
+- plugin-based extensibility
+- minimal unnecessary intermediate files
+- clear data flow
+- scalability to large datasets
+
 ## Architecture
 
-High-level runtime shape:
+The runtime has four stages:
+
+1. `prepare`
+   load raw `.pdb` or `.cif`, apply manipulations once, write canonical base tables, and cache prepared structures
+2. `plugins`
+   read prepared structures and emit prefixed columns into the normalized tables
+3. `merge`
+   merge plugin outputs into final tables
+4. `dataset analyses`
+   run aggregate analyses on the final merged dataset
+
+Dataset composition is separate:
+
+- `merge-datasets`
+  stack multiple completed datasets into one final dataset
+- `run-chunked`
+  split one input dataset into chunks, run them in parallel, then merge the results
+
+High-level flow:
 
 ```text
-YAML config
+input structures
     |
     v
-Config + role definitions
+prepare
+    |
+    +--> canonical base tables
+    +--> cached prepared structures
     |
     v
-CLI commands -----------------------------------------------+
-    |                                                       |
-    | run / run-chunked / prepare / run-plugin / merge      |
-    | analyze-dataset / merge-datasets                      |
-    v                                                       |
-Pipeline ------------------------------------------------+   |
-    |                                                    |   |
-    | prepare                                            |   |
-    v                                                    |   |
-raw .pdb/.cif --> Context --> manipulations ----------+  |   |
-                                  |                   |  |   |
-                                  v                   |  |   |
-                      _prepared/ tables + cached aa   |  |   |
-                                                      |  |   |
-    | run-plugin                                       |  |   |
-    v                                                  |  |   |
-prepared aa --> record plugin registry --------------> |  |   |
-                                  |                    |  |   |
-                                  v                    |  |   |
-                         _plugins/<plugin>/ tables     |  |   |
-                                                      v  v   |
-                                                merge outputs |
-                                                      |       |
-                                                      v       |
-                                         final normalized tables
-                                     structures / chains / roles / interfaces
-                                                      |
-                           +--------------------------+------------------+
-                           |                                             |
-                           v                                             v
-                 dataset analyses                               merge-datasets
-                           |                                   stacks multiple final
-                           v                                   out_dir results
-                 dataset_analysis/ artifacts                            |
-                                                                        v
-                                                             merged final out_dir
+plugins
+    |
+    +--> plugin-specific parquet outputs
+    |
+    v
+merge
+    |
+    +--> final structures/chains/roles/interfaces tables
+    +--> plugin_status.parquet
+    +--> bad_files.parquet
+    +--> run_metadata.json
+    |
+    v
+dataset analyses
+    |
+    +--> out_dir/dataset_analysis/*
 ```
 
-Core package pieces:
+![High-Level Runtime](analysis/highlevel_runtime.svg)
 
-- [cli.py](/home/eva/minimum_atomworks/minimum_atw/cli.py)
-  Entry points for all commands.
-- [config.py](/home/eva/minimum_atomworks/minimum_atw/config.py)
-  Runtime settings, roles, interface pairs, plugin lists.
-- [pipeline.py](/home/eva/minimum_atomworks/minimum_atw/pipeline.py)
-  Prepare, plugin execution, plugin merge, and dataset merge.
+### Package layout
+
+The package is split into three internal layers:
+
+- [minimum_atw/core](/home/eva/minimum_atomworks/minimum_atw/core)
+  core application layer: config, normalized table rules, registries, pipeline orchestration
+- [minimum_atw/runtime](/home/eva/minimum_atomworks/minimum_atw/runtime)
+  execution mechanics: workspace handling, chunk execution, buffered stage output
+- [minimum_atw/plugins](/home/eva/minimum_atomworks/minimum_atw/plugins)
+  built-in manipulations, record plugins, and dataset analyses
+
+Public entrypoints stay at the package root:
+
+- [minimum_atw/cli.py](/home/eva/minimum_atomworks/minimum_atw/cli.py)
+- [minimum_atw/__init__.py](/home/eva/minimum_atomworks/minimum_atw/__init__.py)
+
+Important modules:
+
+- [core/config.py](/home/eva/minimum_atomworks/minimum_atw/core/config.py)
+  runtime configuration model
+- [core/tables.py](/home/eva/minimum_atomworks/minimum_atw/core/tables.py)
+  normalized table identity keys and merge rules
+- [core/pipeline.py](/home/eva/minimum_atomworks/minimum_atw/core/pipeline.py)
+  prepare, plugin execution, final merge, dataset merge
+- [runtime/workspace.py](/home/eva/minimum_atomworks/minimum_atw/runtime/workspace.py)
+  structure loading, prepared workspace layout, row emission helpers
+- [runtime/stage_buffer.py](/home/eva/minimum_atomworks/minimum_atw/runtime/stage_buffer.py)
+  bounded staging buffers for large runs
 - [plugins/base.py](/home/eva/minimum_atomworks/minimum_atw/plugins/base.py)
-  Shared `Context` and base plugin classes.
-- [plugins/](/home/eva/minimum_atomworks/minimum_atw/plugins)
-  Built-in manipulations, record plugins, and dataset analyses.
-- [registry.py](/home/eva/minimum_atomworks/minimum_atw/registry.py)
-  Registry loading plus uniqueness checks for names and prefixes.
+  shared `Context` and plugin base classes
 
-Merge modes:
+![High-Level Architecture](analysis/highlevel_architecture.svg)
+
+## Normalized tables
+
+Identity keys:
+
+- `structures`: `path`, `assembly_id`
+- `chains`: `path`, `assembly_id`, `chain_id`
+- `roles`: `path`, `assembly_id`, `role`
+- `interfaces`: `path`, `assembly_id`, `pair`, `role_left`, `role_right`
+
+Plugin outputs are merged by these keys. Non-identity output columns are prefixed
+as:
 
 ```text
-Plugin-level merge
-------------------
-one dataset
-    |
-    +--> plugin A output  ----+
-    +--> plugin B output  ----+--> merge
-    +--> plugin C output  ----+
-                               |
-                               v
-                    one final out_dir with wider tables
-                    same rows, more columns
-
-
-Dataset-level merge
--------------------
-chunk 1 final out_dir ----+
-chunk 2 final out_dir ----+--> merge-datasets
-chunk 3 final out_dir ----+
-                            |
-                            v
-                 one merged out_dir with taller tables
-                 more rows, same normalized schema
+<prefix>__<field>
 ```
+
+Examples:
+
+- `id__n_atoms_total`
+- `iface__n_contact_atom_pairs`
+- `abseq__cdr3_sequence`
+
+This keeps the row model stable while allowing plugins to widen the schema.
 
 ## Why this shape
 
-The package is meant to stay easy to read and copy:
-
-- one shared `Context`
-- one registry for record plugins
-- one registry for dataset analyses
-- one authoritative `plugin_status.parquet`
-- one authoritative `bad_files.parquet`
-
-`prepare` is now a real cache boundary. A staged run does not reparse raw structures or reapply manipulations for every plugin.
-
-The package stays role-driven rather than modality-driven:
+The package stays role-driven:
 
 - define semantic roles in YAML
 - define interface pairs in terms of those roles
-- choose plugins that make sense for your system
+- choose the plugins you want
 
-Generic plugins such as `identity`, `chain_stats`, `role_sequences`, `role_stats`, and `interface_contacts` work for any protein complex. Antibody-specific plugins are optional add-ons for roles that represent single-chain variable domains.
+`prepare` is the main cache boundary:
 
-## Install On Another Computer
+- raw structures are parsed once
+- manipulations are applied once
+- prepared structures are reused by all record plugins
 
-Clone the repository first, then install into a clean Python 3.11 environment:
+This keeps the system simple without duplicating expensive structure loading.
+
+## Installation
+
+Clone the repository and install into a Python 3.11 environment:
 
 ```bash
 git clone <your-repo-url> minimum_atomworks
@@ -148,7 +163,7 @@ python -m pip install --upgrade pip setuptools wheel
 python -m pip install -e .
 ```
 
-Optional antibody numbering support:
+Optional antibody-numbering support:
 
 ```bash
 python -m pip install -e '.[antibody]'
@@ -160,7 +175,7 @@ Verify the install:
 minimum-atomworks list-extensions
 ```
 
-You can also use the module form:
+or:
 
 ```bash
 python -m minimum_atw.cli list-extensions
@@ -168,22 +183,33 @@ python -m minimum_atw.cli list-extensions
 
 Notes:
 
-- When `superimpose_homology` is enabled but `superimpose_reference_path` is unset, the first input structure encountered becomes the implicit reference (that file is left unchanged).
+- `biotite`, `numpy`, `pandas`, `pyarrow`, `pydantic`, and `pyyaml` are core dependencies
+- `abnumber` is optional and only needed for antibody-numbering plugins
+- Rosetta is not installed by this package
+- example YAMLs often contain machine-specific paths and should be copied and edited before use
 
-- `biotite`, `numpy`, `pandas`, `pyarrow`, `pydantic`, and `pyyaml` are installed automatically.
-- `abnumber` is optional and only needed for antibody-numbering plugins.
-- Rosetta is not installed by this package. The Rosetta example plugin requires a separate Rosetta installation.
-- Example YAML files are shipped with the package, but most of them contain machine-specific paths for `input_dir`, `out_dir`, `superimpose_reference_path`, and optional Rosetta locations. Copy an example and update those paths for the target machine before running it.
+## CLI commands
 
-## Run
+Available commands:
 
-One-shot execution:
+- `run`
+- `prepare`
+- `run-plugin`
+- `merge`
+- `analyze-dataset`
+- `merge-datasets`
+- `plan-chunks`
+- `merge-planned-chunks`
+- `run-chunked`
+- `list-extensions`
+
+### One-shot run
 
 ```bash
 python -m minimum_atw.cli run --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
-Staged execution:
+### Staged run
 
 ```bash
 python -m minimum_atw.cli prepare --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
@@ -193,39 +219,81 @@ python -m minimum_atw.cli merge --config minimum_atw/examples/simple_run/example
 python -m minimum_atw.cli analyze-dataset --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
-`run-plugin` expects prepared outputs to exist already.
-
-Chunked dataset workflow:
+### Chunked run
 
 ```bash
 python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
+  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 5 \
   --workers 2
 ```
 
-`run-chunked` splits one `input_dir` into temporary chunks, runs those chunks in parallel, merges the final chunk outputs into `out_dir`, optionally runs dataset analysis once on the merged result, and then removes the temporary chunk workspace.
+### Planned chunks for scheduler arrays
 
-For advanced control, you can still run manual chunks yourself and combine them later with `merge-datasets`.
+```bash
+python -m minimum_atw.cli plan-chunks \
+  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --chunk-size 100 \
+  --plan-dir /path/to/chunk_plan
+```
 
-Example configs (note the absence of the obsolete `dataset_analysis` boolean):
+Then run the generated per-chunk configs in your scheduler and merge them later:
 
-- [antibody-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml)
-- [VHH-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml)
-- [protein-protein complex](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml)
-- [large-run chunked example](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
-- [simple-run README](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md)
-- [chunk-run README](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md)
-- [large-run README](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md)
+```bash
+python -m minimum_atw.cli merge-planned-chunks \
+  --plan-dir /path/to/chunk_plan
+```
 
-Portable config checklist for a new machine:
+### Manual dataset merge
 
-- set `input_dir` to the directory that contains your `.pdb` or `.cif` files
-- set `out_dir` to a writable output directory on that machine
-- set `superimpose_reference_path` only if you enable `superimpose_homology` (if omitted, the first structure encountered will serve as the reference)
-- set `superimpose_on_chains` to the chain IDs used as the alignment anchor
-- set `rosetta_executable` and `rosetta_database` only if you plan to enable the Rosetta example plugin
-- use `dataset_analyses:` (a list) to request dataset-level summaries; the boolean `dataset_analysis` has been removed
+```bash
+python -m minimum_atw.cli merge-datasets \
+  --out-dir /path/to/merged_out \
+  --source-out-dir /path/to/chunk_out_01 \
+  --source-out-dir /path/to/chunk_out_02
+```
+
+`merge-datasets` validates source compatibility using output metadata before stacking rows.
+
+In practical terms, datasets are expected to represent the same output schema and
+the same structural-analysis setup. For example, they should not be merged if they
+were produced with incompatible:
+
+- plugin inventories
+- manipulation settings
+- interface settings
+- antibody numbering settings such as `numbering_scheme` or `cdr_definition`
+- final table column sets
+
+## Config model
+
+Core config fields include:
+
+- `input_dir`
+- `out_dir`
+- `assembly_id`
+- `roles`
+- `interface_pairs`
+- `manipulations`
+- `plugins`
+- `dataset_analyses`
+- `dataset_analysis_params`
+- `dataset_annotations`
+- `keep_intermediate_outputs`
+
+Antibody-specific options include:
+
+- `numbering_roles`
+- `numbering_scheme`
+- `cdr_definition`
+
+Other plugin-related runtime options include:
+
+- `contact_distance`
+- `superimpose_reference_path`
+- `superimpose_on_chains`
+- `rosetta_executable`
+- `rosetta_database`
 
 ## Output layout
 
@@ -237,6 +305,16 @@ Final outputs in `out_dir/`:
 - `interfaces.parquet`
 - `plugin_status.parquet`
 - `bad_files.parquet`
+- `run_metadata.json`
+
+Merged dataset outputs also include:
+
+- `dataset_metadata.json`
+
+Dataset-analysis outputs:
+
+- `out_dir/dataset_analysis/*.parquet`
+- `out_dir/dataset_analysis/summary.json`
 
 Intermediate outputs, kept only when `keep_intermediate_outputs: true`:
 
@@ -244,32 +322,112 @@ Intermediate outputs, kept only when `keep_intermediate_outputs: true`:
 - `out_dir/_prepared/prepared_manifest.parquet`
 - `out_dir/_prepared/structures/`
 - `out_dir/_plugins/<plugin_name>/`
-- `out_dir/dataset_analysis/`
 
-In one-shot `run`, if `keep_intermediate_outputs: false`, the package now uses a temporary workspace for `_prepared/` and `_plugins/` and only writes the final merged outputs into `out_dir/`.
+Behavior notes:
 
-For chunked workflows, `run-chunked` also uses a temporary chunk workspace. Only the merged final tables plus optional dataset-analysis artifacts are kept in the real `out_dir/`.
+- one-shot `run` uses temporary intermediate workspaces unless `keep_intermediate_outputs: true`
+- `run-plugin` skips writing empty table parquet files for tables that plugin did not emit
+- dataset-analysis reruns clear the old `dataset_analysis/` directory before writing new artifacts
 
-## Extension model
+## Metadata and reproducibility
 
-Record plugins emit rows keyed by the normalized table identity columns. The pipeline prefixes non-identity columns as `<prefix>__<field>`.
+Completed outputs are self-describing:
+
+- `run_metadata.json`
+  written for normal completed runs
+- `dataset_metadata.json`
+  written for merged datasets
+
+These metadata files include:
+
+- row counts
+- merge-compatibility information
+- final table column lists
+
+This is used to make `merge-datasets` safer and more reproducible.
+
+Merge compatibility is checked in two ways:
+
+- runtime configuration compatibility
+  source datasets must agree on the recorded merge-compatibility config
+- final schema compatibility
+  source datasets must expose the same columns in each normalized table
+
+So if two datasets have incompatible CDR-related settings or one dataset writes
+different CDR/interface columns from the other, they are expected to fail before
+merge rather than silently combining.
+
+Current scope of the check:
+
+- it does reject incompatible runtime settings such as different numbering configuration
+- it does reject incompatible final table schemas
+- it does not try to infer semantic differences that are not reflected in config or schema
+
+## Plugin model
+
+There are three extension classes:
+
+- manipulations
+- record plugins
+- dataset analyses
 
 Requirements:
 
-- plugin `name` must be unique
-- plugin `prefix` must be unique and non-empty
-- emitted rows must contain the identity columns for their target table
+- extension `name` must be unique
+- record plugin `prefix` must be unique and non-empty
+- emitted rows must include the identity columns for their target table
 
-Dataset analyses read final merged tables and write aggregate artifacts under `out_dir/dataset_analysis/`.
+Dataset analyses read final outputs and write aggregate artifacts into:
+
+```text
+out_dir/dataset_analysis/
+```
 
 For antibody numbering plugins:
 
-- the package auto-detects roles named `vh`, `vl`, or `vhh`
-- you can override that with `numbering_roles:` in the config
-- each numbering role should correspond to a single protein chain
+- roles named `vh`, `vl`, and `vhh` are recognized automatically
+- `numbering_roles:` can override role selection
+- each numbering role should map to a single protein chain
 
 To inspect registered extensions:
 
 ```bash
 python -m minimum_atw.cli list-extensions
 ```
+
+## Examples
+
+Start here:
+
+- [examples/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md)
+
+Detailed example sets:
+
+- [simple_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md)
+- [chunk_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md)
+- [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md)
+
+Main example configs:
+
+- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml)
+- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml)
+- [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml)
+- [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml)
+- [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
+
+## Tests
+
+The tests now live under:
+
+- [minimum_atw/tests](/home/eva/minimum_atomworks/minimum_atw/tests)
+
+Main command:
+
+```bash
+cd /home/eva/minimum_atomworks
+/home/eva/miniconda3/envs/atw_pp/bin/python -m unittest discover -s minimum_atw/tests -v
+```
+
+Detailed test instructions:
+
+- [minimum_atw/tests/README.md](/home/eva/minimum_atomworks/minimum_atw/tests/README.md)
