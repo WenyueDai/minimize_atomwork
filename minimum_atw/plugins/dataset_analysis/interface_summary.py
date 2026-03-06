@@ -9,6 +9,17 @@ class InterfaceSummaryPlugin(BaseDatasetPlugin):
     name = "interface_summary"
     analysis_category = "interface_analysis"
 
+    def required_columns(self, _params: dict[str, object]) -> dict[str, list[str]]:
+        return {
+            "interfaces": [
+                "pair",
+                "path",
+                "iface__n_contact_atom_pairs",
+                "iface__n_left_interface_residues",
+                "iface__n_right_interface_residues",
+            ]
+        }
+
     def run(self, ctx: DatasetAnalysisContext) -> dict[str, int | str]:
         df = ctx.df_interfaces.copy()
         out_path = ctx.analysis_dir / "interface_summary.parquet"

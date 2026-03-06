@@ -3,9 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .plugins import PLUGIN_REGISTRY
-from .plugins.dataset_analysis import DATASET_ANALYSIS_REGISTRY
-from .plugins.manipulation import MANIPULATION_REGISTRY
+from ..plugins import PLUGIN_REGISTRY
+from ..plugins.dataset_analysis import DATASET_ANALYSIS_REGISTRY
+from ..plugins.manipulation import MANIPULATION_REGISTRY
 
 
 @dataclass(frozen=True, slots=True)

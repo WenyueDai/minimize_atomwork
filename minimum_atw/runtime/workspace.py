@@ -8,18 +8,22 @@ from typing import Any
 import pandas as pd
 from biotite.structure.io import load_structure
 
-from .config import Config
-from .plugins.base import Context
-from .tables import MANIFEST_COLS, TABLE_NAMES, TABLE_SUFFIX, empty_tables, prefix_row, read_frame
+from ..core.config import Config
+from ..plugins.base import Context
+from ..core.tables import MANIFEST_COLS, TABLE_NAMES, TABLE_SUFFIX, empty_tables, prefix_row, read_frame
 
 
 PREPARED_DIRNAME = "_prepared"
 PREPARED_STRUCTURES_DIRNAME = "structures"
 PREPARED_MANIFEST_NAME = "prepared_manifest.parquet"
 PLUGINS_DIRNAME = "_plugins"
+RUN_METADATA_NAME = "run_metadata.json"
+DATASET_METADATA_NAME = "dataset_metadata.json"
 FINAL_OUTPUT_FILES = [f"{table_name}{TABLE_SUFFIX}" for table_name in TABLE_NAMES] + [
     f"plugin_status{TABLE_SUFFIX}",
     f"bad_files{TABLE_SUFFIX}",
+    RUN_METADATA_NAME,
+    DATASET_METADATA_NAME,
 ]
 
 
@@ -92,12 +96,24 @@ def base_rows_for_context(ctx: Context) -> dict[str, list[dict[str, Any]]]:
 def run_unit(
     ctx: Context,
     unit: Any,
-    tables: dict[str, list[dict[str, Any]]],
-    status_rows: list[dict[str, Any]],
+    tables: Any,
+    status_rows: Any,
 ) -> bool:
+    def add_status(row: dict[str, Any]) -> None:
+        if hasattr(status_rows, "add"):
+            status_rows.add(row)
+            return
+        status_rows.append(row)
+
+    def add_table_row(table_name: str, row: dict[str, Any]) -> None:
+        if hasattr(tables, "add"):
+            tables.add(table_name, row)
+            return
+        tables[table_name].append(row)
+
     available, message = unit.available(ctx) if hasattr(unit, "available") else (True, "")
     if not available:
-        status_rows.append(
+        add_status(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
@@ -113,8 +129,8 @@ def run_unit(
         for raw in unit.run(ctx) or []:
             emitted += 1
             table = raw.get("__table__", getattr(unit, "table", "structures"))
-            tables[table].append(prefix_row(raw, unit.prefix))
-        status_rows.append(
+            add_table_row(table, prefix_row(raw, unit.prefix))
+        add_status(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
@@ -125,7 +141,7 @@ def run_unit(
         )
         return True
     except Exception as exc:
-        status_rows.append(
+        add_status(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,

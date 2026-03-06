@@ -6,9 +6,9 @@ from pathlib import Path
 
 import yaml
 
-from .config import Config
-from .extensions import EXTENSION_CLASSES, extension_catalog, extension_catalog_by_category
-from .pipeline import (
+from .core.config import Config
+from .core.extensions import EXTENSION_CLASSES, extension_catalog, extension_catalog_by_category
+from .core.pipeline import (
     merge_dataset_outputs,
     merge_outputs,
     prepare_outputs,

@@ -5,8 +5,8 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from .config import Config
-from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
+from ..core.config import Config
+from ..plugins.dataset_analysis.runtime import analyze_dataset_outputs
 from .workspace import (
     chunk_dir_name,
     chunk_input_paths,
@@ -23,7 +23,7 @@ def _run_chunk_job(
     chunk_index: int,
     workspace_dir: str,
 ) -> dict[str, Any]:
-    from .pipeline import run_pipeline
+    from ..core.pipeline import run_pipeline
 
     workspace_path = Path(workspace_dir).resolve()
     chunk_dir = workspace_path / chunk_dir_name(chunk_index)
@@ -55,7 +55,7 @@ def run_chunked_pipeline(
     chunk_size: int,
     workers: int,
 ) -> dict[str, int]:
-    from .pipeline import merge_dataset_outputs
+    from ..core.pipeline import merge_dataset_outputs
 
     input_paths = discover_inputs(Path(cfg.input_dir).resolve())
     if not input_paths:

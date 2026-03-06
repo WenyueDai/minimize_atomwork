@@ -38,8 +38,8 @@ def _selected_roles(ctx: DatasetAnalysisContext, df: pd.DataFrame) -> list[str]:
     return [role for role in available if role in requested_roles]
 
 
-def _selected_regions(ctx: DatasetAnalysisContext) -> list[str]:
-    requested = dict(ctx.params or {}).get("regions", [])
+def _selected_regions_from_params(params: dict[str, object] | None) -> list[str]:
+    requested = dict(params or {}).get("regions", [])
     default = ["cdr1", "cdr2", "cdr3"]
     if not isinstance(requested, list) or not requested:
         return default
@@ -51,9 +51,19 @@ def _selected_regions(ctx: DatasetAnalysisContext) -> list[str]:
     return regions or default
 
 
+def _selected_regions(ctx: DatasetAnalysisContext) -> list[str]:
+    return _selected_regions_from_params(dict(ctx.params or {}))
+
+
 class CDREntropyPlugin(BaseDatasetPlugin):
     name = "cdr_entropy"
     analysis_category = "antibody_analysis"
+
+    def required_columns(self, params: dict[str, object]) -> dict[str, list[str]]:
+        regions = _selected_regions_from_params(params)
+        return {
+            "roles": ["role", *[REGION_TO_COLUMN[region] for region in regions]],
+        }
 
     def run(self, ctx: DatasetAnalysisContext) -> dict[str, int | str]:
         out_path = ctx.analysis_dir / "cdr_entropy.parquet"

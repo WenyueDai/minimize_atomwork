@@ -9,6 +9,12 @@ class DatasetAnnotationsPlugin(BaseDatasetPlugin):
     name = "dataset_annotations"
     analysis_category = "dataset"
 
+    def required_columns(self, _params: dict[str, object]) -> dict[str, list[str]]:
+        return {
+            "interfaces": ["path"],
+            "roles": ["role"],
+        }
+
     def run(self, ctx: DatasetAnalysisContext) -> dict[str, int | str]:
         out_path = ctx.analysis_dir / "dataset_annotations.parquet"
         annotations = dict(ctx.annotations or {})

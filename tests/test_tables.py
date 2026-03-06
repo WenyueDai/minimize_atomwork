@@ -4,7 +4,7 @@ import unittest
 
 import pandas as pd
 
-from minimum_atw.tables import merge_table_frames, rows_to_frame, stack_table_frames
+from minimum_atw.core.tables import merge_table_frames, rows_to_frame, stack_table_frames
 
 
 class TableTests(unittest.TestCase):

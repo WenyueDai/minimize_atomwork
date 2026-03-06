@@ -3,7 +3,7 @@ from __future__ import annotations
 from .antibody_analysis import AntibodyCDRLengthsPlugin, AntibodyCDRSequencesPlugin
 from .interface_analysis import InterfaceContactsPlugin, RosettaInterfaceExamplePlugin
 from .structure_analysis import ChainStatsPlugin, IdentityPlugin, RoleSequencesPlugin, RoleStatsPlugin
-from ..registry import load_registry
+from ..core.registry import load_registry
 
 
 def _builtin_plugins() -> dict[str, object]:

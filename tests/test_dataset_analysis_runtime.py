@@ -74,6 +74,32 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             self.assertEqual(result.iloc[0]["role"], "vh")
             self.assertEqual(result.iloc[0]["region"], "cdr3")
 
+    def test_runtime_can_project_missing_interface_metric_columns(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
+            out_dir = Path(tmp_dir)
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "pair": "vh__antigen",
+                        "role_left": "vh",
+                        "role_right": "antigen",
+                    }
+                ]
+            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+
+            summary = analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=("interface_summary",),
+            )
+
+            result = pd.read_parquet(out_dir / "dataset_analysis" / "interface_summary.parquet")
+
+            self.assertEqual(summary["dataset_analyses"], "interface_summary")
+            self.assertEqual(len(result), 1)
+            self.assertEqual(result.iloc[0]["pair"], "vh__antigen")
+
 
 if __name__ == "__main__":
     unittest.main()

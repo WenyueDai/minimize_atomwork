@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 try:
-    from minimum_atw.config import Config
+    from minimum_atw.core.config import Config
 except ModuleNotFoundError as exc:
     if exc.name != "pydantic":
         raise

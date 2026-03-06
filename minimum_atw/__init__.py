@@ -20,7 +20,7 @@ def __getattr__(name: str):
         "run_chunked_pipeline",
         "run_pipeline",
     }:
-        from .pipeline import (
+        from .core.pipeline import (
             merge_dataset_outputs,
             merge_outputs,
             prepare_outputs,

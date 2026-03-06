@@ -3,7 +3,7 @@ from __future__ import annotations
 from .base import BaseManipulation
 from .center import CenterOnOriginManipulation
 from .superimpose import SuperimposeHomologyManipulation
-from ...registry import load_registry
+from ...core.registry import load_registry
 
 
 def _builtin_manipulations() -> dict[str, object]:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from minimum_atw.registry import instantiate_unit
+from minimum_atw.core.registry import instantiate_unit
 
 
 class _DummyUnit:

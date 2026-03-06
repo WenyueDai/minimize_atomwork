@@ -22,5 +22,8 @@ class BaseDatasetPlugin:
     extension_class = "dataset_analysis"
     analysis_category = "dataset"
 
+    def required_columns(self, _params: dict[str, Any]) -> dict[str, list[str]]:
+        return {}
+
     def run(self, ctx: DatasetAnalysisContext) -> dict[str, Any]:
         raise NotImplementedError

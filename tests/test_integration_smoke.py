@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import textwrap
 import unittest
@@ -9,7 +10,7 @@ try:
     import pandas as pd
     import yaml
     from minimum_atw.cli import _load_config
-    from minimum_atw.pipeline import run_pipeline
+    from minimum_atw.core.pipeline import run_pipeline
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -67,6 +68,7 @@ class IntegrationSmokeTests(unittest.TestCase):
             chains = pd.read_parquet(out_dir / "chains.parquet")
             roles = pd.read_parquet(out_dir / "roles.parquet")
             interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            metadata = json.loads((out_dir / "run_metadata.json").read_text())
 
             self.assertEqual(len(structures), 1)
             self.assertEqual(len(chains), 2)
@@ -75,6 +77,12 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertIn("id__n_atoms_total", structures.columns)
             self.assertIn("id__n_atoms", chains.columns)
             self.assertIn("id__n_atoms", roles.columns)
+            self.assertEqual(metadata["output_kind"], "run")
+            self.assertEqual(metadata["counts"]["structures"], 1)
+            self.assertEqual(metadata["config"]["plugins"], ["identity"])
+            self.assertEqual(metadata["merge_compatibility"]["plugins"], ["identity"])
+            self.assertIn("structures", metadata["table_columns"])
+            self.assertIn("id__n_atoms_total", metadata["table_columns"]["structures"])
 
 
 if __name__ == "__main__":

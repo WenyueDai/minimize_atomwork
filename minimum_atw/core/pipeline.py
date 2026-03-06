@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -10,28 +11,12 @@ from typing import Any
 import pandas as pd
 from biotite.structure.io import save_structure
 
-from .chunked import run_chunked_pipeline as _run_chunked_pipeline
-from .config import Config
-from .plugins import PLUGIN_REGISTRY
-from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
-from .plugins.manipulation import MANIPULATION_REGISTRY
-from .registry import instantiate_unit
-from .tables import (
-    BAD_COLS,
-    MANIFEST_COLS,
-    STATUS_COLS,
-    TABLE_NAMES,
-    TABLE_SUFFIX,
-    empty_tables as _empty_tables,
-    merge_table_frames as _merge_table_frames,
-    read_frame as _read_frame,
-    read_table as _read_table_parquet,
-    rows_to_frame as _rows_to_frame,
-    stack_table_frames as _stack_table_frames,
-    write_frame as _write_frame,
-    write_tables as _write_tables,
-)
-from .workspace import (
+from ..plugins import PLUGIN_REGISTRY
+from ..plugins.dataset_analysis.runtime import analyze_dataset_outputs
+from ..plugins.manipulation import MANIPULATION_REGISTRY
+from ..runtime.chunked import run_chunked_pipeline as _run_chunked_pipeline
+from ..runtime.stage_buffer import FrameBuffer, TableBuffer
+from ..runtime.workspace import (
     base_rows_for_context as _base_rows_for_context,
     copy_final_outputs as _copy_final_outputs,
     discover_inputs as _discover,
@@ -44,6 +29,21 @@ from .workspace import (
     prepared_manifest_path as _prepared_manifest_path,
     prepared_structures_dir as _prepared_structures_dir,
     run_unit as _run_unit,
+)
+from .config import Config
+from .registry import instantiate_unit
+from .tables import (
+    BAD_COLS,
+    MANIFEST_COLS,
+    STATUS_COLS,
+    TABLE_NAMES,
+    TABLE_SUFFIX,
+    merge_table_frames as _merge_table_frames,
+    read_frame as _read_frame,
+    read_table as _read_table_parquet,
+    stack_table_frames as _stack_table_frames,
+    write_frame as _write_frame,
+    write_tables as _write_tables,
 )
 
 
@@ -82,6 +82,72 @@ def _run_dataset_analyses(cfg: Config, out_dir: Path) -> None:
         dataset_analysis_params=cfg.dataset_analysis_params,
         dataset_annotations=cfg.dataset_annotations,
     )
+
+
+def _write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _table_columns(tables: dict[str, pd.DataFrame]) -> dict[str, list[str]]:
+    return {table_name: list(tables[table_name].columns) for table_name in TABLE_NAMES}
+
+
+def _merge_compatibility(config: Config | dict[str, Any]) -> dict[str, Any]:
+    if isinstance(config, Config):
+        data = config.model_dump()
+    else:
+        data = dict(config)
+    ignored = {
+        "input_dir",
+        "out_dir",
+        "keep_intermediate_outputs",
+        "dataset_analyses",
+        "dataset_analysis_params",
+        "dataset_annotations",
+    }
+    return {key: value for key, value in data.items() if key not in ignored}
+
+
+def _read_output_metadata(source_dir: Path) -> dict[str, Any]:
+    run_metadata_path = source_dir / "run_metadata.json"
+    dataset_metadata_path = source_dir / "dataset_metadata.json"
+    if run_metadata_path.exists():
+        return json.loads(run_metadata_path.read_text())
+    if dataset_metadata_path.exists():
+        return json.loads(dataset_metadata_path.read_text())
+    return {}
+
+
+def _metadata_merge_compatibility(metadata: dict[str, Any]) -> dict[str, Any] | None:
+    compatibility = metadata.get("merge_compatibility")
+    if compatibility is not None:
+        return compatibility
+    config = metadata.get("config")
+    if config is None:
+        return None
+    return _merge_compatibility(config)
+
+
+def _validate_source_table_columns(
+    table_name: str,
+    source_dir: Path,
+    frame: pd.DataFrame,
+    reference_columns: dict[str, list[str]],
+) -> pd.DataFrame:
+    source_columns = list(frame.columns)
+    if table_name not in reference_columns:
+        reference_columns[table_name] = source_columns
+        return frame
+
+    expected_columns = reference_columns[table_name]
+    if set(source_columns) != set(expected_columns):
+        raise ValueError(
+            f"Incompatible columns for {table_name} in {source_dir}: "
+            f"expected {expected_columns}, got {source_columns}"
+        )
+    if source_columns == expected_columns:
+        return frame
+    return frame.loc[:, expected_columns]
 
 
 def prepare_outputs(cfg: Config) -> dict[str, int]:
@@ -140,50 +206,66 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
         shutil.rmtree(plugins_dir)
     prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
-    base_tables = _empty_tables()
-    manipulation_tables_by_name = {unit.name: _empty_tables() for unit in manipulation_units}
-    status_rows: list[dict[str, Any]] = []
-    bad_rows: list[dict[str, Any]] = []
-    manifest_rows: list[dict[str, str]] = []
+    base_tables = TableBuffer()
+    manipulation_tables_by_name = {unit.name: TableBuffer() for unit in manipulation_units}
+    status_rows = FrameBuffer(columns=STATUS_COLS)
+    bad_rows = FrameBuffer(columns=BAD_COLS)
+    manifest_rows = FrameBuffer(columns=MANIFEST_COLS)
 
-    for source_path in _discover(input_dir):
-        try:
-            ctx = _prepare_context(source_path, source_path, cfg)
-        except Exception as exc:
-            bad_rows.append({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
-            continue
+    try:
+        for source_path in _discover(input_dir):
+            try:
+                ctx = _prepare_context(source_path, source_path, cfg)
+            except Exception as exc:
+                bad_rows.add({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
+                continue
 
-        manipulation_ok = True
+            manipulation_ok = True
+            for unit in manipulation_units:
+                manipulation_ok = _run_unit(ctx, unit, manipulation_tables_by_name[unit.name], status_rows) and manipulation_ok
+            if not manipulation_ok:
+                bad_rows.add({"path": ctx.path, "error": "prepare_failed"})
+                continue
+
+            base_rows = _base_rows_for_context(ctx)
+            for table_name, rows in base_rows.items():
+                base_tables.add_rows(table_name, rows)
+
+            prepared_path = prepared_structures_dir / _prepared_filename(source_path)
+            save_structure(prepared_path, ctx.aa)
+            manifest_rows.add({"path": ctx.path, "prepared_path": str(prepared_path.resolve())})
+
+        merged_tables = base_tables.finalize()
         for unit in manipulation_units:
-            manipulation_ok = _run_unit(ctx, unit, manipulation_tables_by_name[unit.name], status_rows) and manipulation_ok
-        if not manipulation_ok:
-            bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
-            continue
+            unit_tables = manipulation_tables_by_name[unit.name].finalize()
+            for table_name in TABLE_NAMES:
+                merged_tables[table_name] = _merge_table_frames(
+                    merged_tables[table_name],
+                    unit_tables[table_name],
+                    table_name,
+                )
 
-        base_rows = _base_rows_for_context(ctx)
-        for table_name, rows in base_rows.items():
-            base_tables[table_name].extend(rows)
-
-        prepared_path = prepared_structures_dir / _prepared_filename(source_path)
-        save_structure(prepared_path, ctx.aa)
-        manifest_rows.append({"path": ctx.path, "prepared_path": str(prepared_path.resolve())})
-
-    merged_tables = {
-        table_name: _rows_to_frame(base_tables[table_name], table_name)
-        for table_name in TABLE_NAMES
-    }
-    for unit in manipulation_units:
-        unit_tables = manipulation_tables_by_name[unit.name]
-        for table_name in TABLE_NAMES:
-            merged_tables[table_name] = _merge_table_frames(
-                merged_tables[table_name],
-                _rows_to_frame(unit_tables[table_name], table_name),
-                table_name,
-            )
-
-    counts = _write_stage_outputs(prepared_dir, merged_tables, status_rows, bad_rows)
-    _write_frame(_prepared_manifest_path(out_dir), manifest_rows, MANIFEST_COLS)
-    return counts
+        status_frame = status_rows.finalize()
+        bad_frame = bad_rows.finalize()
+        counts = _write_stage_outputs(
+            prepared_dir,
+            merged_tables,
+            status_frame.to_dict(orient="records"),
+            bad_frame.to_dict(orient="records"),
+        )
+        _write_frame(
+            _prepared_manifest_path(out_dir),
+            manifest_rows.finalize().to_dict(orient="records"),
+            MANIFEST_COLS,
+        )
+        return counts
+    finally:
+        base_tables.close()
+        for table_buffer in manipulation_tables_by_name.values():
+            table_buffer.close()
+        status_rows.close()
+        bad_rows.close()
+        manifest_rows.close()
 
 
 def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
@@ -240,22 +322,31 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
 
-    plugin_tables = _empty_tables()
-    status_rows: list[dict[str, Any]] = []
-    bad_rows: list[dict[str, Any]] = []
+    plugin_tables = TableBuffer()
+    status_rows = FrameBuffer(columns=STATUS_COLS)
+    bad_rows = FrameBuffer(columns=BAD_COLS)
 
-    for row in manifest.itertuples(index=False):
-        source_path = Path(row.path)
-        prepared_path = Path(row.prepared_path)
-        try:
-            ctx = _prepare_context(source_path, prepared_path, cfg)
-        except Exception as exc:
-            bad_rows.append({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
-            continue
-        _run_unit(ctx, plugin, plugin_tables, status_rows)
+    try:
+        for row in manifest.itertuples(index=False):
+            source_path = Path(row.path)
+            prepared_path = Path(row.prepared_path)
+            try:
+                ctx = _prepare_context(source_path, prepared_path, cfg)
+            except Exception as exc:
+                bad_rows.add({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
+                continue
+            _run_unit(ctx, plugin, plugin_tables, status_rows)
 
-    frames = {table_name: _rows_to_frame(plugin_tables[table_name], table_name) for table_name in TABLE_NAMES}
-    return _write_stage_outputs(plugin_dir, frames, status_rows, bad_rows)
+        return _write_stage_outputs(
+            plugin_dir,
+            plugin_tables.finalize(),
+            status_rows.finalize().to_dict(orient="records"),
+            bad_rows.finalize().to_dict(orient="records"),
+        )
+    finally:
+        plugin_tables.close()
+        status_rows.close()
+        bad_rows.close()
 
 
 def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path) -> dict[str, int]:
@@ -269,12 +360,34 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
     tables_by_name: dict[str, list[pd.DataFrame]] = {table_name: [] for table_name in TABLE_NAMES}
     status_frames: list[pd.DataFrame] = []
     bad_frames: list[pd.DataFrame] = []
+    metadata_by_source: list[dict[str, Any]] = []
+    reference_columns: dict[str, list[str]] = {}
+    reference_compatibility: dict[str, Any] | None = None
 
     for source_dir in resolved_sources:
         if not source_dir.exists():
             raise FileNotFoundError(f"Source out_dir not found: {source_dir}")
+        metadata = _read_output_metadata(source_dir)
+        compatibility = _metadata_merge_compatibility(metadata)
+        if compatibility is not None:
+            if reference_compatibility is None:
+                reference_compatibility = compatibility
+            elif compatibility != reference_compatibility:
+                raise ValueError(
+                    f"Incompatible source runtime configuration in {source_dir}: "
+                    "merge_compatibility does not match earlier sources"
+                )
+        metadata_by_source.append(
+            {
+                "out_dir": str(source_dir),
+                "output_kind": metadata.get("output_kind", "unknown"),
+            }
+        )
         for table_name in TABLE_NAMES:
-            tables_by_name[table_name].append(_read_table_parquet(source_dir / f"{table_name}{TABLE_SUFFIX}", table_name))
+            frame = _read_table_parquet(source_dir / f"{table_name}{TABLE_SUFFIX}", table_name)
+            tables_by_name[table_name].append(
+                _validate_source_table_columns(table_name, source_dir, frame, reference_columns)
+            )
         status_frames.append(_read_frame(source_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
         bad_frames.append(_read_frame(source_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
 
@@ -289,11 +402,23 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
     merged_status.to_parquet(target_out_dir / f"plugin_status{TABLE_SUFFIX}", index=False)
     merged_bad.to_parquet(target_out_dir / f"bad_files{TABLE_SUFFIX}", index=False)
 
-    return {
+    counts = {
         **_count_tables(merged_tables),
         "status": len(merged_status),
         "bad": len(merged_bad),
     }
+    _write_json(
+        target_out_dir / "dataset_metadata.json",
+        {
+            "output_kind": "merged_dataset",
+            "source_out_dirs": [str(path) for path in resolved_sources],
+            "source_outputs": metadata_by_source,
+            "counts": counts,
+            "merge_compatibility": reference_compatibility,
+            "table_columns": _table_columns(merged_tables),
+        },
+    )
+    return counts
 
 
 def run_chunked_pipeline(
@@ -381,11 +506,22 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     merged_status.to_parquet(out_dir / f"plugin_status{TABLE_SUFFIX}", index=False)
     merged_bad.to_parquet(out_dir / f"bad_files{TABLE_SUFFIX}", index=False)
 
-    return {
+    counts = {
         **_count_tables(merged_tables),
         "status": len(merged_status),
         "bad": len(merged_bad),
     }
+    _write_json(
+        out_dir / "run_metadata.json",
+        {
+            "output_kind": "run",
+            "config": cfg.model_dump(),
+            "counts": counts,
+            "merge_compatibility": _merge_compatibility(cfg),
+            "table_columns": _table_columns(merged_tables),
+        },
+    )
+    return counts
 
 
 def run_pipeline(cfg: Config) -> dict[str, int]:

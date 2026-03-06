@@ -4,7 +4,7 @@ from .base import BaseDatasetPlugin, DatasetAnalysisContext
 from .annotations import DatasetAnnotationsPlugin
 from .cdr_entropy import CDREntropyPlugin
 from .interface_summary import InterfaceSummaryPlugin
-from ...registry import load_registry
+from ...core.registry import load_registry
 
 
 def _builtin_dataset_analyses() -> dict[str, object]:

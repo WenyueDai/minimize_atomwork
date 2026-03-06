@@ -10,7 +10,7 @@ try:
     import pandas as pd
     import yaml
     from minimum_atw.cli import _load_config
-    from minimum_atw.pipeline import run_pipeline
+    from minimum_atw.core.pipeline import run_pipeline
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
