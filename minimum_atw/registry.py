@@ -42,3 +42,10 @@ def load_registry(
             seen_prefixes[prefix] = unit_name
 
     return registry
+
+
+def instantiate_unit(unit: Any) -> Any:
+    try:
+        return type(unit)()
+    except Exception as exc:
+        raise TypeError(f"Could not instantiate fresh unit from {type(unit).__name__}") from exc

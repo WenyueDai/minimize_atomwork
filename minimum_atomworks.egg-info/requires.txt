@@ -1,9 +1,0 @@
-biotite
-numpy
-pandas
-pydantic>=2.0
-pyarrow
-pyyaml
-
-[antibody]
-abnumber

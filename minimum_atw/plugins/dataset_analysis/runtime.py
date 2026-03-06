@@ -6,6 +6,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import DATASET_ANALYSIS_REGISTRY, DEFAULT_DATASET_ANALYSES, DatasetAnalysisContext
+from ...registry import instantiate_unit
 
 
 def analyze_dataset_outputs(
@@ -44,7 +45,7 @@ def analyze_dataset_outputs(
             raise ValueError(
                 f"Unknown dataset analysis '{analysis_name}'. Available: {sorted(DATASET_ANALYSIS_REGISTRY)}"
             )
-        result = DATASET_ANALYSIS_REGISTRY[analysis_name].run(ctx)
+        result = instantiate_unit(DATASET_ANALYSIS_REGISTRY[analysis_name]).run(ctx)
         if result:
             summary.update({str(key): value for key, value in result.items()})
 

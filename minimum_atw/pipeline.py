@@ -1,457 +1,49 @@
-"""
-Pipeline orchestration for minimum_atomworks.
-
-This module implements the three-phase execution model:
-
-1. prepare_outputs() - Load raw structures, apply manipulations, write base tables
-   - Source: input_dir/*.pdb, *.cif
-   - Output: _prepared/ with canonical tables and prepared structure files
-   - Caching: Results are cached; can be reused by plugins
-
-2. run_plugin() - Run a single plugin against prepared structures
-   - Source: prepared structures from _prepared/
-   - Output: _plugins/<plugin_name>/ with plugin-specific columns
-   - Execution: One plugin per call, enables parallelization
-
-3. merge_outputs() - Merge plugin outputs with base tables
-   - Source: base tables + all plugin outputs
-   - Output: Final tables in out_dir/ (structures.parquet, chains.parquet, etc.)
-   - Schema: Plugins add prefixed columns (e.g., "iface__n_contacts")
-
-Key concepts:
-- TABLE_NAMES: Four normalized tables (structures, chains, roles, interfaces)
-- IDENTITY_COLS: Columns that uniquely identify records (path, assembly_id, chain_id, etc.)
-- KEY_COLS: Dict mapping table name to its identity column set
-- prefix_row(): Adds plugin prefix to output columns while preserving identity keys
-- Status tracking: Each phase writes plugin_status.parquet and bad_files.parquet
-
-Status values:
-- "ok": Plugin completed without errors
-- "skipped_preflight": Plugin's available() method returned False
-- "failed": Plugin raised an exception
-"""
+"""Pipeline orchestration over extracted table and workspace helpers."""
 
 from __future__ import annotations
 
-import concurrent.futures
-import hashlib
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
-from biotite.structure.io import load_structure, save_structure
+from biotite.structure.io import save_structure
 
+from .chunked import run_chunked_pipeline as _run_chunked_pipeline
 from .config import Config
 from .plugins import PLUGIN_REGISTRY
-from .plugins.base import Context
 from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
 from .plugins.manipulation import MANIPULATION_REGISTRY
-
-
-TABLE_NAMES = ("structures", "chains", "roles", "interfaces")
-PREPARED_DIRNAME = "_prepared"
-PREPARED_STRUCTURES_DIRNAME = "structures"
-PREPARED_MANIFEST_NAME = "prepared_manifest.parquet"
-PLUGINS_DIRNAME = "_plugins"
-TABLE_SUFFIX = ".parquet"
-
-IDENTITY_COLS = {
-    "path",
-    "assembly_id",
-    "chain_id",
-    "role",
-    "pair",
-    "role_left",
-    "role_right",
-}
-
-KEY_COLS = {
-    "structures": ["path", "assembly_id"],
-    "chains": ["path", "assembly_id", "chain_id"],
-    "roles": ["path", "assembly_id", "role"],
-    "interfaces": ["path", "assembly_id", "pair", "role_left", "role_right"],
-}
-
-STATUS_COLS = ["path", "assembly_id", "plugin", "status", "message"]
-BAD_COLS = ["path", "error"]
-MANIFEST_COLS = ["path", "prepared_path"]
-FINAL_OUTPUT_FILES = [f"{table_name}{TABLE_SUFFIX}" for table_name in TABLE_NAMES] + [
-    f"plugin_status{TABLE_SUFFIX}",
-    f"bad_files{TABLE_SUFFIX}",
-]
-
-
-class TableOps:
-    """Common DataFrame operations for normalized tables.
-    
-    Consolidates scattered DataFrame utilities into a single, well-documented class.
-    All operations ensure consistent sorting by identity columns.
-    """
-    
-    @staticmethod
-    def empty_frame(table_name: str) -> pd.DataFrame:
-        """Create empty DataFrame with correct columns for table."""
-        return pd.DataFrame(columns=KEY_COLS[table_name])
-    
-    @staticmethod
-    def sort_frame(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-        """Sort DataFrame by identity columns (stable sort, preserves order)."""
-        if df.empty:
-            return df
-        sort_cols = [col for col in KEY_COLS[table_name] if col in df.columns]
-        if sort_cols:
-            df = df.sort_values(sort_cols, kind="stable")
-        return df.reset_index(drop=True)
-    
-    @staticmethod
-    def from_rows(rows: list[dict[str, Any]], table_name: str) -> pd.DataFrame:
-        """Create DataFrame from rows, sort by identity columns."""
-        if not rows:
-            return TableOps.empty_frame(table_name)
-        df = pd.DataFrame(rows)
-        # Order columns: identity keys first, then others
-        ordered = [col for col in KEY_COLS[table_name] if col in df.columns]
-        ordered.extend(col for col in df.columns if col not in ordered)
-        return TableOps.sort_frame(df.loc[:, ordered], table_name)
-    
-    @staticmethod
-    def read_frame(path: Path, columns: list[str]) -> pd.DataFrame:
-        """Read DataFrame from parquet file."""
-        if not path.exists():
-            return pd.DataFrame(columns=columns)
-        return pd.read_parquet(path)
-    
-    @staticmethod
-    def read_table(path: Path, table_name: str) -> pd.DataFrame:
-        """Read table DataFrame from parquet and sort by identity columns."""
-        if not path.exists():
-            return TableOps.empty_frame(table_name)
-        return TableOps.sort_frame(pd.read_parquet(path), table_name)
-    
-    @staticmethod
-    def merge_frames(base: pd.DataFrame, extra: pd.DataFrame, table_name: str) -> pd.DataFrame:
-        """Merge extra DataFrame into base DataFrame on identity keys."""
-        keys = KEY_COLS[table_name]
-        if base.empty:
-            base = TableOps.empty_frame(table_name)
-        if extra.empty:
-            return TableOps.sort_frame(base, table_name)
-
-        # Validate merge keys exist
-        missing = [col for col in keys if col not in extra.columns]
-        if missing:
-            raise ValueError(f"Missing merge keys for {table_name}: {', '.join(missing)}")
-
-        # Reorder extra columns: keys first, then others
-        extra = extra.loc[:, list(dict.fromkeys([*keys, *[col for col in extra.columns if col not in keys]]))]
-        
-        # Check for duplicates
-        if extra.duplicated(keys).any():
-            raise ValueError(f"Duplicate identity rows detected in {table_name}")
-        if not base.empty and base.duplicated(keys).any():
-            raise ValueError(f"Duplicate base identity rows detected in {table_name}")
-
-        non_key_cols = [col for col in extra.columns if col not in keys]
-        if not non_key_cols:
-            return TableOps.sort_frame(base, table_name)
-
-        # Check for column conflicts
-        overlapping = [col for col in non_key_cols if col in base.columns]
-        if overlapping:
-            raise ValueError(f"Overlapping output columns detected in {table_name}: {', '.join(sorted(overlapping))}")
-
-        if base.empty:
-            return TableOps.sort_frame(extra.loc[:, [*keys, *non_key_cols]].copy(), table_name)
-
-        # Perform merge
-        merged = base.merge(extra.loc[:, [*keys, *non_key_cols]], on=keys, how="left", validate="one_to_one")
-        return TableOps.sort_frame(merged, table_name)
-    
-    @staticmethod
-    def write_tables(dir_path: Path, tables: dict[str, pd.DataFrame]) -> None:
-        """Write multiple tables to parquet files in directory."""
-        dir_path.mkdir(parents=True, exist_ok=True)
-        for table_name in TABLE_NAMES:
-            tables[table_name].to_parquet(dir_path / f"{table_name}{TABLE_SUFFIX}", index=False)
-    
-    @staticmethod
-    def write_frame(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
-        """Write rows to parquet file."""
-        pd.DataFrame(rows, columns=columns).to_parquet(path, index=False)
-
-
-def _prefix_row(row: dict[str, Any], prefix: str) -> dict[str, Any]:
-    out = {}
-    for key, value in row.items():
-        if key == "__table__":
-            continue
-        if key in IDENTITY_COLS:
-            out[key] = value
-        else:
-            out[f"{prefix}__{key}"] = value
-    return out
-
-
-def _empty_tables() -> dict[str, list[dict[str, Any]]]:
-    return {table_name: [] for table_name in TABLE_NAMES}
-
-
-def _empty_frame(table_name: str) -> pd.DataFrame:
-    return TableOps.empty_frame(table_name)
-
-
-def _sort_frame(df: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    return TableOps.sort_frame(df, table_name)
-
-
-def _rows_to_frame(rows: list[dict[str, Any]], table_name: str) -> pd.DataFrame:
-    return TableOps.from_rows(rows, table_name)
-
-
-def _read_frame(path: Path, columns: list[str]) -> pd.DataFrame:
-    return TableOps.read_frame(path, columns)
-
-
-def _read_table_parquet(path: Path, table_name: str) -> pd.DataFrame:
-    return TableOps.read_table(path, table_name)
-
-
-def _merge_table_frames(base: pd.DataFrame, extra: pd.DataFrame, table_name: str) -> pd.DataFrame:
-    return TableOps.merge_frames(base, extra, table_name)
-
-
-def _stack_table_frames(frames: list[pd.DataFrame], table_name: str) -> pd.DataFrame:
-    keys = KEY_COLS[table_name]
-    non_empty = [frame for frame in frames if not frame.empty]
-    if not non_empty:
-        return _empty_frame(table_name)
-
-    combined = pd.concat(non_empty, ignore_index=True, sort=False)
-    missing = [col for col in keys if col not in combined.columns]
-    if missing:
-        raise ValueError(f"Missing identity columns for {table_name}: {', '.join(missing)}")
-    if combined.duplicated(keys).any():
-        raise ValueError(f"Duplicate identity rows detected across datasets in {table_name}")
-    return _sort_frame(combined, table_name)
-
-
-def _write_tables(dir_path: Path, tables: dict[str, pd.DataFrame]) -> None:
-    TableOps.write_tables(dir_path, tables)
-
-
-def _write_frame(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
-    TableOps.write_frame(path, rows, columns)
-
-
-def _discover(input_dir: Path) -> list[Path]:
-    files = []
-    for pattern in ("*.pdb", "*.cif"):
-        files.extend(sorted(input_dir.glob(pattern)))
-    return files
-
-
-def _chunk_paths(paths: list[Path], chunk_size: int) -> list[list[Path]]:
-    if chunk_size < 1:
-        raise ValueError("chunk_size must be at least 1")
-    return [paths[idx : idx + chunk_size] for idx in range(0, len(paths), chunk_size)]
-
-
-def _chunk_dir_name(index: int) -> str:
-    return f"chunk_{index:04d}"
-
-
-def _prepare_chunk_input_dir(chunk_input_dir: Path, chunk_paths: list[Path]) -> None:
-    chunk_input_dir.mkdir(parents=True, exist_ok=True)
-    for source_path in chunk_paths:
-        target_path = chunk_input_dir / source_path.name
-        if target_path.exists():
-            target_path.unlink()
-        target_path.symlink_to(source_path.resolve())
-
-
-def _run_chunk_job(
-    *,
-    config_data: dict[str, Any],
-    chunk_paths: list[str],
-    chunk_index: int,
-    workspace_dir: str,
-) -> dict[str, Any]:
-    workspace_path = Path(workspace_dir).resolve()
-    chunk_dir = workspace_path / _chunk_dir_name(chunk_index)
-    chunk_input_dir = chunk_dir / "input"
-    chunk_out_dir = chunk_dir / "out"
-    _prepare_chunk_input_dir(chunk_input_dir, [Path(path).resolve() for path in chunk_paths])
-
-    chunk_cfg = Config(**config_data).model_copy(
-        update={
-            "input_dir": str(chunk_input_dir),
-            "out_dir": str(chunk_out_dir),
-            "keep_intermediate_outputs": False,
-            "dataset_analyses": [],
-        }
-    )
-    counts = run_pipeline(chunk_cfg)
-    return {
-        "chunk_index": chunk_index,
-        "chunk_input_dir": str(chunk_input_dir),
-        "chunk_out_dir": str(chunk_out_dir),
-        "n_input_files": len(chunk_paths),
-        "counts": counts,
-    }
-
-
-def _prepare_context(source_path: Path, structure_path: Path, cfg: Config) -> Context:
-    aa = load_structure(structure_path)
-    ctx = Context(
-        path=str(source_path.resolve()),
-        assembly_id=cfg.assembly_id,
-        aa=aa,
-        role_map={name: tuple(chain_ids) for name, chain_ids in cfg.roles.items()},
-        config=cfg,
-    )
-    ctx.rebuild_views()
-    return ctx
-
-
-def _base_rows_for_context(ctx: Context) -> dict[str, list[dict[str, Any]]]:
-    tables = _empty_tables()
-    tables["structures"].append({"path": ctx.path, "assembly_id": ctx.assembly_id})
-
-    for chain_id in sorted(ctx.chains):
-        tables["chains"].append({"path": ctx.path, "assembly_id": ctx.assembly_id, "chain_id": chain_id})
-
-    for role_name in sorted(ctx.roles):
-        tables["roles"].append({"path": ctx.path, "assembly_id": ctx.assembly_id, "role": role_name})
-
-    for left_role, right_role in ctx.config.interface_pairs:
-        left = ctx.roles.get(left_role)
-        right = ctx.roles.get(right_role)
-        if left is None or right is None or len(left) == 0 or len(right) == 0:
-            continue
-        tables["interfaces"].append(
-            {
-                "path": ctx.path,
-                "assembly_id": ctx.assembly_id,
-                "pair": f"{left_role}__{right_role}",
-                "role_left": left_role,
-                "role_right": right_role,
-            }
-        )
-    return tables
-
-
-def _run_unit(
-    ctx: Context,
-    unit: Any,
-    tables: dict[str, list[dict[str, Any]]],
-    status_rows: list[dict[str, Any]],
-) -> bool:
-    available, message = unit.available(ctx) if hasattr(unit, "available") else (True, "")
-    if not available:
-        status_rows.append(
-            {
-                "path": ctx.path,
-                "assembly_id": ctx.assembly_id,
-                "plugin": unit.name,
-                "status": "skipped_preflight",
-                "message": message,
-            }
-        )
-        return False
-
-    try:
-        emitted = 0
-        for raw in unit.run(ctx) or []:
-            emitted += 1
-            table = raw.get("__table__", getattr(unit, "table", "structures"))
-            tables[table].append(_prefix_row(raw, unit.prefix))
-        status_rows.append(
-            {
-                "path": ctx.path,
-                "assembly_id": ctx.assembly_id,
-                "plugin": unit.name,
-                "status": "ok",
-                "message": f"rows={emitted}",
-            }
-        )
-        return True
-    except Exception as exc:
-        status_rows.append(
-            {
-                "path": ctx.path,
-                "assembly_id": ctx.assembly_id,
-                "plugin": unit.name,
-                "status": "failed",
-                "message": f"{type(exc).__name__}: {exc}",
-            }
-        )
-        return False
-
-
-def _prepared_dir(out_dir: Path) -> Path:
-    return out_dir / PREPARED_DIRNAME
-
-
-def _prepared_structures_dir(out_dir: Path) -> Path:
-    return _prepared_dir(out_dir) / PREPARED_STRUCTURES_DIRNAME
-
-
-def _prepared_manifest_path(out_dir: Path) -> Path:
-    return _prepared_dir(out_dir) / PREPARED_MANIFEST_NAME
-
-
-def _plugins_dir(out_dir: Path) -> Path:
-    return out_dir / PLUGINS_DIRNAME
-
-
-def _plugin_dir(out_dir: Path, plugin_name: str) -> Path:
-    return _plugins_dir(out_dir) / plugin_name
-
-
-def _cleanup_intermediate_outputs(out_dir: Path) -> None:
-    prepared_dir = _prepared_dir(out_dir)
-    plugins_dir = _plugins_dir(out_dir)
-    if prepared_dir.exists():
-        shutil.rmtree(prepared_dir)
-    if plugins_dir.exists():
-        shutil.rmtree(plugins_dir)
-
-
-def _clear_final_outputs(out_dir: Path) -> None:
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for filename in FINAL_OUTPUT_FILES:
-        path = out_dir / filename
-        if path.exists():
-            path.unlink()
-    analysis_dir = out_dir / "dataset_analysis"
-    if analysis_dir.exists():
-        shutil.rmtree(analysis_dir)
-
-
-def _copy_final_outputs(source_out_dir: Path, target_out_dir: Path) -> None:
-    _clear_final_outputs(target_out_dir)
-    for filename in FINAL_OUTPUT_FILES:
-        source_path = source_out_dir / filename
-        if source_path.exists():
-            shutil.copy2(source_path, target_out_dir / filename)
-
-
-def _prepared_filename(source_path: Path) -> str:
-    digest = hashlib.sha1(str(source_path.resolve()).encode("utf-8")).hexdigest()[:12]
-    suffix = source_path.suffix.lower() if source_path.suffix.lower() in {".pdb", ".cif"} else ".pdb"
-    return f"{source_path.stem}_{digest}{suffix}"
-
-
-def _load_prepared_manifest(out_dir: Path) -> pd.DataFrame:
-    manifest_path = _prepared_manifest_path(out_dir)
-    if not manifest_path.exists():
-        raise FileNotFoundError(f"Prepared outputs not found: {_prepared_dir(out_dir)}")
-    manifest = _read_frame(manifest_path, MANIFEST_COLS)
-    if manifest.duplicated(["path"]).any():
-        raise ValueError("Prepared manifest contains duplicate source paths")
-    return manifest
+from .registry import instantiate_unit
+from .tables import (
+    BAD_COLS,
+    MANIFEST_COLS,
+    STATUS_COLS,
+    TABLE_NAMES,
+    TABLE_SUFFIX,
+    empty_tables as _empty_tables,
+    merge_table_frames as _merge_table_frames,
+    read_frame as _read_frame,
+    read_table as _read_table_parquet,
+    rows_to_frame as _rows_to_frame,
+    stack_table_frames as _stack_table_frames,
+    write_frame as _write_frame,
+    write_tables as _write_tables,
+)
+from .workspace import (
+    base_rows_for_context as _base_rows_for_context,
+    copy_final_outputs as _copy_final_outputs,
+    discover_inputs as _discover,
+    load_prepared_manifest as _load_prepared_manifest,
+    plugin_dir as _plugin_dir,
+    plugins_dir as _plugins_dir,
+    prepare_context as _prepare_context,
+    prepared_dir as _prepared_dir,
+    prepared_filename as _prepared_filename,
+    prepared_manifest_path as _prepared_manifest_path,
+    prepared_structures_dir as _prepared_structures_dir,
+    run_unit as _run_unit,
+)
 
 
 def prepare_outputs(cfg: Config) -> dict[str, int]:
@@ -501,10 +93,13 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
     out_dir = Path(cfg.out_dir).resolve()
     prepared_dir = _prepared_dir(out_dir)
     prepared_structures_dir = _prepared_structures_dir(out_dir)
-    manipulation_units = [MANIPULATION_REGISTRY[name] for name in cfg.manipulations]
+    manipulation_units = [instantiate_unit(MANIPULATION_REGISTRY[name]) for name in cfg.manipulations]
+    plugins_dir = _plugins_dir(out_dir)
 
     if prepared_dir.exists():
         shutil.rmtree(prepared_dir)
+    if plugins_dir.exists():
+        shutil.rmtree(plugins_dir)
     prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
     base_tables = _empty_tables()
@@ -611,7 +206,7 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
 
     out_dir = Path(cfg.out_dir).resolve()
     plugin_dir = _plugin_dir(out_dir, plugin_name)
-    plugin = PLUGIN_REGISTRY[plugin_name]
+    plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
     manifest = _load_prepared_manifest(out_dir)
 
     if plugin_dir.exists():
@@ -693,60 +288,13 @@ def run_chunked_pipeline(
     chunk_size: int,
     workers: int = 1,
 ) -> dict[str, int]:
-    input_paths = _discover(Path(cfg.input_dir).resolve())
-    if not input_paths:
-        raise FileNotFoundError(f"No .pdb or .cif files found in {Path(cfg.input_dir).resolve()}")
-
-    chunks = _chunk_paths(input_paths, chunk_size)
-    max_workers = max(1, int(workers))
-    out_dir = Path(cfg.out_dir).resolve()
-    _clear_final_outputs(out_dir)
-
-    config_data = cfg.model_dump()
-    with tempfile.TemporaryDirectory(prefix="minimum_atw_chunked_") as tmp_dir:
-        workspace_dir = Path(tmp_dir).resolve()
-        chunk_results: list[dict[str, Any]] = []
-
-        jobs = [
-            {
-                "config_data": config_data,
-                "chunk_paths": [str(path) for path in chunk_paths],
-                "chunk_index": chunk_index,
-                "workspace_dir": str(workspace_dir),
-            }
-            for chunk_index, chunk_paths in enumerate(chunks, start=1)
-        ]
-
-        def _submit_all(executor):
-            futures = [executor.submit(_run_chunk_job, **job) for job in jobs]
-            return [future.result() for future in concurrent.futures.as_completed(futures)]
-
-        if max_workers == 1:
-            chunk_results = [_run_chunk_job(**job) for job in jobs]
-        else:
-            try:
-                with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
-                    chunk_results = _submit_all(executor)
-            except PermissionError:
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    chunk_results = _submit_all(executor)
-
-        chunk_results = sorted(chunk_results, key=lambda item: int(item["chunk_index"]))
-        merged_counts = merge_dataset_outputs(
-            [item["chunk_out_dir"] for item in chunk_results],
-            out_dir,
-        )
-        if cfg.dataset_analyses:
-            analyze_dataset_outputs(
-                out_dir,
-                dataset_analyses=tuple(cfg.dataset_analyses),
-                dataset_annotations=cfg.dataset_annotations,
-            )
-
-    merged_counts["chunks"] = len(chunks)
-    merged_counts["chunk_size"] = chunk_size
-    merged_counts["workers"] = max_workers
-    return merged_counts
+    return _run_chunked_pipeline(
+        cfg,
+        chunk_size=chunk_size,
+        workers=workers,
+        merge_dataset_outputs_fn=merge_dataset_outputs,
+        analyze_dataset_outputs_fn=analyze_dataset_outputs,
+    )
 
 
 def merge_outputs(cfg: Config) -> dict[str, int]:
@@ -807,10 +355,11 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     status_frames = [_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)]
     bad_frames = [_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS)]
 
-    plugins_dir = _plugins_dir(out_dir)
-    plugin_names = sorted(path.name for path in plugins_dir.iterdir() if path.is_dir()) if plugins_dir.exists() else []
+    plugin_names = cfg.plugins
     for plugin_name in plugin_names:
-        plugin_dir = plugins_dir / plugin_name
+        plugin_dir = _plugin_dir(out_dir, plugin_name)
+        if not plugin_dir.exists():
+            raise FileNotFoundError(f"Plugin outputs not found for configured plugin '{plugin_name}': {plugin_dir}")
         for table_name in TABLE_NAMES:
             plugin_frame = _read_table_parquet(plugin_dir / f"{table_name}{TABLE_SUFFIX}", table_name)
             merged_tables[table_name] = _merge_table_frames(merged_tables[table_name], plugin_frame, table_name)
