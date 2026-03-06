@@ -1,41 +1,66 @@
 # Simple Run Examples
 
-This folder contains complete example YAML files for running one dataset in one output directory.
+This folder is for one dataset -> one output directory.
 
-Files:
+Use these examples if:
+
+- you want the easiest way to run `minimum_atomworks`
+- you want to inspect one finished dataset
+- you are testing plugin behavior or schema changes
+
+## Files
 
 - `example_antibody_antigen_pdb.yaml`
 - `example_antibody_antigen_light.yaml`
 - `example_vhh_antigen.yaml`
 - `example_protein_protein_complex.yaml`
 
-Built-in extension surface shown in the examples:
+## What these examples show
 
-- manipulations: `center_on_origin`, `superimpose_homology`
-- record plugins: `identity`, `chain_stats`, `role_sequences`, `role_stats`, `interface_contacts`, `antibody_cdr_lengths`, `antibody_cdr_sequences`, `rosetta_interface_example`
-- dataset analyses: `dataset_annotations`, `interface_summary`, `cdr_entropy`
+The YAML files expose the built-in feature surface directly in comments.
 
-The YAML files list as much of that surface as possible directly in comments. When only one option can be active at a time, the alternatives are kept commented out next to the active setting.
+They show:
 
-For antibody/VHH examples, `interface_contacts` now writes both whole-interface residue columns and CDR-specific interface columns when `numbering_roles` is configured. The interface table can therefore include fields such as:
+- manipulations
+  `center_on_origin`, `superimpose_homology`
+- record plugins
+  `identity`, `chain_stats`, `role_sequences`, `role_stats`, `interface_contacts`, `antibody_cdr_lengths`, `antibody_cdr_sequences`, `rosetta_interface_example`
+- dataset analyses
+  `dataset_annotations`, `interface_summary`, `cdr_entropy`
 
-- `iface__left_interface_residues`
-- `iface__right_interface_residues`
-- `iface__n_left_vh_cdr1_interface_residues`
-- `iface__left_vh_cdr1_interface_residues`
-- `iface__n_left_vl_cdr3_interface_residues`
-- `iface__left_vl_cdr3_interface_residues`
+When only one option can be active, the alternatives are left commented out next to the chosen value.
 
-Those residue lists use `chain:resi:resn` with 1-letter residue codes.
+## Which config should you start with?
 
-Run one of them with:
+Use `example_antibody_antigen_pdb.yaml` if:
+
+- you want the most complete antibody example
+- you want interface contact output plus antibody CDR output
+
+Use `example_antibody_antigen_light.yaml` if:
+
+- you want a faster run
+- you want fewer active plugins
+
+Use `example_vhh_antigen.yaml` if:
+
+- your system is a nanobody or VHH binder
+
+Use `example_protein_protein_complex.yaml` if:
+
+- your system is a generic protein-protein complex
+- you do not want antibody-specific output
+
+## Fastest command
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
-Staged workflow:
+## Staged workflow
+
+Use this only if you want to inspect each stage separately.
 
 ```bash
 CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
@@ -50,7 +75,24 @@ CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antib
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config "$CONFIG"
 ```
 
-Other ready-to-run configs on this machine:
+## Important output notes
+
+In antibody and VHH examples, `interface_contacts` can write:
+
+- whole-interface residue columns
+  `iface__left_interface_residues`, `iface__right_interface_residues`
+- CDR-specific interface columns
+  `iface__n_left_vh_cdr1_interface_residues`, `iface__left_vh_cdr1_interface_residues`, `iface__n_left_vl_cdr3_interface_residues`, `iface__left_vl_cdr3_interface_residues`
+
+Residue tokens use:
+
+```text
+chain:resi:resn
+```
+
+with 1-letter residue codes.
+
+## Other ready-to-run commands
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
@@ -63,7 +105,9 @@ Other ready-to-run configs on this machine:
   --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
 ```
 
-Slurm one-shot example:
+## Slurm examples
+
+One-shot:
 
 ```bash
 sbatch <<'EOF'
@@ -82,7 +126,7 @@ cd /home/eva/minimum_atomworks
 EOF
 ```
 
-Slurm staged example:
+Staged:
 
 ```bash
 sbatch <<'EOF'
@@ -109,11 +153,9 @@ CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antib
 EOF
 ```
 
-Notes:
+## Notes
 
-- These YAML files are concrete examples, not guaranteed turnkey runs on every machine.
-- The Rosetta paths are filled in, but the Rosetta plugin is commented out by default because it depends on an external Rosetta install.
-- Antibody numbering examples keep one active `numbering_scheme` and `cdr_definition`, with the other valid combinations commented out beside them.
-- In the antibody and VHH configs, `interface_contacts` uses those numbering settings to add per-CDR contact residue columns to `interfaces.parquet`.
-- `cdr_entropy` examples show region and role filters in comments because only one selection can be active for a given run configuration.
-- On this machine, the four YAML files above already point at real input data and absolute output paths.
+- These configs are concrete examples, not a promise that every machine has the same data paths.
+- The Rosetta example plugin stays commented out by default because it depends on an external Rosetta installation.
+- Antibody numbering examples keep one active `numbering_scheme` and `cdr_definition`, with other valid choices shown as comments.
+- `cdr_entropy` examples also show role and region selection variants in comments.

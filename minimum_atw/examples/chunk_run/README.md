@@ -1,74 +1,57 @@
 # Chunk Run Examples
 
-This folder shows the manual chunk workflow.
+This folder is for manual chunk configs.
 
-This is the example set to use when you want scheduler-level parallelism across
-chunks, for example:
+Use this workflow if:
 
-- one Slurm job per chunk
-- many chunk jobs running at the same time
-- one follow-up merge job after all chunk jobs finish
+- you want one scheduler job per chunk
+- you want to control each chunk config explicitly
+- you want a simple manual path for debugging staged runs
 
-Your input structures do not need to follow any filename numbering convention.
+If you want one large orchestrated command instead, use [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md).
 
-`chunk_run` only cares that:
+## Files
+
+- `chunk_antibody_antigen_01.yaml`
+- `chunk_antibody_antigen_02.yaml`
+- `chunk_config_manifest_example.txt`
+
+## Key rule
+
+Input filenames do not need any shared numeric pattern.
+
+`chunk_run` only requires:
 
 - each chunk config points at a real `input_dir`
-- each chunk `input_dir` contains valid `.pdb` or `.cif` files
+- each chunk input directory contains valid `.pdb` or `.cif` files
 - each chunk writes to its own `out_dir`
 
-The structure filenames inside a chunk can be arbitrary, for example:
+So filenames like these are fine:
 
 - `binder_A_model_final.pdb`
 - `7xyz_relaxed_decoy_alpha.pdb`
 - `candidate_nanobody_redo_2026_03_01.cif`
 
-No shared numeric index in the input filenames is required.
+## What this workflow looks like
 
-For the preferred automatic workflow, use `run-chunked` on one config instead of creating chunk YAML files yourself.
+1. run each chunk config separately
+2. each chunk produces a complete final `out_dir`
+3. merge the finished chunk outputs with `merge-datasets`
+4. optionally run dataset analysis on the merged dataset
 
-Files:
+This is the right workflow when parallelism is owned by the scheduler, not by `minimum_atw`.
 
-- `chunk_antibody_antigen_01.yaml`
-- `chunk_antibody_antigen_02.yaml`
-
-Each chunk YAML now lists the full built-in manipulation, plugin, and dataset-analysis surface in comments, with the non-default options left commented out. This keeps the examples plug-and-play while still advertising the available extension points.
-
-Because these chunk examples keep `numbering_roles` and `interface_contacts` enabled, each chunk `interfaces.parquet` and the merged dataset can include antibody CDR interface fields such as `iface__left_vh_cdr3_interface_residues` and `iface__left_vl_cdr3_interface_residues`.
-
-Run the chunks:
+## Run the example chunks
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 ```
 
-Staged manual chunk workflow:
-
-```bash
-CONFIG_01=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
-CONFIG_02=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
-
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG_01"
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin identity
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin chain_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin role_sequences
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin role_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin interface_contacts
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG_01"
-
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG_02"
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin identity
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin chain_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin role_sequences
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin role_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin interface_contacts
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG_02"
-```
-
-Merge the finished chunk outputs:
+## Merge the finished chunk outputs
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
@@ -77,52 +60,48 @@ Merge the finished chunk outputs:
   --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
 ```
 
-Then, if you want dataset-level summaries on the merged result, run:
+## Optional dataset analysis on the merged result
+
+Point `out_dir` in a config file at:
+
+```text
+/home/eva/minimum_atomworks/out_antibody_antigen_merged
+```
+
+Then run:
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
-Before running that analysis command, point `out_dir` in the YAML at:
+## Staged chunk workflow
 
-```text
-/home/eva/minimum_atomworks/out_antibody_antigen_merged
+Use this only if you want to inspect each stage for a chunk.
+
+```bash
+CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin identity
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin chain_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
 ```
 
-How this is intended to work:
+## Example data on this machine
 
-- each chunk YAML writes a complete final `out_dir`
-- chunk configs keep the same extension inventory as one-shot configs, but you can still trim the active plugin list per chunk if needed
-- `merge-datasets` merges those final chunk outputs row by row into one new final `out_dir`
-- dataset analysis is a separate step on the merged dataset
-- this is the right pattern when you want external scheduler parallelism across chunks
-
-These manual chunk YAMLs now point at real data on this machine:
+These chunk YAMLs point at real data here:
 
 - `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01`
 - `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_02`
 - `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb`
 
-Automatic alternative:
+## Slurm patterns
 
-```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
-  --chunk-size 5 \
-  --workers 2
-```
-
-That command creates temporary chunks internally, runs them, merges the chunk outputs into the final `out_dir`, and removes the temporary chunk workspace afterward.
-
-Parallelism model summary:
-
-- `chunk_run`
-  manual chunking, best for many independent scheduler jobs
-- `run-chunked`
-  one orchestrated command, best for internal parallel workers inside one allocation
-
-Slurm manual chunk example:
+### One job per explicit chunk config
 
 ```bash
 sbatch <<'EOF'
@@ -139,24 +118,9 @@ cd /home/eva/minimum_atomworks
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
 EOF
-
-sbatch <<'EOF'
-#!/bin/bash
-#SBATCH --job-name=minimum-atw-chunk-02
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=02:00:00
-#SBATCH --output=logs/%x-%j.out
-set -euo pipefail
-
-cd /home/eva/minimum_atomworks
-
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
-EOF
 ```
 
-Slurm array-style chunk example:
+### Slurm array with numeric chunk config names
 
 ```bash
 sbatch --array=1-2 <<'EOF'
@@ -172,27 +136,25 @@ cd /home/eva/minimum_atomworks
 
 CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_0${SLURM_ARRAY_TASK_ID}.yaml
 
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-  --config "$CONFIG"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run --config "$CONFIG"
 EOF
 ```
 
-Then submit the merge job after the chunk jobs complete.
+### Slurm array with arbitrary chunk config names
 
-Slurm array example for arbitrary chunk config names:
-
-If your chunk config filenames are not a simple numeric pattern, build a manifest
-file and let the array task read one line from it.
+Use a manifest file and let each array task read one line from it.
 
 Example manifest:
 
-```text
-/home/eva/minimum_atomworks/path/to/chunk_alpha.yaml
-/home/eva/minimum_atomworks/path/to/chunk_beta.yaml
-/home/eva/minimum_atomworks/path/to/chunk_gamma.yaml
+- [chunk_config_manifest_example.txt](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt)
+
+To use the shipped example manifest:
+
+```bash
+MANIFEST=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt
 ```
 
-Then run:
+Generic pattern:
 
 ```bash
 sbatch --array=1-3 <<'EOF'
@@ -209,14 +171,13 @@ cd /home/eva/minimum_atomworks
 MANIFEST=/home/eva/minimum_atomworks/path/to/chunk_config_manifest.txt
 CONFIG=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
 
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-  --config "$CONFIG"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run --config "$CONFIG"
 EOF
 ```
 
-This pattern is usually the safest choice when chunk config names are arbitrary.
+This is the safest pattern when chunk config names are arbitrary.
 
-Slurm merge job:
+### Merge job
 
 ```bash
 sbatch <<'EOF'
@@ -237,28 +198,8 @@ cd /home/eva/minimum_atomworks
 EOF
 ```
 
-Slurm staged chunk example:
+## Notes
 
-```bash
-sbatch <<'EOF'
-#!/bin/bash
-#SBATCH --job-name=minimum-atw-chunk-01-staged
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=04:00:00
-#SBATCH --output=logs/%x-%j.out
-set -euo pipefail
-
-cd /home/eva/minimum_atomworks
-
-CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
-
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG"
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin identity
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin chain_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
-EOF
-```
+- These manual chunk examples keep `numbering_roles` and `interface_contacts` enabled, so merged `interfaces.parquet` can contain antibody CDR interface columns.
+- Chunk outputs must still be compatible before merge. Different numbering setup or different final table columns are expected to fail the merge.
+- If you want automatically generated scheduler-ready chunk configs from one large config, use `plan-chunks` in [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md).
