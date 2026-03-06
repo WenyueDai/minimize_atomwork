@@ -8,7 +8,14 @@ import yaml
 
 from .config import Config
 from .extensions import EXTENSION_CLASSES, extension_catalog, extension_catalog_by_category
-from .pipeline import merge_dataset_outputs, merge_outputs, prepare_outputs, run_pipeline, run_plugin
+from .pipeline import (
+    merge_dataset_outputs,
+    merge_outputs,
+    prepare_outputs,
+    run_chunked_pipeline,
+    run_pipeline,
+    run_plugin,
+)
 from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
 
 
@@ -23,6 +30,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     run_parser = subparsers.add_parser("run", help="Prepare, run all configured plugins, then merge outputs")
     run_parser.add_argument("--config", required=True, help="Path to YAML config")
+
+    run_chunked_parser = subparsers.add_parser("run-chunked", help="Split one input_dir into chunks, run them in parallel, then merge final outputs")
+    run_chunked_parser.add_argument("--config", required=True, help="Path to YAML config")
+    run_chunked_parser.add_argument("--chunk-size", required=True, type=int, help="Maximum number of structures per chunk")
+    run_chunked_parser.add_argument("--workers", type=int, default=1, help="Number of chunk workers to run in parallel")
 
     prepare_parser = subparsers.add_parser("prepare", help="Apply manipulations once, cache prepared structures, and write base tables")
     prepare_parser.add_argument("--config", required=True, help="Path to YAML config")
@@ -94,6 +106,12 @@ def main() -> None:
         cfg = _load_config(args.config)
         counts = prepare_outputs(cfg)
         _print_counts("Prepare complete", counts)
+        return
+
+    if args.command == "run-chunked":
+        cfg = _load_config(args.config)
+        counts = run_chunked_pipeline(cfg, chunk_size=args.chunk_size, workers=args.workers)
+        _print_counts("Chunked run complete", counts)
         return
 
     if args.command == "run-plugin":

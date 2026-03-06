@@ -33,8 +33,10 @@ Status values:
 
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import shutil
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -75,6 +77,10 @@ KEY_COLS = {
 STATUS_COLS = ["path", "assembly_id", "plugin", "status", "message"]
 BAD_COLS = ["path", "error"]
 MANIFEST_COLS = ["path", "prepared_path"]
+FINAL_OUTPUT_FILES = [f"{table_name}{TABLE_SUFFIX}" for table_name in TABLE_NAMES] + [
+    f"plugin_status{TABLE_SUFFIX}",
+    f"bad_files{TABLE_SUFFIX}",
+]
 
 
 class TableOps:
@@ -246,6 +252,57 @@ def _discover(input_dir: Path) -> list[Path]:
     return files
 
 
+def _chunk_paths(paths: list[Path], chunk_size: int) -> list[list[Path]]:
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be at least 1")
+    return [paths[idx : idx + chunk_size] for idx in range(0, len(paths), chunk_size)]
+
+
+def _chunk_dir_name(index: int) -> str:
+    return f"chunk_{index:04d}"
+
+
+def _prepare_chunk_input_dir(chunk_input_dir: Path, chunk_paths: list[Path]) -> None:
+    chunk_input_dir.mkdir(parents=True, exist_ok=True)
+    for source_path in chunk_paths:
+        target_path = chunk_input_dir / source_path.name
+        if target_path.exists():
+            target_path.unlink()
+        target_path.symlink_to(source_path.resolve())
+
+
+def _run_chunk_job(
+    *,
+    config_data: dict[str, Any],
+    chunk_paths: list[str],
+    chunk_index: int,
+    workspace_dir: str,
+) -> dict[str, Any]:
+    workspace_path = Path(workspace_dir).resolve()
+    chunk_dir = workspace_path / _chunk_dir_name(chunk_index)
+    chunk_input_dir = chunk_dir / "input"
+    chunk_out_dir = chunk_dir / "out"
+    _prepare_chunk_input_dir(chunk_input_dir, [Path(path).resolve() for path in chunk_paths])
+
+    chunk_cfg = Config(**config_data).model_copy(
+        update={
+            "input_dir": str(chunk_input_dir),
+            "out_dir": str(chunk_out_dir),
+            "keep_intermediate_outputs": False,
+            "dataset_analysis": False,
+            "dataset_analyses": [],
+        }
+    )
+    counts = run_pipeline(chunk_cfg)
+    return {
+        "chunk_index": chunk_index,
+        "chunk_input_dir": str(chunk_input_dir),
+        "chunk_out_dir": str(chunk_out_dir),
+        "n_input_files": len(chunk_paths),
+        "counts": counts,
+    }
+
+
 def _prepare_context(source_path: Path, structure_path: Path, cfg: Config) -> Context:
     aa = load_structure(structure_path)
     ctx = Context(
@@ -363,6 +420,25 @@ def _cleanup_intermediate_outputs(out_dir: Path) -> None:
         shutil.rmtree(plugins_dir)
 
 
+def _clear_final_outputs(out_dir: Path) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for filename in FINAL_OUTPUT_FILES:
+        path = out_dir / filename
+        if path.exists():
+            path.unlink()
+    analysis_dir = out_dir / "dataset_analysis"
+    if analysis_dir.exists():
+        shutil.rmtree(analysis_dir)
+
+
+def _copy_final_outputs(source_out_dir: Path, target_out_dir: Path) -> None:
+    _clear_final_outputs(target_out_dir)
+    for filename in FINAL_OUTPUT_FILES:
+        source_path = source_out_dir / filename
+        if source_path.exists():
+            shutil.copy2(source_path, target_out_dir / filename)
+
+
 def _prepared_filename(source_path: Path) -> str:
     digest = hashlib.sha1(str(source_path.resolve()).encode("utf-8")).hexdigest()[:12]
     suffix = source_path.suffix.lower() if source_path.suffix.lower() in {".pdb", ".cif"} else ".pdb"
@@ -433,7 +509,7 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
     prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
     base_tables = _empty_tables()
-    manipulation_tables = _empty_tables()
+    manipulation_tables_by_name = {unit.name: _empty_tables() for unit in manipulation_units}
     status_rows: list[dict[str, Any]] = []
     bad_rows: list[dict[str, Any]] = []
     manifest_rows: list[dict[str, str]] = []
@@ -447,7 +523,7 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
 
         manipulation_ok = True
         for unit in manipulation_units:
-            manipulation_ok = _run_unit(ctx, unit, manipulation_tables, status_rows) and manipulation_ok
+            manipulation_ok = _run_unit(ctx, unit, manipulation_tables_by_name[unit.name], status_rows) and manipulation_ok
         if not manipulation_ok:
             bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
             continue
@@ -461,13 +537,17 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
         manifest_rows.append({"path": ctx.path, "prepared_path": str(prepared_path.resolve())})
 
     merged_tables = {
-        table_name: _merge_table_frames(
-            _rows_to_frame(base_tables[table_name], table_name),
-            _rows_to_frame(manipulation_tables[table_name], table_name),
-            table_name,
-        )
+        table_name: _rows_to_frame(base_tables[table_name], table_name)
         for table_name in TABLE_NAMES
     }
+    for unit in manipulation_units:
+        unit_tables = manipulation_tables_by_name[unit.name]
+        for table_name in TABLE_NAMES:
+            merged_tables[table_name] = _merge_table_frames(
+                merged_tables[table_name],
+                _rows_to_frame(unit_tables[table_name], table_name),
+                table_name,
+            )
 
     _write_tables(prepared_dir, merged_tables)
     _write_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
@@ -608,6 +688,68 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
     }
 
 
+def run_chunked_pipeline(
+    cfg: Config,
+    *,
+    chunk_size: int,
+    workers: int = 1,
+) -> dict[str, int]:
+    input_paths = _discover(Path(cfg.input_dir).resolve())
+    if not input_paths:
+        raise FileNotFoundError(f"No .pdb or .cif files found in {Path(cfg.input_dir).resolve()}")
+
+    chunks = _chunk_paths(input_paths, chunk_size)
+    max_workers = max(1, int(workers))
+    out_dir = Path(cfg.out_dir).resolve()
+    _clear_final_outputs(out_dir)
+
+    config_data = cfg.model_dump()
+    with tempfile.TemporaryDirectory(prefix="minimum_atw_chunked_") as tmp_dir:
+        workspace_dir = Path(tmp_dir).resolve()
+        chunk_results: list[dict[str, Any]] = []
+
+        jobs = [
+            {
+                "config_data": config_data,
+                "chunk_paths": [str(path) for path in chunk_paths],
+                "chunk_index": chunk_index,
+                "workspace_dir": str(workspace_dir),
+            }
+            for chunk_index, chunk_paths in enumerate(chunks, start=1)
+        ]
+
+        def _submit_all(executor):
+            futures = [executor.submit(_run_chunk_job, **job) for job in jobs]
+            return [future.result() for future in concurrent.futures.as_completed(futures)]
+
+        if max_workers == 1:
+            chunk_results = [_run_chunk_job(**job) for job in jobs]
+        else:
+            try:
+                with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as executor:
+                    chunk_results = _submit_all(executor)
+            except PermissionError:
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    chunk_results = _submit_all(executor)
+
+        chunk_results = sorted(chunk_results, key=lambda item: int(item["chunk_index"]))
+        merged_counts = merge_dataset_outputs(
+            [item["chunk_out_dir"] for item in chunk_results],
+            out_dir,
+        )
+        if cfg.dataset_analyses:
+            analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=tuple(cfg.dataset_analyses),
+                dataset_annotations=cfg.dataset_annotations,
+            )
+
+    merged_counts["chunks"] = len(chunks)
+    merged_counts["chunk_size"] = chunk_size
+    merged_counts["workers"] = max_workers
+    return merged_counts
+
+
 def merge_outputs(cfg: Config) -> dict[str, int]:
     """
     Merge plugin outputs with base tables.
@@ -728,16 +870,30 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
         Intermediate files are deleted unless keep_intermediate_outputs=True
     """
     out_dir = Path(cfg.out_dir).resolve()
-    prepare_outputs(cfg)
-    for plugin_name in cfg.plugins:
-        run_plugin(cfg, plugin_name)
-    counts = merge_outputs(cfg)
-    if cfg.dataset_analyses:
-        analyze_dataset_outputs(
-            out_dir,
-            dataset_analyses=tuple(cfg.dataset_analyses),
-            dataset_annotations=cfg.dataset_annotations,
-        )
-    if not cfg.keep_intermediate_outputs:
-        _cleanup_intermediate_outputs(out_dir)
+    if cfg.keep_intermediate_outputs:
+        prepare_outputs(cfg)
+        for plugin_name in cfg.plugins:
+            run_plugin(cfg, plugin_name)
+        counts = merge_outputs(cfg)
+        if cfg.dataset_analyses:
+            analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=tuple(cfg.dataset_analyses),
+                dataset_annotations=cfg.dataset_annotations,
+            )
+        return counts
+
+    with tempfile.TemporaryDirectory(prefix="minimum_atw_run_") as tmp_dir:
+        temp_cfg = cfg.model_copy(update={"out_dir": str(Path(tmp_dir).resolve())})
+        prepare_outputs(temp_cfg)
+        for plugin_name in temp_cfg.plugins:
+            run_plugin(temp_cfg, plugin_name)
+        counts = merge_outputs(temp_cfg)
+        _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir)
+        if cfg.dataset_analyses:
+            analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=tuple(cfg.dataset_analyses),
+                dataset_annotations=cfg.dataset_annotations,
+            )
     return counts

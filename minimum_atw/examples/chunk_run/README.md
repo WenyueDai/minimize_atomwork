@@ -1,6 +1,8 @@
 # Chunk Run Examples
 
-This folder shows how to process a dataset in pieces and merge the finished outputs at the end.
+This folder shows the manual chunk workflow.
+
+For the preferred automatic workflow, use `run-chunked` on one config instead of creating chunk YAML files yourself.
 
 Files:
 
@@ -43,3 +45,14 @@ How this is intended to work:
 - dataset analysis is a separate step on the merged dataset
 
 Adjust the chunk input directories and reference path to match your machine before running.
+
+Automatic alternative:
+
+```bash
+python -m minimum_atw.cli run-chunked \
+  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
+  --chunk-size 5 \
+  --workers 2
+```
+
+That command creates temporary chunks internally, runs them, merges the chunk outputs into the final `out_dir`, and removes the temporary chunk workspace afterward.

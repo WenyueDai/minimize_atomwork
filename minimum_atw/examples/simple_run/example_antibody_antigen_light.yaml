@@ -1,5 +1,5 @@
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_pdb"
+out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_pdb_light_test"
 assembly_id: "1"
 
 roles:
@@ -13,7 +13,6 @@ interface_pairs:
 
 manipulations:
   - "center_on_origin"
-  - "superimpose_homology"
 
 plugins:
   - "identity"
@@ -21,8 +20,6 @@ plugins:
   - "role_sequences"
   - "role_stats"
   - "interface_contacts"
-  - "antibody_cdr_lengths"
-  - "antibody_cdr_sequences"
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
@@ -36,7 +33,6 @@ dataset_analysis: true
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
-  - "cdr_entropy"
 
 numbering_roles:
   - "vh"
@@ -44,8 +40,6 @@ numbering_roles:
 
 dataset_annotations:
   project: "atomworks_example"
-  dataset_name: "antibody_antigen_pdb"
+  dataset_name: "antibody_antigen_pdb_light_test"
   modality: "antibody_antigen"
   source: "atw_pp default input"
-  reference_model: "rank_001_alphafold2_multimer_v3_model_3_seed_000_2024"
-  rosetta_plugin_note: "Configured but not enabled in plugins by default because Rosetta is an external dependency"

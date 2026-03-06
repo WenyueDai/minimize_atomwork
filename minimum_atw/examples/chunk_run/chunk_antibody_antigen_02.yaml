@@ -29,6 +29,7 @@ rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linux
 rosetta_database: "/opt/rosetta/main/database"
 superimpose_reference_path: "/home/eva/chunks/antibody_antigen/reference/7e9b_reference_rank_001.pdb"
 superimpose_on_chains: ["A", "B", "C"]
+# Chunk runs keep only final outputs in each chunk out_dir.
 keep_intermediate_outputs: false
 
 dataset_analysis: false

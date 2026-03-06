@@ -29,6 +29,7 @@ rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linux
 rosetta_database: "/opt/rosetta/main/database"
 superimpose_reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
 superimpose_on_chains: ["A", "B", "C"]
+# One-shot runs keep only final outputs in out_dir.
 keep_intermediate_outputs: false
 
 dataset_analysis: true

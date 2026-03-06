@@ -16,6 +16,7 @@ The package has three runtime concepts only:
 It also supports one dataset-composition step for chunked runs:
 
 - `merge-datasets`: stack multiple completed `out_dir` results into one final dataset
+- `run-chunked`: split one large dataset into chunks, run them in parallel, and merge the final outputs
 
 It is intended to work with:
 
@@ -36,8 +37,8 @@ Config + role definitions
     v
 CLI commands -----------------------------------------------+
     |                                                       |
-    | run / prepare / run-plugin / merge / analyze-dataset  |
-    | merge-datasets                                        |
+    | run / run-chunked / prepare / run-plugin / merge      |
+    | analyze-dataset / merge-datasets                      |
     v                                                       |
 Pipeline ------------------------------------------------+   |
     |                                                    |   |
@@ -166,24 +167,25 @@ python -m minimum_atw.cli analyze-dataset --config minimum_atw/examples/simple_r
 Chunked dataset workflow:
 
 ```bash
-python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
-python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
-python -m minimum_atw.cli merge-datasets --out-dir /path/to/out_merged \
-  --source-out-dir /path/to/out_chunk_01 \
-  --source-out-dir /path/to/out_chunk_02
+python -m minimum_atw.cli run-chunked \
+  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
+  --chunk-size 5 \
+  --workers 2
 ```
 
-`merge-datasets` stacks rows from multiple completed datasets and writes a new final `out_dir`. It tells you exactly what it merged from and where it wrote the combined result.
+`run-chunked` splits one `input_dir` into temporary chunks, runs those chunks in parallel, merges the final chunk outputs into `out_dir`, optionally runs dataset analysis once on the merged result, and then removes the temporary chunk workspace.
 
-If you want dataset-level summaries on the merged output, run `analyze-dataset` afterward using a config whose `out_dir` points at the merged directory.
+For advanced control, you can still run manual chunks yourself and combine them later with `merge-datasets`.
 
 Example configs:
 
 - [antibody-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml)
 - [VHH-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml)
 - [protein-protein complex](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml)
+- [large-run chunked example](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
 - [simple-run README](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md)
 - [chunk-run README](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md)
+- [large-run README](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md)
 
 ## Output layout
 
@@ -204,7 +206,9 @@ Intermediate outputs, kept only when `keep_intermediate_outputs: true`:
 - `out_dir/_plugins/<plugin_name>/`
 - `out_dir/dataset_analysis/`
 
-For chunked workflows, the merged dataset output contains only the final merged tables plus optional dataset-analysis artifacts. It does not preserve the source chunks' intermediate caches.
+In one-shot `run`, if `keep_intermediate_outputs: false`, the package now uses a temporary workspace for `_prepared/` and `_plugins/` and only writes the final merged outputs into `out_dir/`.
+
+For chunked workflows, `run-chunked` also uses a temporary chunk workspace. Only the merged final tables plus optional dataset-analysis artifacts are kept in the real `out_dir/`.
 
 ## Extension model
 
