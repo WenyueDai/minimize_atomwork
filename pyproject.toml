@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minimum-atomworks"
+version = "0.1.0"
+description = "Minimal plugin-style structural metadata framework inspired by atw_pp"
+requires-python = ">=3.11"
+dependencies = [
+  "biotite",
+  "numpy",
+  "pandas",
+  "pydantic>=2.0",
+  "pyarrow",
+  "pyyaml",
+]
+
+[project.scripts]
+minimum-atomworks = "minimum_atw.cli:main"
