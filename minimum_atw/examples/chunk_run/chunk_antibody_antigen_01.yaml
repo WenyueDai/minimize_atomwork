@@ -35,7 +35,7 @@ plugins:
   - "interface_contacts"          # writes vh/vl CDR interface columns into the chunk interfaces table
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
-  # - "rosetta_interface_example"
+  - "rosetta_interface_example"    # high-quality binding metrics
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"

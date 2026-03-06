@@ -35,7 +35,7 @@ plugins:
   - "interface_contacts"          # merged interfaces.parquet can include vh/vl CDR contact columns when numbering_roles is set
   # - "antibody_cdr_lengths"
   # - "antibody_cdr_sequences"
-  # - "rosetta_interface_example"
+  - "rosetta_interface_example"   # high-quality binding metrics; runs in parallel when chunked
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"

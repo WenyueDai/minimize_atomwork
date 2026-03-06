@@ -1,16 +1,29 @@
 # Large Run Example
 
-This folder is for large datasets.
+This folder is for large datasets (50+ structures).
 
 Use it if:
 
 - you want automatic chunking with `run-chunked`
 - you want one larger job with internal parallel workers
 - or you want `plan-chunks` to generate scheduler-ready chunk configs for a Slurm array
+- **you are running Rosetta on many structures and need efficient memory/CPU usage**
 
 ## File
 
-- `example_antibody_antigen_chunked.yaml`
+- `example_antibody_antigen_chunked.yaml` (includes Rosetta by default)
+
+## Rosetta Resource Management
+
+Rosetta InterfaceAnalyzer is computationally expensive (~5-30s per interface pair). For large datasets:
+
+| Dataset Size | Recommended Strategy | Est. Total Time | Resources |
+|--------------|----------------------|-----------------|-----------|
+| 10-50 structures | `run-chunked` with 2-4 workers | 1-5 hours | 4-8 CPU, 16-32 GB |
+| 50-500 structures | `plan-chunks` + Slurm array | 30 mins - 2 hours | 4-8 CPU per chunk job |
+| 500+ structures | `plan-chunks` + array + many workers | depends on queue | Distributed across nodes |
+
+**Key insight:** Chunking allows parallel Rosetta execution. Each chunk runs Rosetta independently, so N workers can run N structures simultaneously (vs. serial: 100 structures × 20s = 33 minutes).
 
 ## Two valid workflows
 
@@ -80,6 +93,24 @@ The original input structure filenames do not need to be numbered or share any i
 - ...
 
 The scheduler only targets the generated `config.yaml` files.
+
+## Chunking Strategy for Rosetta
+
+**Recommended chunk sizes:**
+- Structures with 1 interface pair: `--chunk-size 10-20`
+- Structures with 2-3 interface pairs: `--chunk-size 5-10`
+- Structures with 4+ interface pairs: `--chunk-size 2-5`
+
+Reasoning: Each Rosetta call takes 5-30 seconds. Larger chunks = fewer chunk jobs but longer per-job runtime.
+
+**Worker allocation:**
+- Small cluster (1 node): `--workers 2-4`
+- Medium cluster (1-2 nodes): `--workers 4-8`
+- Large cluster: `--workers 8-16` (or rely on array jobs)
+
+**Memory per worker:**
+- Rosetta + Python overhead: ~200-500 MB per worker
+- Set `#SBATCH --mem-per-cpu=4G` for 2-4 worker jobs
 
 ## Start smaller first
 

@@ -4,11 +4,30 @@ This folder is for manual chunk configs.
 
 Use this workflow if:
 
-- you want one scheduler job per chunk
-- you want to control each chunk config explicitly
-- you want a simple manual path for debugging staged runs
+- you want **one scheduler job per chunk** with explicit scheduler control
+- you want to debug each chunk independently
+- your HPC cluster manages parallelism (e.g., Slurm array jobs)
+- you want manual orchestration of Rosetta parallelization
 
-If you want one large orchestrated command instead, use [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md).
+If you want one large orchestrated command with internal parallelism, use [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md) instead.
+
+## Files
+
+- `chunk_antibody_antigen_01.yaml` (includes Rosetta)
+- `chunk_antibody_antigen_02.yaml` (includes Rosetta)
+- `chunk_config_manifest_example.txt`
+
+## Resource Strategy
+
+When running chunks as separate scheduler jobs:
+
+| Setup | Parallelism | Resource Efficiency |
+|-------|-------------|-------------------|
+| 100 structures, 4 chunks × 25 each | 4 Rosetta jobs in parallel | Good (4 CPU) |
+| 100 structures, 10 chunks × 10 each | 10 Rosetta jobs in parallel | ~OK (10 CPU needed) |
+| 100 structures, 100 chunks × 1 each | 100 Rosetta jobs (rarely useful) | Poor (many small jobs) |
+
+**Recommended:** 5-20 structures per chunk so Rosetta work is balanced.
 
 ## Files
 
@@ -32,14 +51,29 @@ So filenames like these are fine:
 - `7xyz_relaxed_decoy_alpha.pdb`
 - `candidate_nanobody_redo_2026_03_01.cif`
 
+## Rosetta Setup
+
+All chunk configs include `rosetta_interface_example`. Configure Rosetta before running:
+
+```bash
+export ROSETTA_INTERFACE_ANALYZER="/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+export ROSETTA_DATABASE="/path/to/rosetta/database"
+```
+
+Or edit each YAML config directly.
+
 ## What this workflow looks like
 
-1. run each chunk config separately
-2. each chunk produces a complete final `out_dir`
-3. merge the finished chunk outputs with `merge-datasets`
-4. optionally run dataset analysis on the merged dataset
+1. **run each chunk config separately** (each can be a Slurm job)
+2. **each chunk produces its own complete final `out_dir`** (with Rosetta metrics)
+3. **merge the finished chunk outputs** with `merge-datasets`
+4. **(optional) run dataset analysis** on the merged dataset
 
-This is the right workflow when parallelism is owned by the scheduler, not by `minimum_atw`.
+This workflow is ideal when:
+
+- your HPC scheduler (Slurm) manages chunk parallelism
+- you want per-chunk retries without re-running the whole dataset
+- multiple Rosetta jobs run simultaneously (one per chunk job)
 
 ## Run the example chunks
 
@@ -77,7 +111,7 @@ Then run:
 
 ## Staged chunk workflow
 
-Use this only if you want to inspect each stage for a chunk.
+Use this only if you want to inspect each stage for a chunk (including Rosetta):
 
 ```bash
 CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
@@ -88,6 +122,7 @@ CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin rosetta_interface_example  # slowest step
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
 ```
 
@@ -99,21 +134,75 @@ These chunk YAMLs point at real data here:
 - `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_02`
 - `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb`
 
-## Slurm patterns
+## Slurm Examples
 
-### One job per explicit chunk config
+### Sequential chunk jobs (simple, slow)
 
 ```bash
 sbatch <<'EOF'
 #!/bin/bash
 #SBATCH --job-name=minimum-atw-chunk-01
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
-#SBATCH --time=02:00:00
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=00:30:00
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
 cd /home/eva/minimum_atomworks
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+EOF
+
+sbatch <<'EOF'
+#!/bin/bash
+#SBATCH --job-name=minimum-atw-chunk-02
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=00:30:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /home/eva/minimum_atomworks
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+EOF
+```
+
+### Parallel chunk jobs (better, recommended)
+
+Submit all chunks as independent jobs (they run in parallel if queue capacity allows):
+
+```bash
+for i in 01 02; do
+  sbatch <<EOF
+#!/bin/bash
+#SBATCH --job-name=chunk-$i
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
+#SBATCH --time=00:30:00
+#SBATCH --output=logs/%x-%j.out
+set -euo pipefail
+
+cd /home/eva/minimum_atomworks
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_$i.yaml
+EOF
+done
+```
+
+### After all chunks complete: merge results
+
+```bash
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
+  --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
+  --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_01 \
+  --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
+```
+
+**Resource model:** If you submit 10 chunks with `--cpus-per-task=2 --mem=8G`, and the queue allows 10 parallel jobs, all 10 Rosetta processes run simultaneously, completing the entire dataset ~10x faster than sequential processing.
 
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
