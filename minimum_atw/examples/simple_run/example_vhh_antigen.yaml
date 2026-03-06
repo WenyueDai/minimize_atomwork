@@ -32,7 +32,6 @@ superimpose_on_chains: ["A", "B", "C"]
 # One-shot runs keep only final outputs in out_dir.
 keep_intermediate_outputs: false
 
-dataset_analysis: true
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"

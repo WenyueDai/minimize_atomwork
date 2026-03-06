@@ -11,7 +11,7 @@ The package has three runtime concepts only:
 
 - `prepare`: load raw structures, apply manipulations once, write canonical base tables, and cache prepared structures
 - `plugins`: read prepared structures and emit prefixed columns into the normalized tables
-- `dataset analyses`: run after merge on the final tables
+- `dataset analyses`: run after merge on the final tables (controlled by the `dataset_analyses` list in config)
 
 It also supports one dataset-composition step for chunked runs:
 
@@ -168,6 +168,8 @@ python -m minimum_atw.cli list-extensions
 
 Notes:
 
+- When `superimpose_homology` is enabled but `superimpose_reference_path` is unset, the first input structure encountered becomes the implicit reference (that file is left unchanged).
+
 - `biotite`, `numpy`, `pandas`, `pyarrow`, `pydantic`, and `pyyaml` are installed automatically.
 - `abnumber` is optional and only needed for antibody-numbering plugins.
 - Rosetta is not installed by this package. The Rosetta example plugin requires a separate Rosetta installation.
@@ -206,7 +208,7 @@ python -m minimum_atw.cli run-chunked \
 
 For advanced control, you can still run manual chunks yourself and combine them later with `merge-datasets`.
 
-Example configs:
+Example configs (note the absence of the obsolete `dataset_analysis` boolean):
 
 - [antibody-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml)
 - [VHH-antigen](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml)
@@ -220,9 +222,10 @@ Portable config checklist for a new machine:
 
 - set `input_dir` to the directory that contains your `.pdb` or `.cif` files
 - set `out_dir` to a writable output directory on that machine
-- set `superimpose_reference_path` only if you enable `superimpose_homology`
+- set `superimpose_reference_path` only if you enable `superimpose_homology` (if omitted, the first structure encountered will serve as the reference)
 - set `superimpose_on_chains` to the chain IDs used as the alignment anchor
 - set `rosetta_executable` and `rosetta_database` only if you plan to enable the Rosetta example plugin
+- use `dataset_analyses:` (a list) to request dataset-level summaries; the boolean `dataset_analysis` has been removed
 
 ## Output layout
 

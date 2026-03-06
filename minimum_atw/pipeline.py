@@ -289,7 +289,6 @@ def _run_chunk_job(
             "input_dir": str(chunk_input_dir),
             "out_dir": str(chunk_out_dir),
             "keep_intermediate_outputs": False,
-            "dataset_analysis": False,
             "dataset_analyses": [],
         }
     )

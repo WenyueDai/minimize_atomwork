@@ -60,7 +60,7 @@ Before running that analysis command, point `out_dir` in the YAML at:
 How this is intended to work:
 
 - each chunk YAML writes a complete final `out_dir`
-- chunk configs keep `dataset_analysis: false` to avoid redundant dataset summaries
+- chunk configs omit the deprecated `dataset_analysis` key so that dataset summaries are only run on the merged result
 - `merge-datasets` merges those final chunk outputs row by row into one new final `out_dir`
 - dataset analysis is a separate step on the merged dataset
 

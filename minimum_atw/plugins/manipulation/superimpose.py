@@ -57,17 +57,39 @@ class SuperimposeHomologyManipulation(BaseManipulation):
     name = "superimpose_homology"
     prefix = "sup"
 
+    # store a cached reference structure when the first context is seen
+    _reference: struc.AtomArray | None = None
+    _reference_path: str | None = None
+
     def available(self, ctx) -> tuple[bool, str]:
-        ref_path = getattr(ctx.config, "superimpose_reference_path", None)
-        if not ref_path:
-            return False, "superimpose_reference_path is required"
+        # always available; if the user provided a path it will be used,
+        # otherwise the first structure encountered during a run becomes the
+        # implicit reference.
         return True, ""
 
     def run(self, ctx):
-        ref_path = str(Path(ctx.config.superimpose_reference_path).expanduser().resolve())
+        # determine reference structure on first invocation
+        if self._reference is None:
+            if getattr(ctx.config, "superimpose_reference_path", None):
+                ref_path = str(Path(ctx.config.superimpose_reference_path).expanduser().resolve())
+                self._reference = _load_reference(ref_path)
+                self._reference_path = ref_path
+            else:
+                # use the first structure we see; no transformation applied to it
+                self._reference = ctx.aa.copy()
+                self._reference_path = ctx.path
+                # record identity row for completeness but do not change coords
+                yield {
+                    "__table__": "structures",
+                    "path": ctx.path,
+                    "assembly_id": ctx.assembly_id,
+                    "note": "reference_structure",
+                }
+                return
+
+        fixed = self._reference
         on_chains = tuple(str(chain_id) for chain_id in ctx.config.superimpose_on_chains if str(chain_id))
 
-        fixed = _load_reference(ref_path)
         mobile = ctx.aa.copy()
         fixed_anchor = _select_chains(fixed, on_chains)
         mobile_anchor = _select_chains(mobile, on_chains)

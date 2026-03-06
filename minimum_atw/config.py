@@ -19,7 +19,6 @@ class Config(BaseModel):
     superimpose_reference_path: Optional[str] = None
     superimpose_on_chains: list[str] = Field(default_factory=list)
     keep_intermediate_outputs: bool = False
-    dataset_analysis: bool = False
     dataset_analyses: list[str] = Field(default_factory=list)
     dataset_annotations: dict[str, str] = Field(default_factory=dict)
     numbering_roles: list[str] = Field(default_factory=list)
