@@ -44,7 +44,7 @@ def prepare_chunk_input_dir(chunk_input_dir: Path, chunk_paths: list[Path]) -> N
     chunk_input_dir.mkdir(parents=True, exist_ok=True)
     for source_path in chunk_paths:
         target_path = chunk_input_dir / source_path.name
-        if target_path.exists():
+        if target_path.exists() or target_path.is_symlink():
             target_path.unlink()
         target_path.symlink_to(source_path.resolve())
 

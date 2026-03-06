@@ -3,9 +3,10 @@ from __future__ import annotations
 import concurrent.futures
 import tempfile
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from .config import Config
+from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
 from .workspace import (
     chunk_dir_name,
     chunk_input_paths,
@@ -53,9 +54,9 @@ def run_chunked_pipeline(
     *,
     chunk_size: int,
     workers: int,
-    merge_dataset_outputs_fn: Callable[[list[str | Path], str | Path], dict[str, int]],
-    analyze_dataset_outputs_fn: Callable[..., dict[str, int | str]],
 ) -> dict[str, int]:
+    from .pipeline import merge_dataset_outputs
+
     input_paths = discover_inputs(Path(cfg.input_dir).resolve())
     if not input_paths:
         raise FileNotFoundError(f"No .pdb or .cif files found in {Path(cfg.input_dir).resolve()}")
@@ -94,11 +95,12 @@ def run_chunked_pipeline(
                     chunk_results = submit_all(executor)
 
         chunk_results = sorted(chunk_results, key=lambda item: int(item["chunk_index"]))
-        merged_counts = merge_dataset_outputs_fn([item["chunk_out_dir"] for item in chunk_results], out_dir)
+        merged_counts = merge_dataset_outputs([item["chunk_out_dir"] for item in chunk_results], out_dir)
         if cfg.dataset_analyses:
-            analyze_dataset_outputs_fn(
+            analyze_dataset_outputs(
                 out_dir,
                 dataset_analyses=tuple(cfg.dataset_analyses),
+                dataset_analysis_params=cfg.dataset_analysis_params,
                 dataset_annotations=cfg.dataset_annotations,
             )
 

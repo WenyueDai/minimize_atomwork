@@ -13,6 +13,7 @@ def analyze_dataset_outputs(
     out_dir: Path,
     *,
     dataset_analyses: tuple[str, ...] | None = None,
+    dataset_analysis_params: dict[str, dict[str, object]] | None = None,
     dataset_annotations: dict[str, str] | None = None,
 ) -> dict[str, int | str]:
     out_dir = Path(out_dir).resolve()
@@ -27,15 +28,6 @@ def analyze_dataset_outputs(
     roles_path = out_dir / "roles.parquet"
     df_roles = pd.read_parquet(roles_path) if roles_path.exists() else pd.DataFrame()
     analysis_names = tuple(dataset_analyses or DEFAULT_DATASET_ANALYSES)
-    ctx = DatasetAnalysisContext(
-        out_dir=out_dir,
-        analysis_dir=analysis_dir,
-        df_interfaces=df_interfaces,
-        df_roles=df_roles,
-        params={"dataset_analyses": list(analysis_names)},
-        annotations=dict(dataset_annotations or {}),
-    )
-
     summary: dict[str, int | str] = {
         "n_interfaces": int(len(df_interfaces)),
         "dataset_analyses": ",".join(analysis_names),
@@ -45,7 +37,15 @@ def analyze_dataset_outputs(
             raise ValueError(
                 f"Unknown dataset analysis '{analysis_name}'. Available: {sorted(DATASET_ANALYSIS_REGISTRY)}"
             )
-        result = instantiate_unit(DATASET_ANALYSIS_REGISTRY[analysis_name]).run(ctx)
+        analysis_ctx = DatasetAnalysisContext(
+            out_dir=out_dir,
+            analysis_dir=analysis_dir,
+            df_interfaces=df_interfaces,
+            df_roles=df_roles,
+            params=dict((dataset_analysis_params or {}).get(analysis_name, {})),
+            annotations=dict(dataset_annotations or {}),
+        )
+        result = instantiate_unit(DATASET_ANALYSIS_REGISTRY[analysis_name]).run(analysis_ctx)
         if result:
             summary.update({str(key): value for key, value in result.items()})
 

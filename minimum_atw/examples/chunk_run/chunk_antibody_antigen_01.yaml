@@ -1,4 +1,4 @@
-input_dir: "/home/eva/chunks/antibody_antigen/chunk_01"
+input_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01"
 out_dir: "/home/eva/minimum_atomworks/out_chunk_antibody_antigen_01"
 assembly_id: "1"
 
@@ -11,36 +11,69 @@ roles:
 interface_pairs:
   - ["antibody", "antigen"]
 
+# Built-in manipulations:
+# - "center_on_origin"
+# - "superimpose_homology"
 manipulations:
   - "center_on_origin"
   - "superimpose_homology"
 
+# Built-in record plugins:
+# - "identity"
+# - "chain_stats"
+# - "role_sequences"
+# - "role_stats"
+# - "interface_contacts"
+# - "antibody_cdr_lengths"
+# - "antibody_cdr_sequences"
+# - "rosetta_interface_example"   # requires Rosetta, disabled by default
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"
+  - "interface_contacts"          # writes vh/vl CDR interface columns into the chunk interfaces table
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
 rosetta_database: "/opt/rosetta/main/database"
-superimpose_reference_path: "/home/eva/chunks/antibody_antigen/reference/7e9b_reference_rank_001.pdb"
+superimpose_reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb"
 superimpose_on_chains: ["A", "B", "C"]
 # Chunk runs keep only final outputs in each chunk out_dir.
 keep_intermediate_outputs: false
 
-dataset_analysis: false
+# Built-in dataset analyses:
+# - "dataset_annotations"
+# - "interface_summary"
+# - "cdr_entropy"
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cdr_entropy"
 
+# dataset_analysis_params:
+#   cdr_entropy:
+#     roles: ["vh"]
+#     regions: ["cdr3"]
+
 numbering_roles:
   - "vh"
   - "vl"
+
+# This chunk config also writes antibody CDR-specific interface columns such as
+# iface__left_vh_cdr3_interface_residues and iface__left_vl_cdr3_interface_residues.
+
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
+# numbering_scheme: "chothia"
+# cdr_definition: "north"
+# numbering_scheme: "kabat"
+# cdr_definition: "kabat"
+# numbering_scheme: "aho"
+# cdr_definition: "north"
 
 dataset_annotations:
   project: "atomworks_chunked_example"

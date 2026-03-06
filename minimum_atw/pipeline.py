@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from biotite.structure.io import save_structure
@@ -44,6 +45,43 @@ from .workspace import (
     prepared_structures_dir as _prepared_structures_dir,
     run_unit as _run_unit,
 )
+
+
+def _count_tables(tables: dict[str, pd.DataFrame]) -> dict[str, int]:
+    return {table_name: len(tables[table_name]) for table_name in TABLE_NAMES}
+
+
+def _write_stage_outputs(
+    out_dir: Path,
+    tables: dict[str, pd.DataFrame],
+    status_rows: list[dict[str, Any]],
+    bad_rows: list[dict[str, Any]],
+) -> dict[str, int]:
+    _write_tables(out_dir, tables)
+    _write_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+    _write_frame(out_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
+    return {
+        **_count_tables(tables),
+        "status": len(status_rows),
+        "bad": len(bad_rows),
+    }
+
+
+def _merge_tracking_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True).drop_duplicates().reset_index(drop=True)
+
+
+def _run_dataset_analyses(cfg: Config, out_dir: Path) -> None:
+    if not cfg.dataset_analyses:
+        return
+    analyze_dataset_outputs(
+        out_dir,
+        dataset_analyses=tuple(cfg.dataset_analyses),
+        dataset_analysis_params=cfg.dataset_analysis_params,
+        dataset_annotations=cfg.dataset_annotations,
+    )
 
 
 def prepare_outputs(cfg: Config) -> dict[str, int]:
@@ -143,19 +181,9 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
                 table_name,
             )
 
-    _write_tables(prepared_dir, merged_tables)
-    _write_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
-    _write_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
+    counts = _write_stage_outputs(prepared_dir, merged_tables, status_rows, bad_rows)
     _write_frame(_prepared_manifest_path(out_dir), manifest_rows, MANIFEST_COLS)
-
-    return {
-        "structures": len(merged_tables["structures"]),
-        "chains": len(merged_tables["chains"]),
-        "roles": len(merged_tables["roles"]),
-        "interfaces": len(merged_tables["interfaces"]),
-        "status": len(status_rows),
-        "bad": len(bad_rows),
-    }
+    return counts
 
 
 def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
@@ -227,18 +255,7 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
         _run_unit(ctx, plugin, plugin_tables, status_rows)
 
     frames = {table_name: _rows_to_frame(plugin_tables[table_name], table_name) for table_name in TABLE_NAMES}
-    _write_tables(plugin_dir, frames)
-    _write_frame(plugin_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
-    _write_frame(plugin_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
-
-    return {
-        "structures": len(frames["structures"]),
-        "chains": len(frames["chains"]),
-        "roles": len(frames["roles"]),
-        "interfaces": len(frames["interfaces"]),
-        "status": len(status_rows),
-        "bad": len(bad_rows),
-    }
+    return _write_stage_outputs(plugin_dir, frames, status_rows, bad_rows)
 
 
 def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path) -> dict[str, int]:
@@ -265,18 +282,15 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
         table_name: _stack_table_frames(frames, table_name)
         for table_name, frames in tables_by_name.items()
     }
-    merged_status = pd.concat(status_frames, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
-    merged_bad = pd.concat(bad_frames, ignore_index=True, sort=False).drop_duplicates().reset_index(drop=True)
+    merged_status = _merge_tracking_frames(status_frames)
+    merged_bad = _merge_tracking_frames(bad_frames)
 
     _write_tables(target_out_dir, merged_tables)
     merged_status.to_parquet(target_out_dir / f"plugin_status{TABLE_SUFFIX}", index=False)
     merged_bad.to_parquet(target_out_dir / f"bad_files{TABLE_SUFFIX}", index=False)
 
     return {
-        "structures": len(merged_tables["structures"]),
-        "chains": len(merged_tables["chains"]),
-        "roles": len(merged_tables["roles"]),
-        "interfaces": len(merged_tables["interfaces"]),
+        **_count_tables(merged_tables),
         "status": len(merged_status),
         "bad": len(merged_bad),
     }
@@ -288,13 +302,7 @@ def run_chunked_pipeline(
     chunk_size: int,
     workers: int = 1,
 ) -> dict[str, int]:
-    return _run_chunked_pipeline(
-        cfg,
-        chunk_size=chunk_size,
-        workers=workers,
-        merge_dataset_outputs_fn=merge_dataset_outputs,
-        analyze_dataset_outputs_fn=analyze_dataset_outputs,
-    )
+    return _run_chunked_pipeline(cfg, chunk_size=chunk_size, workers=workers)
 
 
 def merge_outputs(cfg: Config) -> dict[str, int]:
@@ -366,18 +374,15 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
         status_frames.append(_read_frame(plugin_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
         bad_frames.append(_read_frame(plugin_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
 
-    merged_status = pd.concat(status_frames, ignore_index=True).drop_duplicates().reset_index(drop=True)
-    merged_bad = pd.concat(bad_frames, ignore_index=True).drop_duplicates().reset_index(drop=True)
+    merged_status = _merge_tracking_frames(status_frames)
+    merged_bad = _merge_tracking_frames(bad_frames)
 
     _write_tables(out_dir, merged_tables)
     merged_status.to_parquet(out_dir / f"plugin_status{TABLE_SUFFIX}", index=False)
     merged_bad.to_parquet(out_dir / f"bad_files{TABLE_SUFFIX}", index=False)
 
     return {
-        "structures": len(merged_tables["structures"]),
-        "chains": len(merged_tables["chains"]),
-        "roles": len(merged_tables["roles"]),
-        "interfaces": len(merged_tables["interfaces"]),
+        **_count_tables(merged_tables),
         "status": len(merged_status),
         "bad": len(merged_bad),
     }
@@ -423,12 +428,7 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
         for plugin_name in cfg.plugins:
             run_plugin(cfg, plugin_name)
         counts = merge_outputs(cfg)
-        if cfg.dataset_analyses:
-            analyze_dataset_outputs(
-                out_dir,
-                dataset_analyses=tuple(cfg.dataset_analyses),
-                dataset_annotations=cfg.dataset_annotations,
-            )
+        _run_dataset_analyses(cfg, out_dir)
         return counts
 
     with tempfile.TemporaryDirectory(prefix="minimum_atw_run_") as tmp_dir:
@@ -438,10 +438,5 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
             run_plugin(temp_cfg, plugin_name)
         counts = merge_outputs(temp_cfg)
         _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir)
-        if cfg.dataset_analyses:
-            analyze_dataset_outputs(
-                out_dir,
-                dataset_analyses=tuple(cfg.dataset_analyses),
-                dataset_annotations=cfg.dataset_annotations,
-            )
+        _run_dataset_analyses(cfg, out_dir)
     return counts

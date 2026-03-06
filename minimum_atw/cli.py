@@ -138,6 +138,7 @@ def main() -> None:
         summary = analyze_dataset_outputs(
             Path(cfg.out_dir).resolve(),
             dataset_analyses=tuple(cfg.dataset_analyses) or None,
+            dataset_analysis_params=cfg.dataset_analysis_params,
             dataset_annotations=cfg.dataset_annotations,
         )
         print("Dataset analysis complete")

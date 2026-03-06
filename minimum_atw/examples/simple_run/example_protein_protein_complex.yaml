@@ -12,16 +12,31 @@ interface_pairs:
   - ["ligand", "receptor"]
   - ["complex_left", "complex_right"]
 
+# Built-in manipulations:
+# - "center_on_origin"
+# - "superimpose_homology"
 manipulations:
   - "center_on_origin"
   - "superimpose_homology"
 
+# Built-in record plugins:
+# - "identity"
+# - "chain_stats"
+# - "role_sequences"
+# - "role_stats"
+# - "interface_contacts"
+# - "antibody_cdr_lengths"        # antibody-only, left disabled here
+# - "antibody_cdr_sequences"      # antibody-only, left disabled here
+# - "rosetta_interface_example"   # requires Rosetta, disabled by default
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"
+  - "interface_contacts"          # generic interface outputs only; no antibody CDR interface columns in this config
+  # - "antibody_cdr_lengths"
+  # - "antibody_cdr_sequences"
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
@@ -31,9 +46,14 @@ superimpose_on_chains: ["A", "B", "C"]
 # One-shot runs keep only final outputs in out_dir.
 keep_intermediate_outputs: false
 
+# Built-in dataset analyses:
+# - "dataset_annotations"
+# - "interface_summary"
+# - "cdr_entropy"                 # antibody-only, left disabled here
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
+  # - "cdr_entropy"
 
 dataset_annotations:
   project: "atomworks_example"

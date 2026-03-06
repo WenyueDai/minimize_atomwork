@@ -5,8 +5,8 @@ This folder is for automatic chunked execution with `run-chunked`.
 Use:
 
 ```bash
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 100 \
   --workers 4
 ```
@@ -22,8 +22,8 @@ Staged large-run pattern:
 Example dry run:
 
 ```bash
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --workers 2
 ```
@@ -39,11 +39,15 @@ What this does:
 - runs dataset analysis once on the merged result
 - removes the temporary chunk workspace
 
+The example YAML includes the broader built-in manipulation/plugin/dataset-analysis inventory as commented alternatives so you can promote or trim features without looking them up elsewhere.
+
+If you enable antibody numbering roles together with `interface_contacts`, the merged `interfaces.parquet` will also contain per-CDR contact counts and residue lists for the numbered antibody/VHH roles.
+
 Start with smaller values if you are unsure:
 
 ```bash
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --workers 2
 ```
@@ -60,11 +64,10 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 100 \
   --workers 4
 EOF
@@ -82,11 +85,10 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --workers 2
 EOF

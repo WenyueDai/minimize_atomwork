@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from typing import Any
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class Config(BaseModel):
@@ -20,8 +21,11 @@ class Config(BaseModel):
     superimpose_on_chains: list[str] = Field(default_factory=list)
     keep_intermediate_outputs: bool = False
     dataset_analyses: list[str] = Field(default_factory=list)
+    dataset_analysis_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dataset_annotations: dict[str, str] = Field(default_factory=dict)
     numbering_roles: list[str] = Field(default_factory=list)
+    numbering_scheme: str = "imgt"
+    cdr_definition: Optional[str] = None
 
     @field_validator(
         "manipulations",
@@ -81,3 +85,58 @@ class Config(BaseModel):
             seen.add(normalized)
             out.append(normalized)
         return out
+
+    @field_validator("dataset_analysis_params", mode="before")
+    @classmethod
+    def _normalize_dataset_analysis_params(cls, value):
+        if value is None:
+            return {}
+        out: dict[str, dict[str, Any]] = {}
+        for analysis_name, params in dict(value).items():
+            normalized_name = str(analysis_name).strip()
+            if not normalized_name:
+                continue
+            normalized_params = dict(params or {})
+            for key, param_value in list(normalized_params.items()):
+                if isinstance(param_value, list):
+                    seen: set[str] = set()
+                    items: list[str] = []
+                    for item in param_value:
+                        normalized_item = str(item).strip()
+                        if not normalized_item or normalized_item in seen:
+                            continue
+                        seen.add(normalized_item)
+                        items.append(normalized_item)
+                    normalized_params[key] = items
+            out[normalized_name] = normalized_params
+        return out
+
+    @field_validator("numbering_scheme", mode="before")
+    @classmethod
+    def _normalize_numbering_scheme(cls, value):
+        return str(value or "imgt").strip().lower()
+
+    @field_validator("cdr_definition", mode="before")
+    @classmethod
+    def _normalize_cdr_definition(cls, value):
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        return normalized or None
+
+    @model_validator(mode="after")
+    def _validate_numbering_options(self):
+        allowed_schemes = {"imgt", "chothia", "kabat", "aho"}
+        allowed_cdr_definitions = {"imgt", "chothia", "kabat", "north"}
+
+        if self.numbering_scheme not in allowed_schemes:
+            raise ValueError(
+                f"numbering_scheme must be one of {sorted(allowed_schemes)}, got {self.numbering_scheme!r}"
+            )
+        if self.cdr_definition is not None and self.cdr_definition not in allowed_cdr_definitions:
+            raise ValueError(
+                f"cdr_definition must be one of {sorted(allowed_cdr_definitions)}, got {self.cdr_definition!r}"
+            )
+        if self.numbering_scheme == "aho" and self.cdr_definition is None:
+            raise ValueError("cdr_definition is required when numbering_scheme is 'aho'")
+        return self

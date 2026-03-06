@@ -11,18 +11,31 @@ interface_pairs:
   - ["vhh", "antigen"]
   - ["binder", "antigen"]
 
+# Built-in manipulations:
+# - "center_on_origin"
+# - "superimpose_homology"
 manipulations:
   - "center_on_origin"
   - "superimpose_homology"
 
+# Built-in record plugins:
+# - "identity"
+# - "chain_stats"
+# - "role_sequences"
+# - "role_stats"
+# - "interface_contacts"
+# - "antibody_cdr_lengths"
+# - "antibody_cdr_sequences"
+# - "rosetta_interface_example"   # requires Rosetta, disabled by default
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"
+  - "interface_contacts"          # also writes per-CDR interface columns for vhh when numbering_roles is set
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
 rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
@@ -32,13 +45,42 @@ superimpose_on_chains: ["A", "B", "C"]
 # One-shot runs keep only final outputs in out_dir.
 keep_intermediate_outputs: false
 
+# Built-in dataset analyses:
+# - "dataset_annotations"
+# - "interface_summary"
+# - "cdr_entropy"
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cdr_entropy"
 
+# dataset_analysis_params:
+#   cdr_entropy:
+#     roles: ["vhh"]
+#     regions: ["cdr3"]
+#   cdr_entropy:
+#     roles: ["vhh"]
+#     regions: ["cdr1", "cdr2", "cdr3"]
+#   cdr_entropy:
+#     roles: ["vhh"]
+#     regions: ["sequence"]
+
 numbering_roles:
   - "vhh"
+
+# With the numbering role above, interface_contacts also annotates interfaces.parquet with:
+# - iface__left_vhh_cdr{1,2,3}_interface_residues
+# - matching iface__n_left_vhh_cdr{1,2,3}_interface_residues count columns
+# Residue lists use chain:resi:resn with 1-letter residue codes.
+
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
+# numbering_scheme: "chothia"
+# cdr_definition: "north"
+# numbering_scheme: "kabat"
+# cdr_definition: "kabat"
+# numbering_scheme: "aho"
+# cdr_definition: "north"
 
 dataset_annotations:
   project: "atomworks_example"

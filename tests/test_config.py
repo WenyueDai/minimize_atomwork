@@ -36,6 +36,25 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.roles, {"vh": ["H"]})
         self.assertEqual(cfg.interface_pairs, [("vh", "antigen")])
 
+    def test_numbering_options_are_normalized(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            numbering_scheme=" Chothia ",
+            cdr_definition=" North ",
+        )
+
+        self.assertEqual(cfg.numbering_scheme, "chothia")
+        self.assertEqual(cfg.cdr_definition, "north")
+
+    def test_aho_requires_cdr_definition(self) -> None:
+        with self.assertRaises(ValueError):
+            Config(
+                input_dir="/tmp/in",
+                out_dir="/tmp/out",
+                numbering_scheme="aho",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

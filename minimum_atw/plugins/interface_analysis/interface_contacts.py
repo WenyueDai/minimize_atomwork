@@ -1,39 +1,55 @@
 from __future__ import annotations
 
-import json
-
 import numpy as np
 
+from ..antibody_analysis.antibody_numbering import cdr_indices
+from ..antibody_analysis.base import (
+    antibody_role_sequences,
+    cdr_definition_from_config,
+    numbering_scheme_from_config,
+)
 from ..base import Context, InterfacePlugin
+from ..sequence import chain_residue_entries
 
 
-def _residue_keys(arr) -> list[tuple[str, int]]:
-    seen = set()
-    out = []
-    for chain_id, res_id in zip(arr.chain_id.astype(str), arr.res_id):
-        key = (chain_id, int(res_id))
-        if key in seen:
+def _residue_tokens(residue_entries: list[tuple[str, int, str]]) -> str:
+    return ";".join(f"{chain_id}:{res_id}:{res_name}" for chain_id, res_id, res_name in residue_entries)
+
+
+def _cdr_interface_fields(
+    ctx: Context,
+    *,
+    side_prefix: str,
+    side_arr,
+    interface_residues: list[tuple[str, int, str]],
+) -> dict[str, object]:
+    side_chain_ids = {str(chain_id) for chain_id in side_arr.chain_id.astype(str)}
+    interface_keys = {(chain_id, res_id) for chain_id, res_id, _res_name in interface_residues}
+    scheme = numbering_scheme_from_config(ctx.config)
+    cdr_definition = cdr_definition_from_config(ctx.config)
+    fields: dict[str, object] = {}
+
+    for role_name, chain_ids, sequence in antibody_role_sequences(ctx):
+        if not set(chain_ids).issubset(side_chain_ids):
             continue
-        seen.add(key)
-        out.append(key)
-    return out
+        role_arr = ctx.roles.get(role_name)
+        if role_arr is None or len(role_arr) == 0:
+            continue
+        role_entries = chain_residue_entries(role_arr)
+        if len(role_entries) != len(sequence):
+            continue
 
-
-def _ca_or_first_coord(arr, chain_id: str, res_id: int) -> tuple[float, float, float]:
-    res_atoms = arr[(arr.chain_id.astype(str) == chain_id) & (arr.res_id == res_id)]
-    if len(res_atoms) == 0:
-        return 0.0, 0.0, 0.0
-    ca = res_atoms[res_atoms.atom_name.astype(str) == "CA"]
-    atom = ca[0] if len(ca) else res_atoms[0]
-    return float(atom.coord[0]), float(atom.coord[1]), float(atom.coord[2])
-
-
-def _payload_tokens(arr, residue_keys: list[tuple[str, int]]) -> str:
-    tokens = []
-    for chain_id, res_id in residue_keys:
-        x, y, z = _ca_or_first_coord(arr, chain_id, res_id)
-        tokens.append(f"{chain_id}:{res_id}:X:{x:.3f},{y:.3f},{z:.3f}")
-    return ";".join(tokens)
+        cdr_map = cdr_indices(sequence, scheme=scheme, cdr_definition=cdr_definition)
+        for cdr_name, indices in cdr_map.items():
+            index_set = set(indices)
+            cdr_interface_residues = [
+                entry
+                for idx, entry in enumerate(role_entries)
+                if idx in index_set and (entry[0], entry[1]) in interface_keys
+            ]
+            fields[f"n_{side_prefix}_{role_name}_{cdr_name}_interface_residues"] = int(len(cdr_interface_residues))
+            fields[f"{side_prefix}_{role_name}_{cdr_name}_interface_residues"] = _residue_tokens(cdr_interface_residues)
+    return fields
 
 
 class InterfaceContactsPlugin(InterfacePlugin):
@@ -55,15 +71,8 @@ class InterfaceContactsPlugin(InterfacePlugin):
 
             left_contact_atoms = left[np.any(contact_mask, axis=1)]
             right_contact_atoms = right[np.any(contact_mask, axis=0)]
-            left_res = _residue_keys(left_contact_atoms)
-            right_res = _residue_keys(right_contact_atoms)
-
-            payload = {
-                "left_interface_residues": _payload_tokens(left, left_res),
-                "right_interface_residues": _payload_tokens(right, right_res),
-                "left_n_interface_ca": len(left_res),
-                "right_n_interface_ca": len(right_res),
-            }
+            left_res = chain_residue_entries(left_contact_atoms)
+            right_res = chain_residue_entries(right_contact_atoms)
 
             yield {
                 **self.pair_identity_row(ctx, left_role=left_role, right_role=right_role),
@@ -73,5 +82,8 @@ class InterfaceContactsPlugin(InterfacePlugin):
                 "n_right_contact_atoms": int(len(right_contact_atoms)),
                 "n_left_interface_residues": int(len(left_res)),
                 "n_right_interface_residues": int(len(right_res)),
-                "interface_payload": json.dumps(payload, separators=(",", ":")),
+                "left_interface_residues": _residue_tokens(left_res),
+                "right_interface_residues": _residue_tokens(right_res),
+                **_cdr_interface_fields(ctx, side_prefix="left", side_arr=left, interface_residues=left_res),
+                **_cdr_interface_fields(ctx, side_prefix="right", side_arr=right, interface_residues=right_res),
             }

@@ -9,37 +9,46 @@ Files:
 - `chunk_antibody_antigen_01.yaml`
 - `chunk_antibody_antigen_02.yaml`
 
+Each chunk YAML now lists the full built-in manipulation, plugin, and dataset-analysis surface in comments, with the non-default options left commented out. This keeps the examples plug-and-play while still advertising the available extension points.
+
+Because these chunk examples keep `numbering_roles` and `interface_contacts` enabled, each chunk `interfaces.parquet` and the merged dataset can include antibody CDR interface fields such as `iface__left_vh_cdr3_interface_residues` and `iface__left_vl_cdr3_interface_residues`.
+
 Run the chunks:
 
 ```bash
-python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
-python -m minimum_atw.cli run --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 ```
 
 Staged manual chunk workflow:
 
 ```bash
-python -m minimum_atw.cli prepare --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin identity
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin chain_stats
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin role_sequences
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin role_stats
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml --plugin interface_contacts
-python -m minimum_atw.cli merge --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+CONFIG_01=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+CONFIG_02=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 
-python -m minimum_atw.cli prepare --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin identity
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin chain_stats
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin role_sequences
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin role_stats
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml --plugin interface_contacts
-python -m minimum_atw.cli merge --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG_01"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin identity
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin chain_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin role_sequences
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin role_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_01" --plugin interface_contacts
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG_01"
+
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG_02"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin identity
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin chain_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin role_sequences
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin role_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG_02" --plugin interface_contacts
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG_02"
 ```
 
 Merge the finished chunk outputs:
 
 ```bash
-python -m minimum_atw.cli merge-datasets \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
   --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
   --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_01 \
   --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
@@ -48,7 +57,8 @@ python -m minimum_atw.cli merge-datasets \
 Then, if you want dataset-level summaries on the merged result, run:
 
 ```bash
-python -m minimum_atw.cli analyze-dataset --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
 Before running that analysis command, point `out_dir` in the YAML at:
@@ -60,17 +70,21 @@ Before running that analysis command, point `out_dir` in the YAML at:
 How this is intended to work:
 
 - each chunk YAML writes a complete final `out_dir`
-- chunk configs omit the deprecated `dataset_analysis` key so that dataset summaries are only run on the merged result
+- chunk configs keep the same extension inventory as one-shot configs, but you can still trim the active plugin list per chunk if needed
 - `merge-datasets` merges those final chunk outputs row by row into one new final `out_dir`
 - dataset analysis is a separate step on the merged dataset
 
-Adjust the chunk input directories and reference path to match your machine before running.
+These manual chunk YAMLs now point at real data on this machine:
+
+- `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01`
+- `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_02`
+- `/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb`
 
 Automatic alternative:
 
 ```bash
-python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml \
   --chunk-size 5 \
   --workers 2
 ```
@@ -89,11 +103,10 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-python -m minimum_atw.cli run \
-  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
 EOF
 
 sbatch <<'EOF'
@@ -105,11 +118,10 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-python -m minimum_atw.cli run \
-  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
 EOF
 ```
 
@@ -125,13 +137,12 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-python -m minimum_atw.cli merge-datasets \
-  --out-dir /path/to/out_antibody_antigen_merged \
-  --source-out-dir /path/to/out_chunk_antibody_antigen_01 \
-  --source-out-dir /path/to/out_chunk_antibody_antigen_02
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
+  --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
+  --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_01 \
+  --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
 EOF
 ```
 
@@ -147,17 +158,16 @@ sbatch <<'EOF'
 #SBATCH --output=logs/%x-%j.out
 set -euo pipefail
 
-cd /path/to/minimum_atomworks
-source .venv/bin/activate
+cd /home/eva/minimum_atomworks
 
-CONFIG=minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
 
-python -m minimum_atw.cli prepare --config "$CONFIG"
-python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin identity
-python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin chain_stats
-python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
-python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
-python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
-python -m minimum_atw.cli merge --config "$CONFIG"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG"
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin identity
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin chain_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_sequences
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin role_stats
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
 EOF
 ```
