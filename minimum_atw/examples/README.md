@@ -33,6 +33,39 @@ CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antib
 - [chunk_run/](chunk_run/README.md): manual one-config-per-chunk workflows
 - [multi_dataset/](multi_dataset/README.md): compare clustering within each dataset, then on pooled merged outputs
 
+## Why There Are Four Example Cases
+
+The four example folders are not redundant. They represent four different operational situations that need different config shapes, different commands, and different expectations about what gets merged and analyzed.
+
+- `simple_run`
+  Use this when you have one dataset, want one config, and want the fastest path from input structures to final outputs.
+  Example: you are testing `abepitope_score` on 20 antibody-antigen complexes on one workstation.
+
+- `large_run`
+  Use this when you have one logically single dataset, but it is too large or slow to run comfortably as one local process.
+  Example: you have 10,000 structures and want to split them automatically into chunks, run them in parallel, then merge and analyze the full dataset once at the end.
+
+- `chunk_run`
+  Use this when you want manual control over chunk boundaries or scheduler submission, and you are comfortable managing one YAML per chunk.
+  Example: a cluster job array is already organized by folder, or you want chunk 01 and chunk 02 to have different runtime limits or be rerun independently.
+
+- `multi_dataset`
+  Use this when the biological question is about comparing separate datasets rather than just scaling one dataset.
+  Example: dataset A is one campaign, dataset B is another campaign, and you want within-dataset paratope/epitope clusters plus pooled cross-dataset clustering after merge.
+
+## Which One Should You Start From?
+
+- Start from `simple_run` if you are still validating roles, plugins, or reference structures.
+- Move to `large_run` when the pipeline logic is stable and you mainly need scale.
+- Use `chunk_run` instead of `large_run` when chunking must be manual or externally orchestrated.
+- Use `multi_dataset` only when each source dataset should remain identifiable and comparable after merge.
+
+In practice, a common progression is:
+
+1. prototype on `simple_run`
+2. scale the same logic with `large_run`
+3. switch to `multi_dataset` only after each source dataset can already run correctly on its own
+
 ## Config keys and when to use them
 
 ### Core paths and naming
