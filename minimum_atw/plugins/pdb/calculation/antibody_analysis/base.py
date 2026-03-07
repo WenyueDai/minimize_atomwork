@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from importlib.util import find_spec
 
+from ...annotations import role_sequences_by_chain
 from ..base import BasePlugin, Context
-from ..sequence_analysis.sequence import sequences_by_chain
 
 
 DEFAULT_NUMBERING_ROLES = ("vh", "vl", "vhh")
@@ -34,7 +34,7 @@ def antibody_role_sequences(ctx: Context) -> list[tuple[str, list[str], str]]:
         arr = ctx.roles.get(role_name)
         if arr is None or len(arr) == 0:
             continue
-        seq_by_chain = sequences_by_chain(arr)
+        seq_by_chain = role_sequences_by_chain(ctx, role_name)
         non_empty = sorted((chain_id, seq) for chain_id, seq in seq_by_chain.items() if seq)
         if len(non_empty) != 1:
             continue

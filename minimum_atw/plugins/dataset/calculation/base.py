@@ -23,6 +23,12 @@ class DatasetAnalysisContext:
         return self.grains.get("role", pd.DataFrame())
 
 
+@dataclass(slots=True)
+class DatasetAnalysisResult:
+    dataset_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
+    pdb_frame: pd.DataFrame = field(default_factory=pd.DataFrame)
+
+
 class BaseDatasetPlugin:
     name = ""
     extension_class = "dataset_calculation"
@@ -31,5 +37,5 @@ class BaseDatasetPlugin:
     def required_columns(self, _params: dict[str, Any]) -> dict[str, list[str]]:
         return {}
 
-    def run(self, ctx: DatasetAnalysisContext) -> pd.DataFrame:
+    def run(self, ctx: DatasetAnalysisContext) -> pd.DataFrame | DatasetAnalysisResult:
         raise NotImplementedError

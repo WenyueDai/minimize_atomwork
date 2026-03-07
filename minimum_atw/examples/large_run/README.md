@@ -1,24 +1,16 @@
-# Large Run Example
+# Large Run Examples
 
-This folder is for `run-chunked` and `plan-chunks`.
+This folder is for chunk-aware workflows:
 
-The shipped config follows the same local-development rule as the small examples:
+- `run-chunked`
+- `plan-chunks`
+- `merge-planned-chunks`
 
-- built-in local features are enabled
-- Rosetta blocks are present but commented out
-- AbEpiTope is enabled in antibody-oriented chunked examples
-
-## Config
+## Files
 
 - [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
 - [example_vhh_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml)
 - [example_protein_protein_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml)
-
-## Profile matrix
-
-- antibody-antigen: paired heavy/light chain binder with antibody-only plugins and CDR entropy
-- VHH-antigen: single-chain binder with VHH numbering and CDR entropy
-- protein-protein: generic interface analysis without antibody-only plugins
 
 ## Run with internal chunk workers
 
@@ -29,7 +21,7 @@ The shipped config follows the same local-development rule as the small examples
   --workers 2
 ```
 
-## Plan chunk configs for scheduler use
+## Plan chunk configs for a scheduler
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli plan-chunks \
@@ -38,19 +30,34 @@ The shipped config follows the same local-development rule as the small examples
   --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan
 ```
 
-## What the chunked example shows
+## What these configs show
 
-- both built-in quality controls
-- the built-in PDB manipulation
-- the built-in dataset manipulation
-- the plugin set appropriate for each role model
-- dataset analyses, with `cdr_entropy` scaffolded but commented out by default
-- `dataset_analysis_mode: post_merge` so chunked runs analyze only the merged final dataset by default
-- cache/checkpoint toggles as commented options
-- the full Rosetta config block ready for later activation
+- chunk-aware prepare and plugin execution
+- `dataset_analysis_mode: post_merge` by default
+- optional checkpoint settings
+- optional Rosetta scaffold
+- optional `cdr_entropy`
+- enabled interface clustering
 
-Merged outputs use the configured parquet names from the YAML. If you do not set them, the defaults remain `pdb.parquet` and `dataset.parquet`.
+Clustering behavior in the examples:
 
-## Enabling Rosetta later
+```yaml
+dataset_analyses:
+  - "cluster"
+```
 
-Uncomment the Rosetta plugin and Rosetta config block in [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml). The scaffold already includes the current Rosetta controls used by this package.
+With no extra cluster params, chunked examples also emit both `left` and `right` jobs automatically.
+Those cluster labels are written back onto interface rows in the merged `pdb.parquet`.
+
+Because the chunked examples keep `superimpose_homology`, they are the most natural place to use coordinate-based dataset clustering.
+
+## Profiles
+
+- antibody-antigen: heavy/light antibody binder against antigen
+- VHH-antigen: single-chain binder against antigen
+- protein-protein: generic non-antibody interface analysis
+
+## Notes
+
+- `dataset_analysis_mode: post_merge` is the cleanest default for clustering because clusters are only meaningful on the merged dataset.
+- If you need per-chunk analyses for operational reasons, keep `cluster` commented out unless you explicitly want per-chunk cluster labels.

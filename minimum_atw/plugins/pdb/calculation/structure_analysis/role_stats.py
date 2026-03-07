@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ...annotations import role_unique_residue_count
 from ..base import RolePlugin, Context
 
 
@@ -22,7 +23,7 @@ class RoleStatsPlugin(RolePlugin):
             yield {
                 "grain": "role",
                 **self.role_identity_row(ctx, role_name=role_name),
-                "n_residues": int(len(np.unique(role_aa.res_id))),
+                "n_residues": int(role_unique_residue_count(ctx, role_name)),
                 "centroid_x": float(centroid[0]),
                 "centroid_y": float(centroid[1]),
                 "centroid_z": float(centroid[2]),

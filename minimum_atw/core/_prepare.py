@@ -43,6 +43,30 @@ from .tables import (
 )
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _progress_bar(done: int, total: int, *, width: int = 20) -> str:
+    if total <= 0:
+        return "[" + ("-" * width) + "]"
+    filled = min(width, int(round(width * (float(done) / float(total)))))
+    return "[" + ("#" * filled) + ("-" * max(0, width - filled)) + "]"
+
+
+def _status_count_string(counts: dict[str, int]) -> str:
+    ordered = []
+    for key in ("ok", "failed", "failed_load", "skipped_preflight", "skipped_checkpoint"):
+        value = int(counts.get(key, 0))
+        if value > 0:
+            ordered.append(f"{key}={value}")
+    return " ".join(ordered) if ordered else "no_status"
+
+
+def _prepare_progress_line(unit_name: str, *, done: int, total: int, status_counts: dict[str, int]) -> str:
+    return f"[prepare:{unit_name}] {_progress_bar(done, total)} {done}/{total} {_status_count_string(status_counts)}"
+
+
 def _empty_pdb_frame() -> pd.DataFrame:
     return pd.DataFrame(columns=PDB_KEY_COLS)
 
@@ -134,12 +158,23 @@ def _prepared_manifest_entry(
     source_path: Path,
     prepared_structures_dir: Path,
     *,
-    prepared_source_path: str,
-) -> tuple[Path | None, dict[str, str]]:
+    ctx: Any,
+) -> tuple[Path | None, dict[str, Any]]:
     prepared_path = prepared_structures_dir / _prepared_filename(source_path) if cfg.keep_prepared_structures else None
+    source_meta = dict(getattr(ctx, "metadata", {}).get("source", {}))
+    loaded_meta = dict(getattr(ctx, "metadata", {}).get("loaded", {}))
+    structure_meta = dict(getattr(ctx, "metadata", {}).get("structure", {}))
     return prepared_path, {
-        "path": prepared_source_path,
+        "path": str(source_meta.get("path", getattr(ctx, "path", str(source_path.resolve())))),
         "prepared_path": str(prepared_path.resolve()) if prepared_path else str(source_path.resolve()),
+        "source_name": str(source_meta.get("name", source_path.name)),
+        "source_format": str(source_meta.get("format", source_path.suffix.lower().lstrip("."))),
+        "source_size_bytes": int(source_meta.get("size_bytes", source_path.stat().st_size)),
+        "source_mtime_ns": int(source_meta.get("mtime_ns", source_path.stat().st_mtime_ns)),
+        "loaded_path": str(loaded_meta.get("path", source_path.resolve())),
+        "loaded_format": str(loaded_meta.get("format", source_path.suffix.lower().lstrip("."))),
+        "n_atoms_loaded": int(structure_meta.get("n_atoms_loaded", 0) or 0),
+        "n_chains_loaded": int(structure_meta.get("n_chains_loaded", 0) or 0),
     }
 
 
@@ -210,11 +245,32 @@ def _prepare_outputs_checkpointed(
     manifest_ckpt: Path,
 ) -> dict[str, int]:
     done_paths = _load_manifest_checkpoint_paths(manifest_ckpt)
+    discovered = _discover(input_dir)
+    initial_done = int(len(done_paths))
     prepared_dir.mkdir(parents=True, exist_ok=True)
     if cfg.keep_prepared_structures:
         prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
-    for source_path in _discover(input_dir):
+    _log(
+        f"[prepare] mode=checkpointed structures={len(discovered)} "
+        f"units={','.join(unit.name for unit in manipulation_units) or 'none'}"
+    )
+    unit_progress = {unit.name: initial_done for unit in manipulation_units}
+    unit_status_counts = {
+        unit.name: ({"skipped_checkpoint": initial_done} if initial_done > 0 else {})
+        for unit in manipulation_units
+    }
+    for unit in manipulation_units:
+        _log(
+            _prepare_progress_line(
+                unit.name,
+                done=unit_progress[unit.name],
+                total=len(discovered),
+                status_counts=unit_status_counts[unit.name],
+            )
+        )
+
+    for source_path in discovered:
         src_str = str(source_path.resolve())
         if src_str in done_paths:
             continue
@@ -223,6 +279,18 @@ def _prepare_outputs_checkpointed(
             ctx = _prepare_context(source_path, source_path, cfg)
         except Exception as exc:
             _append_stage_outputs(prepared_dir, _empty_pdb_frame(), [], [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}])
+            for unit in manipulation_units:
+                unit_progress[unit.name] += 1
+                counts = unit_status_counts[unit.name]
+                counts["failed_load"] = int(counts.get("failed_load", 0)) + 1
+                _log(
+                    _prepare_progress_line(
+                        unit.name,
+                        done=unit_progress[unit.name],
+                        total=len(discovered),
+                        status_counts=counts,
+                    )
+                )
             done_paths.add(src_str)
             continue
 
@@ -232,6 +300,19 @@ def _prepare_outputs_checkpointed(
         bad_rows: list[dict[str, Any]] = []
         for unit in manipulation_units:
             manipulation_ok = _run_unit(ctx, unit, manipulation_rows, status_rows) and manipulation_ok
+            unit_progress[unit.name] += 1
+            status = status_rows[-1] if status_rows else {}
+            counts = unit_status_counts[unit.name]
+            key = str(status.get("status", "unknown"))
+            counts[key] = int(counts.get(key, 0)) + 1
+            _log(
+                _prepare_progress_line(
+                    unit.name,
+                    done=unit_progress[unit.name],
+                    total=len(discovered),
+                    status_counts=counts,
+                )
+            )
         if not manipulation_ok:
             bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
             _append_stage_outputs(prepared_dir, _empty_pdb_frame(), status_rows, bad_rows)
@@ -243,7 +324,7 @@ def _prepare_outputs_checkpointed(
             cfg,
             source_path,
             prepared_structures_dir,
-            prepared_source_path=ctx.path,
+            ctx=ctx,
         )
         with manifest_ckpt.open("a") as fh:
             fh.write(json.dumps(manifest_entry) + "\n")
@@ -270,6 +351,7 @@ def _prepare_outputs_buffered(
     prepared_structures_dir: Path,
     manipulation_units: list[Any],
 ) -> dict[str, int]:
+    discovered = _discover(input_dir)
     if cfg.keep_prepared_structures:
         prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -280,11 +362,38 @@ def _prepare_outputs_buffered(
     manifest_rows = FrameBuffer(columns=MANIFEST_COLS)
 
     try:
-        for source_path in _discover(input_dir):
+        _log(
+            f"[prepare] mode=buffered structures={len(discovered)} "
+            f"units={','.join(unit.name for unit in manipulation_units) or 'none'}"
+        )
+        unit_progress = {unit.name: 0 for unit in manipulation_units}
+        unit_status_counts = {unit.name: {} for unit in manipulation_units}
+        for unit in manipulation_units:
+            _log(
+                _prepare_progress_line(
+                    unit.name,
+                    done=0,
+                    total=len(discovered),
+                    status_counts={},
+                )
+            )
+        for source_path in discovered:
             try:
                 ctx = _prepare_context(source_path, source_path, cfg)
             except Exception as exc:
                 bad_rows.add({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
+                for unit in manipulation_units:
+                    unit_progress[unit.name] += 1
+                    counts = unit_status_counts[unit.name]
+                    counts["failed_load"] = int(counts.get("failed_load", 0)) + 1
+                    _log(
+                        _prepare_progress_line(
+                            unit.name,
+                            done=unit_progress[unit.name],
+                            total=len(discovered),
+                            status_counts=counts,
+                        )
+                    )
                 continue
 
             manipulation_ok = True
@@ -295,6 +404,19 @@ def _prepare_outputs_buffered(
                 manipulation_tables_by_name[unit.name].add_rows(local_rows)
                 for row in local_status:
                     status_rows.add(row)
+                unit_progress[unit.name] += 1
+                status = local_status[-1] if local_status else {}
+                counts = unit_status_counts[unit.name]
+                key = str(status.get("status", "unknown"))
+                counts[key] = int(counts.get(key, 0)) + 1
+                _log(
+                    _prepare_progress_line(
+                        unit.name,
+                        done=unit_progress[unit.name],
+                        total=len(discovered),
+                        status_counts=counts,
+                    )
+                )
                 manipulation_ok = ok and manipulation_ok
             if not manipulation_ok:
                 bad_rows.add({"path": ctx.path, "error": "prepare_failed"})
@@ -307,7 +429,7 @@ def _prepare_outputs_buffered(
                 cfg,
                 source_path,
                 prepared_structures_dir,
-                prepared_source_path=ctx.path,
+                ctx=ctx,
             )
             manifest_rows.add(manifest_entry)
             _write_prepared_structure(prepared_path, ctx)
@@ -355,6 +477,10 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
     manipulation_units = _ordered_prepare_units(cfg)
     plugins_dir = _plugins_dir(out_dir)
     manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
+    _log(
+        f"[prepare] start input_dir={input_dir} out_dir={out_dir} "
+        f"checkpoint={cfg.checkpoint_enabled} keep_prepared={cfg.keep_prepared_structures}"
+    )
 
     if not cfg.checkpoint_enabled:
         if prepared_dir.exists():
@@ -368,7 +494,7 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
             prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
     if cfg.checkpoint_enabled:
-        return _prepare_outputs_checkpointed(
+        counts = _prepare_outputs_checkpointed(
             cfg,
             input_dir=input_dir,
             out_dir=out_dir,
@@ -377,8 +503,10 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
             manipulation_units=manipulation_units,
             manifest_ckpt=manifest_ckpt,
         )
+        _log(f"[prepare] complete counts={counts}")
+        return counts
 
-    return _prepare_outputs_buffered(
+    counts = _prepare_outputs_buffered(
         cfg,
         input_dir=input_dir,
         out_dir=out_dir,
@@ -386,3 +514,5 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
         prepared_structures_dir=prepared_structures_dir,
         manipulation_units=manipulation_units,
     )
+    _log(f"[prepare] complete counts={counts}")
+    return counts

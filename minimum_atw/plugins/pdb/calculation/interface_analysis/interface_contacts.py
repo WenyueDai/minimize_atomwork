@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ...annotations import role_residue_entries
+from ...interface_annotations import interface_contact_summary_for_roles
 from ..antibody_analysis.antibody_numbering import cdr_indices
 from ..antibody_analysis.base import (
     antibody_role_sequences,
@@ -7,7 +9,7 @@ from ..antibody_analysis.base import (
     numbering_scheme_from_config,
 )
 from ..base import Context, InterfacePlugin
-from .interface_metrics import chain_residue_entries, interface_contact_summary, residue_tokens
+from .interface_metrics import residue_tokens
 
 
 def _cdr_interface_fields(
@@ -29,7 +31,7 @@ def _cdr_interface_fields(
         role_arr = ctx.roles.get(role_name)
         if role_arr is None or len(role_arr) == 0:
             continue
-        role_entries = chain_residue_entries(role_arr)
+        role_entries = role_residue_entries(ctx, role_name)
         if len(role_entries) != len(sequence):
             continue
 
@@ -53,7 +55,12 @@ class InterfaceContactsPlugin(InterfacePlugin):
     def run(self, ctx: Context):
         cutoff = float(ctx.config.contact_distance)
         for left_role, right_role, left, right in self.iter_role_pairs(ctx):
-            summary = interface_contact_summary(left, right, contact_distance=cutoff)
+            summary = interface_contact_summary_for_roles(
+                ctx,
+                left_role=left_role,
+                right_role=right_role,
+                contact_distance=cutoff,
+            )
             if summary is None:
                 continue
 

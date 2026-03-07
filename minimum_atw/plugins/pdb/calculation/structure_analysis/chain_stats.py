@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from ...annotations import chain_unique_residue_count
 from ..base import ChainPlugin, Context
 
 
@@ -22,7 +23,7 @@ class ChainStatsPlugin(ChainPlugin):
             yield {
                 "grain": "chain",
                 **self.chain_identity_row(ctx, chain_id=chain_id),
-                "n_residues": int(len(np.unique(chain_aa.res_id))),
+                "n_residues": int(chain_unique_residue_count(ctx, chain_id)),
                 "centroid_x": float(centroid[0]),
                 "centroid_y": float(centroid[1]),
                 "centroid_z": float(centroid[2]),

@@ -19,7 +19,7 @@ class TemplateStructurePlugin(BasePlugin):
     name = "template_structure"
     prefix = "tmpl"
     execution = "in_process"
-    resource_class = "lightweight"
+    input_model = "atom_array"
     execution_mode = "batched"
     failure_policy = "continue"
 
@@ -63,7 +63,7 @@ class TemplateRolePlugin(RolePlugin):
 class TemplateInterfacePlugin(InterfacePlugin):
     name = "template_interface"
     prefix = "tmpl_iface"
-    resource_class = "heavy"
+    input_model = "hybrid"
     execution_mode = "isolated"
 
     def run(self, ctx: Context):

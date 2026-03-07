@@ -33,7 +33,7 @@ def _resolve_hmmsearch() -> str | None:
 class AbEpiTopeScorePlugin(InterfacePlugin):
     name = "abepitope_score"
     prefix = "abepitope"
-    resource_class = "heavy"
+    input_model = "hybrid"
     execution_mode = "isolated"
     failure_policy = "continue"
 

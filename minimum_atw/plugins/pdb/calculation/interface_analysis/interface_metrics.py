@@ -4,7 +4,8 @@ from typing import Any
 
 import biotite.structure as struc
 import numpy as np
-from biotite.sequence import ProteinSequence
+
+from ...annotations import chain_residue_entries, iter_unique_residues, residue_code, residue_infos
 
 
 AA_CHARGE = {
@@ -16,40 +17,6 @@ AA_CHARGE = {
 AA_HYDROPHOBIC = set("AVILMFWYP")
 AA_POLAR = set("STNQCH")
 AA_AROMATIC = set("FWYH")
-
-
-def residue_code(res_name: str) -> str:
-    try:
-        return ProteinSequence.convert_letter_3to1(str(res_name))
-    except Exception:
-        return "X"
-
-
-def iter_unique_residues(arr):
-    if arr is None or len(arr) == 0:
-        return
-    starts = struc.get_residue_starts(arr, add_exclusive_stop=True)
-    for start, stop in zip(starts[:-1], starts[1:]):
-        atom = arr[start]
-        yield {
-            "chain_id": str(atom.chain_id),
-            "res_id": int(atom.res_id),
-            "res_name": str(atom.res_name),
-            "atoms": arr[start:stop],
-        }
-
-
-def residue_infos(arr) -> list[dict[str, Any]]:
-    infos: list[dict[str, Any]] = []
-    for info in iter_unique_residues(arr):
-        entry = dict(info)
-        entry["aa"] = residue_code(entry["res_name"])
-        infos.append(entry)
-    return infos
-
-
-def chain_residue_entries(chain_arr) -> list[tuple[str, int, str]]:
-    return [(info["chain_id"], info["res_id"], info["aa"]) for info in residue_infos(chain_arr)]
 
 
 def residue_tokens(residue_entries: list[tuple[str, int, str]]) -> str:
@@ -205,21 +172,44 @@ def interface_contact_summary(
     if len(left) == 0 or len(right) == 0:
         return None
 
-    pair_list, left_contact_atoms, right_contact_atoms = interface_residue_contact_pairs(
+    left_atoms, right_atoms, near = _contact_mask(
         left,
         right,
         contact_cutoff=contact_distance,
         cell_size=cell_size,
+    )
+    if near.size == 0:
+        return None
+
+    left_contact_atoms = left_atoms[np.any(near, axis=1)]
+    right_contact_atoms = right_atoms[np.any(near, axis=0)]
+    if len(left_contact_atoms) == 0 or len(right_contact_atoms) == 0:
+        return None
+
+    pair_set: set[tuple[tuple[str, int, str], tuple[str, int, str]]] = set()
+    left_idx, right_idx = np.nonzero(near)
+    for li, ri in zip(left_idx.tolist(), right_idx.tolist()):
+        pair_set.add(
+            (
+                (
+                    str(left_atoms.chain_id[li]),
+                    int(left_atoms.res_id[li]),
+                    residue_code(str(left_atoms.res_name[li])),
+                ),
+                (
+                    str(right_atoms.chain_id[ri]),
+                    int(right_atoms.res_id[ri]),
+                    residue_code(str(right_atoms.res_name[ri])),
+                ),
+            )
+        )
+    pair_list = sorted(
+        pair_set,
+        key=lambda pair: (pair[0][0], pair[0][1], pair[1][0], pair[1][1], pair[0][2], pair[1][2]),
     )
     if not pair_list:
         return None
 
-    _, _, near = _contact_mask(
-        left,
-        right,
-        contact_cutoff=contact_distance,
-        cell_size=cell_size,
-    )
     left_res = chain_residue_entries(left_contact_atoms)
     right_res = chain_residue_entries(right_contact_atoms)
 

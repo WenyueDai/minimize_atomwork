@@ -22,7 +22,30 @@ PDB_KEY_COLS = [
 IDENTITY_COLS = set(PDB_KEY_COLS)
 STATUS_COLS = ["path", "assembly_id", "plugin", "status", "message"]
 BAD_COLS = ["path", "error"]
-MANIFEST_COLS = ["path", "prepared_path"]
+MANIFEST_COLS = [
+    "path",
+    "prepared_path",
+    "source_name",
+    "source_format",
+    "source_size_bytes",
+    "source_mtime_ns",
+    "loaded_path",
+    "loaded_format",
+    "n_atoms_loaded",
+    "n_chains_loaded",
+]
+REDUNDANT_PDB_COLUMN_PAIRS = (
+    ("sup__anchor_atoms_mobile", "sup__anchor_atoms_fixed"),
+    ("ifm__contact_distance", "iface__contact_distance"),
+    ("ifm__cell_size", "ifm__contact_distance"),
+    ("ifm__cell_size", "iface__contact_distance"),
+    ("ifm__left_n_interface_residues", "iface__n_left_interface_residues"),
+    ("ifm__right_n_interface_residues", "iface__n_right_interface_residues"),
+    ("abcdr__chain_ids", "abseq__chain_ids"),
+    ("abcdr__numbering_scheme", "abseq__numbering_scheme"),
+    ("abcdr__cdr_definition", "abseq__cdr_definition"),
+    ("abcdr__sequence_length", "abseq__sequence_length"),
+)
 
 
 def normalize_grain(value: Any) -> str:
@@ -62,6 +85,21 @@ def sort_pdb_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def prune_redundant_pdb_columns(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    drop_cols: list[str] = []
+    for redundant, canonical in REDUNDANT_PDB_COLUMN_PAIRS:
+        if redundant not in df.columns or canonical not in df.columns:
+            continue
+        if df[redundant].equals(df[canonical]):
+            drop_cols.append(redundant)
+    if not drop_cols:
+        return df
+    kept = [column for column in df.columns if column not in set(drop_cols)]
+    return df.loc[:, kept].copy()
+
+
 def rows_to_pdb_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     if not rows:
         return empty_pdb_frame()
@@ -74,7 +112,7 @@ def rows_to_pdb_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     df["grain"] = df["grain"].map(normalize_grain)
     ordered = [col for col in PDB_KEY_COLS if col in df.columns]
     ordered.extend(col for col in df.columns if col not in ordered)
-    return sort_pdb_frame(df.loc[:, ordered])
+    return prune_redundant_pdb_columns(sort_pdb_frame(df.loc[:, ordered]))
 
 
 def read_frame(path: Path, columns: list[str]) -> pd.DataFrame:
@@ -124,10 +162,10 @@ def merge_pdb_frames(base: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
         raise ValueError(f"Overlapping output columns detected in pdb: {', '.join(sorted(overlapping))}")
 
     if base.empty:
-        return sort_pdb_frame(extra.loc[:, [*keys, *non_key_cols]].copy())
+        return prune_redundant_pdb_columns(sort_pdb_frame(extra.loc[:, [*keys, *non_key_cols]].copy()))
 
     merged = base.merge(extra.loc[:, [*keys, *non_key_cols]], on=keys, how="left", validate="one_to_one")
-    return sort_pdb_frame(merged)
+    return prune_redundant_pdb_columns(sort_pdb_frame(merged))
 
 
 def stack_pdb_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
@@ -141,7 +179,7 @@ def stack_pdb_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         raise ValueError(f"Missing identity columns for pdb: {', '.join(missing)}")
     if combined.duplicated(PDB_KEY_COLS).any():
         raise ValueError("Duplicate identity rows detected across datasets in pdb")
-    return sort_pdb_frame(combined)
+    return prune_redundant_pdb_columns(sort_pdb_frame(combined))
 
 
 def write_pdb_table(

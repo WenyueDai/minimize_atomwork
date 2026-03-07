@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+from ...interface_annotations import interface_contact_summary_for_roles
 from ..base import Context, InterfacePlugin
 from .interface_metrics import (
     _cell_size,
     format_residue_labels,
-    interface_residue_contact_pairs,
     residue_contact_pair_tokens,
     residue_infos,
     summarize_residue_properties,
@@ -19,13 +19,20 @@ class InterfaceMetricsPlugin(InterfacePlugin):
         cutoff = float(ctx.config.contact_distance)
         cell_size = _cell_size(getattr(ctx.config, "interface_cell_size", None), cutoff)
 
-        for left_role, right_role, left, right in self.iter_role_pairs(ctx):
-            pair_list, left_contact_atoms, right_contact_atoms = interface_residue_contact_pairs(
-                left,
-                right,
-                contact_cutoff=cutoff,
+        for left_role, right_role, _left, _right in self.iter_role_pairs(ctx):
+            summary = interface_contact_summary_for_roles(
+                ctx,
+                left_role=left_role,
+                right_role=right_role,
+                contact_distance=cutoff,
                 cell_size=cell_size,
             )
+            if summary is None:
+                continue
+
+            pair_list = summary["residue_contact_pairs"]
+            left_contact_atoms = summary["left_contact_atoms"]
+            right_contact_atoms = summary["right_contact_atoms"]
             if not pair_list:
                 continue
 

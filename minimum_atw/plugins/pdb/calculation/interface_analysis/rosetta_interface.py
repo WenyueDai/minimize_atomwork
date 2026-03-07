@@ -369,7 +369,7 @@ class RosettaInterfaceExamplePlugin(InterfacePlugin):
     name = "rosetta_interface_example"
     prefix = "rosetta"
     execution = "external"
-    resource_class = "heavy"
+    input_model = "prepared_file"
     execution_mode = "isolated"
     failure_policy = "continue"
 

@@ -81,24 +81,53 @@ def prepare_context(source_path: Path, structure_path: Path, cfg: Config) -> Con
         Context with loaded AtomArray and role views built from cfg
     """
     aa = load_structure(structure_path)
+    source_stat = source_path.stat()
+    source_format = source_path.suffix.lower().lstrip(".")
+    loaded_format = structure_path.suffix.lower().lstrip(".")
+    metadata = {
+        "source": {
+            "path": str(source_path.resolve()),
+            "name": source_path.name,
+            "format": source_format,
+            "size_bytes": int(source_stat.st_size),
+            "mtime_ns": int(source_stat.st_mtime_ns),
+        },
+        "loaded": {
+            "path": str(structure_path.resolve()),
+            "format": loaded_format,
+        },
+        "structure": {
+            "n_atoms_loaded": int(len(aa)),
+            "n_chains_loaded": int(len({str(chain_id) for chain_id in aa.chain_id})) if len(aa) else 0,
+        },
+    }
     ctx = Context(
         path=str(source_path.resolve()),
         assembly_id=cfg.assembly_id,
         aa=aa,
         role_map={name: tuple(chain_ids) for name, chain_ids in cfg.roles.items()},
         config=cfg,
+        metadata=metadata,
     )
     ctx.rebuild_views()
     return ctx
 
 
 def base_rows_for_context(ctx: Context) -> list[dict[str, Any]]:
+    source_meta = dict(ctx.metadata.get("source", {}))
+    structure_meta = dict(ctx.metadata.get("structure", {}))
     rows = empty_pdb_rows()
     rows.append(
         {
             "grain": "structure",
             "path": ctx.path,
             "assembly_id": ctx.assembly_id,
+            "source__name": str(source_meta.get("name", "")),
+            "source__format": str(source_meta.get("format", "")),
+            "source__size_bytes": int(source_meta.get("size_bytes", 0) or 0),
+            "source__mtime_ns": int(source_meta.get("mtime_ns", 0) or 0),
+            "source__n_atoms_loaded": int(structure_meta.get("n_atoms_loaded", 0) or 0),
+            "source__n_chains_loaded": int(structure_meta.get("n_chains_loaded", 0) or 0),
         }
     )
 

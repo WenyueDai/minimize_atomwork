@@ -106,7 +106,7 @@ Examples:
 
 Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/pdb/calculation/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
 
-Dataset analyses write a second parquet, usually `dataset.parquet`, with an `analysis` column instead of `grain`.
+Most dataset analyses write a second parquet, usually `dataset.parquet`, with an `analysis` column instead of `grain`. Dataset-level clustering is the main exception: it is computed at dataset scope but writes its assignments back onto `pdb.parquet` interface rows.
 
 ## Installation
 

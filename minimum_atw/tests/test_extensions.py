@@ -37,7 +37,7 @@ class ExtensionCatalogTests(unittest.TestCase):
         )
         self.assertEqual(
             [item.name for item in catalog["dataset_calculation"]],
-            ["cdr_entropy", "dataset_annotations", "interface_summary"],
+            ["cdr_entropy", "cluster", "dataset_annotations", "interface_summary"],
         )
 
 

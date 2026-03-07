@@ -3,14 +3,15 @@ from __future__ import annotations
 import numpy as np
 import biotite.structure as struc
 
+from ..annotations import residue_starts
 from .base import BaseQualityControl
 
 
 def _count_residue_id_gaps(arr) -> int:
-    residue_starts = struc.get_residue_starts(arr)
-    if residue_starts.size < 2:
+    starts = residue_starts(arr)
+    if starts.size < 2:
         return 0
-    residue_ids = np.asarray(arr.res_id[residue_starts], dtype=int)
+    residue_ids = np.asarray(arr.res_id[starts], dtype=int)
     gaps = residue_ids[1:] - residue_ids[:-1]
     return int(np.count_nonzero(gaps > 1))
 

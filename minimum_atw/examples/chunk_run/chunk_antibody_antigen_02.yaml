@@ -68,6 +68,7 @@ keep_prepared_structures: false
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
+  - "cluster"
   # - "cdr_entropy"
 # dataset_analysis_mode: "post_merge"   # use merge-planned-chunks or analyze-dataset after merge
 # dataset_analysis_mode: "both"

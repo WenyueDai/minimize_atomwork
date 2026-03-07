@@ -32,11 +32,45 @@ from .tables import (
 )
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _progress_bar(done: int, total: int, *, width: int = 20) -> str:
+    if total <= 0:
+        return "[" + ("-" * width) + "]"
+    filled = min(width, int(round(width * (float(done) / float(total)))))
+    return "[" + ("#" * filled) + ("-" * max(0, width - filled)) + "]"
+
+
+def _status_count_string(counts: dict[str, int]) -> str:
+    ordered = []
+    for key in ("ok", "failed", "failed_prepare", "skipped_preflight"):
+        value = int(counts.get(key, 0))
+        if value > 0:
+            ordered.append(f"{key}={value}")
+    return " ".join(ordered) if ordered else "no_status"
+
+
+def _plugin_progress_line(
+    spec: "PluginExecutionSpec",
+    *,
+    done: int,
+    total: int,
+    rows: int,
+    status_counts: dict[str, int],
+) -> str:
+    return (
+        f"[plugin:{spec.name}] {_progress_bar(done, total)} {done}/{total} "
+        f"rows={rows} {_status_count_string(status_counts)}"
+    )
+
+
 @dataclass(frozen=True)
 class PluginExecutionSpec:
     name: str
     plugin: Any
-    resource_class: str
+    input_model: str
     execution_mode: str
     failure_policy: str
 
@@ -107,6 +141,18 @@ class PluginRunState:
         return self.root / f"{self.spec.name}.bad_files{TABLE_SUFFIX}"
 
 
+def _resolve_input_model(plugin: Any) -> str:
+    explicit = getattr(plugin, "input_model", None)
+    if explicit:
+        return str(explicit)
+
+    # Compatibility fallback for older third-party plugins.
+    resource_class = str(getattr(plugin, "resource_class", "lightweight") or "lightweight")
+    if resource_class == "lightweight":
+        return "atom_array"
+    return "hybrid"
+
+
 def _plugin_execution_spec(plugin_name: str) -> PluginExecutionSpec:
     if plugin_name not in PLUGIN_REGISTRY:
         raise KeyError(f"Unknown plugin: {plugin_name}")
@@ -114,7 +160,7 @@ def _plugin_execution_spec(plugin_name: str) -> PluginExecutionSpec:
     return PluginExecutionSpec(
         name=plugin_name,
         plugin=plugin,
-        resource_class=str(getattr(plugin, "resource_class", "lightweight") or "lightweight"),
+        input_model=_resolve_input_model(plugin),
         execution_mode=str(getattr(plugin, "execution_mode", "batched") or "batched"),
         failure_policy=str(getattr(plugin, "failure_policy", "continue") or "continue"),
     )
@@ -125,18 +171,18 @@ def _resolve_plugin_specs(plugin_names: list[str]) -> list[PluginExecutionSpec]:
 
 
 def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
-    lightweight_specs: list[PluginExecutionSpec] = []
+    atom_array_specs: list[PluginExecutionSpec] = []
     isolated_specs: list[PluginExecutionSpec] = []
 
     for spec in specs:
-        if spec.execution_mode == "batched" and spec.resource_class == "lightweight":
-            lightweight_specs.append(spec)
+        if spec.execution_mode == "batched" and spec.input_model == "atom_array":
+            atom_array_specs.append(spec)
         else:
             isolated_specs.append(spec)
 
     plan: list[list[PluginExecutionSpec]] = []
-    if lightweight_specs:
-        plan.append(lightweight_specs)
+    if atom_array_specs:
+        plan.append(atom_array_specs)
     for spec in isolated_specs:
         plan.append([spec])
     return plan
@@ -148,7 +194,7 @@ def plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
     return {
         "plugins": {
             spec.name: {
-                "resource_class": spec.resource_class,
+                "input_model": spec.input_model,
                 "execution_mode": spec.execution_mode,
                 "failure_policy": spec.failure_policy,
             }
@@ -157,7 +203,7 @@ def plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
         "groups": [
             {
                 "plugins": [spec.name for spec in group],
-                "resource_class": "mixed" if len({spec.resource_class for spec in group}) > 1 else group[0].resource_class,
+                "input_model": "mixed" if len({spec.input_model for spec in group}) > 1 else group[0].input_model,
                 "execution_mode": "mixed" if len({spec.execution_mode for spec in group}) > 1 else group[0].execution_mode,
             }
             for group in groups
@@ -174,11 +220,48 @@ def _execute_plugin_group(
     if not group:
         return
 
+    total_structures = int(len(manifest))
+    total_pending = sum(
+        1
+        for row in manifest.itertuples(index=False)
+        if any(str(getattr(row, "path")) not in states[spec.name].processed for spec in group)
+    )
     if len(group) == 1:
-        label = f"Running isolated plugin: {group[0].name}"
+        spec = group[0]
+        label = (
+            f"[execute] plugin={spec.name} mode=isolated input_model={spec.input_model} "
+            f"pending={total_pending}/{total_structures}"
+        )
     else:
-        label = f"Running batched plugins: {', '.join(spec.name for spec in group)}"
-    print(label)
+        label = (
+            f"[execute] batched plugins={','.join(spec.name for spec in group)} "
+            f"input_model=atom_array pending={total_pending}/{total_structures}"
+        )
+    _log(label)
+
+    group_targets = {
+        spec.name: sum(
+            1
+            for row in manifest.itertuples(index=False)
+            if str(getattr(row, "path")) not in states[spec.name].processed
+        )
+        for spec in group
+    }
+    group_progress = {spec.name: 0 for spec in group}
+    group_status_counts = {spec.name: {} for spec in group}
+
+    for spec in group:
+        total = int(group_targets[spec.name])
+        if total > 0:
+            _log(
+                _plugin_progress_line(
+                    spec,
+                    done=0,
+                    total=total,
+                    rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                    status_counts={},
+                )
+            )
 
     for row in manifest.itertuples(index=False):
         source_path = Path(row.path)
@@ -192,6 +275,18 @@ def _execute_plugin_group(
         except Exception as exc:
             for spec in pending_specs:
                 states[spec.name].mark_bad(source_path, exc)
+                group_progress[spec.name] += 1
+                counts = group_status_counts[spec.name]
+                counts["failed_prepare"] = int(counts.get("failed_prepare", 0)) + 1
+                _log(
+                    _plugin_progress_line(
+                        spec,
+                        done=group_progress[spec.name],
+                        total=int(group_targets[spec.name]),
+                        rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                        status_counts=counts,
+                    )
+                )
             continue
 
         for spec in pending_specs:
@@ -201,8 +296,30 @@ def _execute_plugin_group(
             ok = _run_unit(ctx, spec.plugin, local_rows, local_status)
             states[spec.name].record_result(local_rows, local_status, local_bad)
             states[spec.name].processed.add(str(source_path))
+            group_progress[spec.name] += 1
+            counts = group_status_counts[spec.name]
+            status = "unknown"
+            if local_status:
+                status = str(local_status[-1].get("status", "unknown"))
+            counts[status] = int(counts.get(status, 0)) + 1
+            _log(
+                _plugin_progress_line(
+                    spec,
+                    done=group_progress[spec.name],
+                    total=int(group_targets[spec.name]),
+                    rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                    status_counts=counts,
+                )
+            )
             if not ok and spec.failure_policy == "raise":
                 raise RuntimeError(f"Plugin {spec.name} failed for {source_path}")
+
+    for spec in group:
+        state = states[spec.name]
+        _log(
+            f"[plugin:{spec.name}] summary rows={state.counts.get(PDB_TABLE_NAME, 0)} "
+            f"status={state.counts.get('status', 0)} bad={state.counts.get('bad', 0)}"
+        )
 
 
 def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:

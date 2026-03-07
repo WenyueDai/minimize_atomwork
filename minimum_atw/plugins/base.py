@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal
+from typing import Any, Callable, Iterable, Literal, TypeVar
 
 import numpy as np
 import biotite.structure as struc
 
 
 GrainName = Literal["structure", "chain", "role", "interface"]
+InputModelName = Literal["atom_array", "prepared_file", "hybrid"]
+_T = TypeVar("_T")
 
 
 @dataclass
@@ -21,8 +23,10 @@ class Context:
     metadata: dict[str, Any] = field(default_factory=dict)
     chains: dict[str, struc.AtomArray] = field(default_factory=dict)
     roles: dict[str, struc.AtomArray] = field(default_factory=dict)
+    annotation_cache: dict[tuple[str, ...], Any] = field(default_factory=dict)
 
     def rebuild_views(self) -> None:
+        self.annotation_cache.clear()
         self.chains = {}
         for chain_id in sorted({str(chain_id) for chain_id in self.aa.chain_id}):
             self.chains[chain_id] = self.aa[self.aa.chain_id == chain_id]
@@ -33,13 +37,19 @@ class Context:
             mask = np.isin(self.aa.chain_id.astype(str), list(chain_ids))
             self.roles[role_name] = self.aa[mask]
 
+    def get_annotation(self, *key_parts: str, factory: Callable[[], _T]) -> _T:
+        key = tuple(str(part) for part in key_parts)
+        if key not in self.annotation_cache:
+            self.annotation_cache[key] = factory()
+        return self.annotation_cache[key]
+
 
 class BasePlugin:
     name = ""
     prefix = ""
     grain: GrainName = "structure"
+    input_model: InputModelName = "atom_array"
     execution = "in_process"
-    resource_class = "lightweight"
     execution_mode = "batched"
     failure_policy = "continue"
     extension_class = "pdb_calculation"

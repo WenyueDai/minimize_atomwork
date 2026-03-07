@@ -174,8 +174,16 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(len(roles), 2)
             self.assertEqual(len(interfaces), 1)
             self.assertIn("id__n_atoms_total", structures.columns)
+            self.assertIn("source__name", structures.columns)
+            self.assertIn("source__format", structures.columns)
+            self.assertIn("source__size_bytes", structures.columns)
+            self.assertIn("source__n_atoms_loaded", structures.columns)
             self.assertIn("id__n_atoms", chains.columns)
             self.assertIn("id__n_atoms", roles.columns)
+            self.assertEqual(structures.iloc[0]["source__name"], "toy_complex.pdb")
+            self.assertEqual(structures.iloc[0]["source__format"], "pdb")
+            self.assertEqual(int(structures.iloc[0]["source__n_atoms_loaded"]), 4)
+            self.assertEqual(int(structures.iloc[0]["source__n_chains_loaded"]), 2)
             self.assertEqual(metadata["output_kind"], "run")
             self.assertEqual(metadata["counts"]["structures"], 1)
             self.assertEqual(metadata["status_summary"], {"ok": 1})
@@ -187,6 +195,11 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertTrue((out_dir / "plugin_status.parquet").exists())
 
             self.assertTrue((out_dir / "_plugins" / "identity.pdb.parquet").exists())
+            manifest = pd.read_parquet(out_dir / "_prepared" / "prepared_manifest.parquet")
+            self.assertEqual(manifest.iloc[0]["source_name"], "toy_complex.pdb")
+            self.assertEqual(manifest.iloc[0]["source_format"], "pdb")
+            self.assertEqual(int(manifest.iloc[0]["n_atoms_loaded"]), 4)
+            self.assertEqual(int(manifest.iloc[0]["n_chains_loaded"]), 2)
 
             # simulate a later resume with checkpointing enabled
             input2 = input_dir / "toy_complex2.pdb"

@@ -73,6 +73,7 @@ keep_prepared_structures: false
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
+  - "cluster"
 # dataset_analysis_mode: "per_chunk"
 # dataset_analysis_mode: "both"
 dataset_analysis_mode: "post_merge"

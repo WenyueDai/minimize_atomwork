@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
+from ...annotations import role_sequences_by_chain
 from ..base import Context, RolePlugin
-from ..sequence_analysis.sequence import sequences_by_chain
 
 
 class RoleSequencesPlugin(RolePlugin):
@@ -13,7 +13,7 @@ class RoleSequencesPlugin(RolePlugin):
 
     def run(self, ctx: Context):
         for role_name, role_aa in self.iter_roles(ctx):
-            seq_by_chain = sequences_by_chain(role_aa)
+            seq_by_chain = role_sequences_by_chain(ctx, role_name)
             chain_ids = sorted(seq_by_chain)
             total_length = sum(len(sequence) for sequence in seq_by_chain.values())
             concatenated = "".join(seq_by_chain[chain_id] for chain_id in chain_ids)

@@ -25,7 +25,7 @@ except ModuleNotFoundError as exc:
 class TestLightStructurePlugin(BasePlugin):
     name = "test_light_structure"
     prefix = "light_structure"
-    resource_class = "lightweight"
+    input_model = "atom_array"
     execution_mode = "batched"
     failure_policy = "continue"
 
@@ -40,7 +40,7 @@ class TestLightStructurePlugin(BasePlugin):
 class TestLightInterfacePlugin(InterfacePlugin):
     name = "test_light_interface"
     prefix = "light_interface"
-    resource_class = "lightweight"
+    input_model = "atom_array"
     execution_mode = "batched"
     failure_policy = "continue"
 
@@ -55,7 +55,7 @@ class TestLightInterfacePlugin(InterfacePlugin):
 class TestHeavyFailurePlugin(BasePlugin):
     name = "test_heavy_failure"
     prefix = "heavy_failure"
-    resource_class = "heavy"
+    input_model = "prepared_file"
     execution_mode = "isolated"
     failure_policy = "continue"
 
@@ -65,7 +65,7 @@ class TestHeavyFailurePlugin(BasePlugin):
 
 @unittest.skipIf(Config is None, "pipeline dependencies are not installed")
 class PluginExecutionModelTests(unittest.TestCase):
-    def test_light_plugins_batch_and_heavy_plugin_isolates(self) -> None:
+    def test_atom_array_plugins_batch_and_file_boundary_plugin_isolates(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_execution_test_") as tmp_dir:
             root = Path(tmp_dir)
             input_dir = root / "input"
@@ -153,12 +153,12 @@ class PluginExecutionModelTests(unittest.TestCase):
                 [
                     {
                         "plugins": ["test_light_structure", "test_light_interface"],
-                        "resource_class": "lightweight",
+                        "input_model": "atom_array",
                         "execution_mode": "batched",
                     },
                     {
                         "plugins": ["test_heavy_failure"],
-                        "resource_class": "heavy",
+                        "input_model": "prepared_file",
                         "execution_mode": "isolated",
                     },
                 ],
