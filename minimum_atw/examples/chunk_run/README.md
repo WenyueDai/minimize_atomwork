@@ -36,6 +36,12 @@ This folder is for manual chunk configs: one config per chunk, one run per confi
 - optional `cdr_entropy`
 - enabled interface clustering
 
+Execution note:
+
+- native `atom_array` plugins stay batched
+- external or file-bound plugins stay isolated
+- those groups can run concurrently within each chunk config
+
 Clustering note:
 
 - These chunk YAMLs now do enable `cluster`, so they write per-chunk cluster labels onto interface rows in each chunk's `pdb.parquet`.

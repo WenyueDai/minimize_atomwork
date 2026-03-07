@@ -20,7 +20,7 @@ class ConfigTests(unittest.TestCase):
             quality_controls=[" chain_continuity ", "chain_continuity"],
             structure_manipulations=[" center_on_origin ", "center_on_origin"],
             dataset_quality_controls=[" dataset_schema ", "dataset_schema"],
-            dataset_manipulations=[" superimpose_homology ", "superimpose_homology"],
+            dataset_manipulations=[" custom_manipulation ", "custom_manipulation"],
             manipulations=[" center_on_origin ", "center_on_origin"],
             dataset_analyses=[" interface_summary ", "interface_summary"],
             dataset_analysis_mode=" BOTH ",
@@ -30,7 +30,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.quality_controls, ["chain_continuity"])
         self.assertEqual(cfg.structure_manipulations, ["center_on_origin"])
         self.assertEqual(cfg.dataset_quality_controls, ["dataset_schema"])
-        self.assertEqual(cfg.dataset_manipulations, ["superimpose_homology"])
+        self.assertEqual(cfg.dataset_manipulations, ["custom_manipulation"])
         self.assertEqual(cfg.manipulations, ["center_on_origin"])
         self.assertEqual(cfg.dataset_analyses, ["interface_summary"])
         self.assertEqual(cfg.dataset_analysis_mode, "both")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -231,9 +232,10 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
             if reference_compatibility is None:
                 reference_compatibility = compatibility
             elif compatibility != reference_compatibility:
-                raise ValueError(
+                warnings.warn(
                     f"Incompatible source runtime configuration in {source_dir}: "
-                    "merge_compatibility does not match earlier sources"
+                    "merge_compatibility does not match earlier sources",
+                    stacklevel=2,
                 )
         metadata_by_source.append(
             {

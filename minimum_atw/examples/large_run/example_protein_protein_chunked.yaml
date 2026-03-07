@@ -24,6 +24,9 @@ structure_manipulations:
 dataset_manipulations:
   - "superimpose_homology"
 
+# Native atom-array plugins are batched together.
+# External/file-bound plugins such as optional Rosetta run in isolated workers.
+# Those groups can run concurrently within each chunk run.
 plugins:
   - "identity"
   - "chain_stats"

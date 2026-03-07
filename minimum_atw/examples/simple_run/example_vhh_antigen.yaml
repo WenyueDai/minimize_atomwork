@@ -23,6 +23,9 @@ structure_manipulations:
 dataset_manipulations:
   - "superimpose_homology"
 
+# Native atom-array plugins are batched together.
+# External/file-bound plugins such as abepitope_score or optional Rosetta run in isolated workers.
+# Those groups can run concurrently during one pipeline execution.
 plugins:
   - "identity"
   - "chain_stats"

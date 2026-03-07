@@ -43,6 +43,12 @@ Enabled by default:
 
 - `cluster`
 
+Execution note:
+
+- native `atom_array` plugins are batched together
+- external or file-bound plugins such as `abepitope_score` and optional Rosetta run in isolated workers
+- those groups can run concurrently during one `run`, so external tools do not have to wait for the full native batch to finish first
+
 Cluster behavior in the examples:
 
 ```yaml

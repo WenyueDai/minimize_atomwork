@@ -5,7 +5,7 @@ from .interface_analysis.abepitope_score import AbEpiTopeScorePlugin
 from .interface_analysis.interface_contacts import InterfaceContactsPlugin
 from .interface_analysis.interface_residue_metrics import InterfaceMetricsPlugin
 from .interface_analysis.rosetta_interface import RosettaInterfaceExamplePlugin
-from .structure_analysis import ChainStatsPlugin, IdentityPlugin, RoleSequencesPlugin, RoleStatsPlugin
+from .structure_analysis import ChainStatsPlugin, IdentityPlugin, RoleSequencesPlugin, RoleStatsPlugin, SuperimposePlugin
 from ....core.registry import load_registry
 
 
@@ -21,6 +21,7 @@ def _builtin_pdb_calculations() -> dict[str, object]:
         "role_sequences": RoleSequencesPlugin(),
         "role_stats": RoleStatsPlugin(),
         "rosetta_interface_example": RosettaInterfaceExamplePlugin(),
+        "superimpose_homology": SuperimposePlugin(),
     }
 
 
@@ -43,4 +44,5 @@ __all__ = [
     "RoleSequencesPlugin",
     "RoleStatsPlugin",
     "RosettaInterfaceExamplePlugin",
+    "SuperimposePlugin",
 ]

@@ -7,7 +7,7 @@ import biotite.structure as struc
 import numpy as np
 from biotite.structure.io import load_structure
 
-from .base import BaseDatasetManipulation
+from ..base import BasePlugin, Context
 
 
 @lru_cache(maxsize=16)
@@ -53,18 +53,20 @@ def _matched_atom_indices(fixed: struc.AtomArray, mobile: struc.AtomArray) -> tu
     return np.asarray(fixed_idx, dtype=int), np.asarray(mobile_idx, dtype=int)
 
 
-class SuperimposeHomologyManipulation(BaseDatasetManipulation):
+class SuperimposePlugin(BasePlugin):
     name = "superimpose_homology"
     prefix = "sup"
+    grain = "structure"
+    analysis_category = "structure_analysis"
 
     def __init__(self) -> None:
         self._reference: struc.AtomArray | None = None
         self._reference_path: str | None = None
 
-    def available(self, ctx) -> tuple[bool, str]:
+    def available(self, ctx: Context) -> tuple[bool, str]:
         return True, ""
 
-    def run(self, ctx):
+    def run(self, ctx: Context):
         if self._reference is None:
             if getattr(ctx.config, "superimpose_reference_path", None):
                 self._reference_path = str(Path(ctx.config.superimpose_reference_path).expanduser().resolve())
@@ -106,9 +108,6 @@ class SuperimposeHomologyManipulation(BaseDatasetManipulation):
         fixed_idx, mobile_idx = _matched_atom_indices(fixed, fitted_complex)
         if len(fixed_idx) == 0:
             raise ValueError("no_common_atoms_for_rmsd")
-
-        ctx.aa = fitted_complex
-        ctx.rebuild_views()
 
         complex_rmsd = float(struc.rmsd(fixed[fixed_idx], fitted_complex[mobile_idx]))
         yield {

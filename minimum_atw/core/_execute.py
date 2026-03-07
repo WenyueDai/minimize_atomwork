@@ -1,8 +1,10 @@
 """Execute phase: run pdb_calculation plugins against prepared structures."""
 
 from __future__ import annotations
+import concurrent.futures
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 from typing import Any
 
 import pandas as pd
@@ -31,9 +33,12 @@ from .tables import (
     read_pdb_table as _read_pdb_table,
 )
 
-
 def _log(message: str) -> None:
-    print(message, flush=True)
+    with _LOG_LOCK:
+        print(message, flush=True)
+
+
+_LOG_LOCK = threading.Lock()
 
 
 def _progress_bar(done: int, total: int, *, width: int = 20) -> str:
@@ -337,9 +342,21 @@ def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
         spec.name: PluginRunState.from_out_dir(out_dir, spec, cfg.checkpoint_enabled)
         for spec in specs
     }
+    groups = _plan_plugin_execution(specs)
 
-    for group in _plan_plugin_execution(specs):
-        _execute_plugin_group(cfg, manifest, group, states)
+    if len(groups) <= 1:
+        for group in groups:
+            _execute_plugin_group(cfg, manifest, group, states)
+    else:
+        max_workers = len(groups)
+        _log(f"[execute] groups={len(groups)} workers={max_workers}")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(_execute_plugin_group, cfg, manifest, group, states)
+                for group in groups
+            ]
+            for future in concurrent.futures.as_completed(futures):
+                future.result()
 
     total_counts = {PDB_TABLE_NAME: 0, "status": 0, "bad": 0}
     for state in states.values():

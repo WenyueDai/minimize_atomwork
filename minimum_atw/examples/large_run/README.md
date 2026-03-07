@@ -39,6 +39,12 @@ This folder is for chunk-aware workflows:
 - optional `cdr_entropy`
 - enabled interface clustering
 
+Execution note:
+
+- within each chunk, native `atom_array` plugins are batched together
+- external or file-bound plugins such as `abepitope_score` and optional Rosetta run in isolated workers
+- those execution groups can run concurrently inside the chunk run
+
 Clustering behavior in the examples:
 
 ```yaml

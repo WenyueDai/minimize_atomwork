@@ -28,13 +28,13 @@ class PrepareSectionsTests(unittest.TestCase):
         cfg = Config(
             input_dir="/tmp/in",
             out_dir="/tmp/out",
-            manipulations=["chain_continuity", "center_on_origin", "superimpose_homology"],
+            manipulations=["chain_continuity", "center_on_origin"],
         )
 
         metadata = _prepare_execution_metadata(cfg)
         self.assertEqual(metadata["sections"]["quality_control"], ["chain_continuity"])
         self.assertEqual(metadata["sections"]["structure"], ["center_on_origin"])
-        self.assertEqual(metadata["sections"]["dataset"], ["superimpose_homology"])
+        self.assertEqual(metadata["sections"]["dataset"], [])
 
     def test_quality_control_stage_writes_continuity_and_clash_fields(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_prepare_qc_") as tmp_dir:

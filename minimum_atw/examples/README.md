@@ -51,6 +51,12 @@ cd /home/eva/minimum_atomworks
 - `cdr_entropy` is scaffolded but off by default.
 - `cluster` is enabled by default in all examples.
 
+## Execution behavior
+
+- Native `atom_array` plugins are batched together.
+- External or file-bound plugins such as `abepitope_score` and `rosetta_interface_example` run in isolated workers.
+- Those execution groups can run concurrently, so enabling an external plugin no longer forces the native plugin batch to wait for it to finish first.
+
 ## Dataset analyses in the examples
 
 Enabled by default:

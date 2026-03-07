@@ -19,7 +19,7 @@ class ExtensionCatalogTests(unittest.TestCase):
         self.assertEqual([item.name for item in catalog["pdb_quality_control"]], ["chain_continuity", "structure_clashes"])
         self.assertEqual([item.name for item in catalog["pdb_manipulation"]], ["center_on_origin"])
         self.assertEqual(catalog["dataset_quality_control"], [])
-        self.assertEqual([item.name for item in catalog["dataset_manipulation"]], ["superimpose_homology"])
+        self.assertEqual(catalog["dataset_manipulation"], [])
         self.assertEqual(
             [item.name for item in catalog["pdb_calculation"]],
             [
@@ -33,6 +33,7 @@ class ExtensionCatalogTests(unittest.TestCase):
                 "role_sequences",
                 "role_stats",
                 "rosetta_interface_example",
+                "superimpose_homology",
             ],
         )
         self.assertEqual(
