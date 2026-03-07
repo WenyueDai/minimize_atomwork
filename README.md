@@ -42,7 +42,7 @@ For large datasets, see:
 Main pipeline:
 
 - `prepare`
-  load structures, apply manipulations once, cache prepared structures
+  load structures, run quality control, run structure manipulations, run dataset manipulations, cache prepared structures
 - `plugins`
   emit prefixed columns into normalized tables
 - `merge`
@@ -70,7 +70,7 @@ The package has three internal layers:
 - [minimum_atw/runtime](/home/eva/minimum_atomworks/minimum_atw/runtime)
   execution mechanics, chunk planning, workspace layout, spill buffers
 - [minimum_atw/plugins](/home/eva/minimum_atomworks/minimum_atw/plugins)
-  manipulations, record plugins, dataset analyses
+  prepare units, record plugins, dataset analyses
 
 Public entrypoints:
 
@@ -119,6 +119,13 @@ Optional antibody numbering support:
 python -m pip install -e '.[antibody]'
 ```
 
+Optional AbEpiTope support:
+
+```bash
+python -m pip install git+https://github.com/mnielLab/AbEpiTope-1.0
+conda install -c bioconda hmmer
+```
+
 List extensions:
 
 ```bash
@@ -128,6 +135,7 @@ python -m minimum_atw.cli list-extensions
 Notes:
 
 - `abnumber` is optional
+- `abepitope` and `hmmsearch` are optional and only needed for the `abepitope_score` plugin
 - Rosetta is not installed by this package
 - example YAMLs usually need path edits before reuse on another machine
 

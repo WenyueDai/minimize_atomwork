@@ -4,12 +4,20 @@ This folder is for `run-chunked` and `plan-chunks`.
 
 The shipped config follows the same local-development rule as the small examples:
 
-- all non-Rosetta features are enabled
-- the full Rosetta block is present but commented out
+- built-in local features are enabled
+- heavy external tool blocks are present but commented out
 
 ## Config
 
 - [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
+- [example_vhh_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml)
+- [example_protein_protein_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml)
+
+## Profile matrix
+
+- antibody-antigen: paired heavy/light chain binder with antibody-only plugins and CDR entropy
+- VHH-antigen: single-chain binder with VHH numbering and CDR entropy
+- protein-protein: generic interface analysis without antibody-only plugins
 
 ## Run with internal chunk workers
 
@@ -31,9 +39,12 @@ The shipped config follows the same local-development rule as the small examples
 
 ## What the chunked example shows
 
-- both built-in manipulations
-- all non-Rosetta antibody/interface plugins
-- dataset analyses including `cdr_entropy`
+- both built-in quality controls
+- the built-in per-structure manipulation
+- the built-in dataset-scale manipulation
+- the plugin set appropriate for each role model
+- dataset analyses, including `cdr_entropy` where antibody/VHH numbering applies
+- `dataset_analysis_mode: post_merge` so chunked runs analyze only the merged final dataset by default
 - cache/checkpoint toggles as commented options
 - the full Rosetta config block ready for later activation
 

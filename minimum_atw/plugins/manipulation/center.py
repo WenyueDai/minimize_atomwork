@@ -8,6 +8,8 @@ from .base import BaseManipulation
 class CenterOnOriginManipulation(BaseManipulation):
     name = "center_on_origin"
     prefix = "center"
+    analysis_category = "structure_manipulation"
+    prepare_section = "structure"
 
     def run(self, ctx):
         if len(ctx.aa) == 0:

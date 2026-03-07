@@ -30,10 +30,10 @@ class ExtensionInfo:
 EXTENSION_CLASSES: dict[str, ExtensionClassSpec] = {
     "manipulation": ExtensionClassSpec(
         name="manipulation",
-        display_name="Manipulations",
-        config_key="manipulations",
+        display_name="Prepare Units",
+        config_key="prepare",
         stage="prepare",
-        description="Pre-calculation structure transforms that modify the shared context.",
+        description="Prepare-stage quality controls and structure/dataset manipulations that modify or annotate the shared context.",
     ),
     "record_plugin": ExtensionClassSpec(
         name="record_plugin",
@@ -52,6 +52,19 @@ EXTENSION_CLASSES: dict[str, ExtensionClassSpec] = {
 }
 
 
+def _config_key_for_unit(unit: Any, spec: ExtensionClassSpec | None) -> str:
+    if spec is None:
+        return ""
+    if spec.name != "manipulation":
+        return spec.config_key
+    section = str(getattr(unit, "prepare_section", "structure") or "structure").strip().lower()
+    if section == "quality_control":
+        return "quality_controls"
+    if section == "dataset":
+        return "dataset_manipulations"
+    return "structure_manipulations"
+
+
 def _info_from_unit(name: str, unit: Any) -> ExtensionInfo:
     extension_class = str(getattr(unit, "extension_class", "unknown"))
     spec = EXTENSION_CLASSES.get(extension_class)
@@ -60,7 +73,7 @@ def _info_from_unit(name: str, unit: Any) -> ExtensionInfo:
         extension_class=extension_class,
         analysis_category=str(getattr(unit, "analysis_category", "generic")),
         stage=spec.stage if spec else "unknown",
-        config_key=spec.config_key if spec else "",
+        config_key=_config_key_for_unit(unit, spec),
         execution=str(getattr(unit, "execution", "n/a")),
     )
 

@@ -11,11 +11,21 @@ roles:
 interface_pairs:
   - ["antibody", "antigen"]
 
-# Built-in manipulations:
+# Prepare-stage quality controls:
+# - "chain_continuity"
+# - "structure_clashes"
+quality_controls:
+  - "chain_continuity"
+  - "structure_clashes"
+
+# Per-structure manipulations:
 # - "center_on_origin"
-# - "superimpose_homology"
-manipulations:
+structure_manipulations:
   - "center_on_origin"
+
+# Dataset-scale manipulations:
+# - "superimpose_homology"
+dataset_manipulations:
   - "superimpose_homology"
 
 # Built-in record plugins:
@@ -23,6 +33,7 @@ manipulations:
 # - "chain_stats"
 # - "role_sequences"
 # - "role_stats"
+# - "abepitope_score"            # optional external AbEpiTope plugin; requires abepitope + hmmsearch
 # - "interface_contacts"
 # - "interface_metrics"
 # - "antibody_cdr_lengths"
@@ -41,6 +52,7 @@ plugins:
 
 contact_distance: 5.0
 # interface_cell_size: 5.0
+# abepitope_atom_radius: 4.0
 
 # Rosetta InterfaceAnalyzer scaffold.
 # Uncomment the plugin above and fill these in when you want Rosetta metrics.
@@ -76,6 +88,9 @@ dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cdr_entropy"
+# dataset_analysis_mode: "per_chunk"
+# dataset_analysis_mode: "both"
+dataset_analysis_mode: "post_merge"
 
 dataset_analysis_params:
   cdr_entropy:

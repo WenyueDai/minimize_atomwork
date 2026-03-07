@@ -4,7 +4,9 @@ This directory contains runnable example configs for `minimum_atomworks` on this
 
 Current example policy:
 
-- all locally testable non-Rosetta features are enabled where they fit the example
+- all built-in local features are enabled where they fit the example
+- prepare is shown explicitly as quality control -> structure manipulation -> dataset manipulation
+- heavy external tools stay scaffolded but commented by default
 - Rosetta InterfaceAnalyzer is fully scaffolded in every relevant YAML
 - Rosetta stays commented out by default for local development
 
@@ -30,11 +32,24 @@ Use [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large
 
 ## Ready-to-run local examples
 
-- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml): local antibody-antigen development, all non-Rosetta features enabled
+- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml): local antibody-antigen development with built-in plugins enabled
 - [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml): full antibody-antigen example
 - [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml): VHH/nanobody-style example
 - [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml): generic protein-protein example
-- [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml): chunked local-development example
+
+## Chunked example matrix
+
+`large_run/` now includes one chunk-aware config for each common role model:
+
+- [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
+- [example_vhh_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml)
+- [example_protein_protein_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml)
+
+`chunk_run/` keeps one canonical manual per-chunk example pair:
+
+- antibody-antigen: [chunk_antibody_antigen_01.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml), [chunk_antibody_antigen_02.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml)
+
+Use `large_run/` when you want chunk-aware variants for VHH-antigen or generic protein-protein profiles.
 
 ## Rosetta usage
 
@@ -47,6 +62,21 @@ Each relevant YAML already contains the full Rosetta block:
 - packing and packstat controls
 
 To enable Rosetta, uncomment the `rosetta_interface_example` plugin and the Rosetta config block in the YAML you want to run.
+
+## AbEpiTope usage
+
+AbEpiTope is available as an optional external plugin:
+
+- plugin name: `abepitope_score`
+- output prefix: `abepitope__`
+- target table: `interfaces.parquet`
+
+Requirements:
+
+- Python package `abepitope`
+- `hmmsearch` from HMMER on `PATH`
+
+The example YAMLs include the plugin as a commented option. Enable it only when those dependencies are installed and the structure is compatible with AbEpiTope's antibody-antigen assumptions.
 
 ## YAML Config Reference
 
@@ -67,12 +97,17 @@ The example YAML files all use the same core config model. The sections below ex
 
 `roles` define the semantic groups. `interface_pairs` define which of those groups are analyzed as interfaces.
 
-### Prepare-stage manipulations
+### Prepare-stage sections
 
-- `manipulations`: structure transforms applied once during `prepare`
+- `quality_controls`: prepare-time checks that annotate structures/chains without changing coordinates
+- `structure_manipulations`: transforms applied independently to each structure
+- `dataset_manipulations`: transforms that depend on a dataset reference or shared dataset context
+- `manipulations`: legacy combined prepare list kept for backward compatibility
 
-Built-in examples:
+Built-in prepare units:
 
+- `chain_continuity`: per-chain continuity/gap check
+- `structure_clashes`: structure-level steric clash check
 - `center_on_origin`: translate coordinates so the structure is centered
 - `superimpose_homology`: align to a reference structure using `superimpose_reference_path` and `superimpose_on_chains`
 
@@ -95,6 +130,7 @@ Built-in plugins used in the examples:
 - `role_stats`: one row per role with counts and sizes
 - `interface_contacts`: interface atom-contact and interface-residue metrics
 - `interface_metrics`: interface residue-property and residue-contact-pair metrics
+- `abepitope_score`: external AbEpiTope interface scoring for antibody-antigen complexes
 - `antibody_cdr_lengths`: antibody/VHH CDR length fields on `roles.parquet`
 - `antibody_cdr_sequences`: antibody/VHH CDR sequence fields on `roles.parquet`
 - `rosetta_interface_example`: Rosetta InterfaceAnalyzer metrics on `interfaces.parquet`
@@ -109,8 +145,9 @@ Related internal helper modules:
 
 - `contact_distance`: atom-atom distance cutoff in Angstroms for `interface_contacts` and `interface_metrics`
 - `interface_cell_size`: optional cell-list bin size for `interface_metrics`; when unset, the plugin uses `contact_distance`
+- `abepitope_atom_radius`: atom-radius parameter passed to AbEpiTope encoding; only used by `abepitope_score`
 
-These affect the lightweight geometric interface-analysis plugins, not Rosetta.
+These affect the non-Rosetta interface-analysis plugins. Rosetta uses its own `rosetta_*` settings.
 
 ### Rosetta settings
 
@@ -141,8 +178,18 @@ Use the defaults unless you are debugging, re-running plugins, or dealing with l
 
 ### Dataset analyses
 
-- `dataset_analyses`: post-merge analyses that run on the final tables
+- `dataset_analyses`: dataset-level analyses such as interface summary or CDR entropy
+- `dataset_analysis_mode`: when those analyses run in chunk-aware workflows
+  - `post_merge`: run once on the final merged dataset
+  - `per_chunk`: run inside each chunk only
+  - `both`: run in both places
 - `dataset_analysis_params`: per-analysis parameter block
+
+Notes:
+
+- regular `run` always analyzes the dataset in the current `out_dir` after `merge`
+- `run-chunked` and `merge-planned-chunks` honor `dataset_analysis_mode`
+- low-level `merge-datasets` is merge-only; if you want post-merge dataset analyses there, follow it with `analyze-dataset --config ...`
 
 Built-in dataset analyses used in the examples:
 

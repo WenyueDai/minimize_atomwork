@@ -1,15 +1,16 @@
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_pdb"
+out_dir: "/home/eva/minimum_atomworks/out_protein_protein_chunked"
 assembly_id: "1"
 
 roles:
-  antigen: ["A"]
-  vh: ["C"]
-  vl: ["B"]
-  antibody: ["B", "C"]
+  receptor: ["B", "C"]
+  ligand: ["A"]
+  complex_left: ["A"]
+  complex_right: ["B", "C"]
 
 interface_pairs:
-  - ["antibody", "antigen"]
+  - ["ligand", "receptor"]
+  - ["complex_left", "complex_right"]
 
 # Prepare-stage quality controls:
 # - "chain_continuity"
@@ -33,7 +34,7 @@ dataset_manipulations:
 # - "chain_stats"
 # - "role_sequences"
 # - "role_stats"
-# - "abepitope_score"            # optional external AbEpiTope plugin; requires abepitope + hmmsearch
+# - "abepitope_score"            # optional antibody-antigen-only external plugin
 # - "interface_contacts"
 # - "interface_metrics"
 # - "antibody_cdr_lengths"
@@ -46,8 +47,6 @@ plugins:
   - "role_stats"
   - "interface_contacts"
   - "interface_metrics"
-  - "antibody_cdr_lengths"
-  - "antibody_cdr_sequences"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
@@ -61,12 +60,12 @@ contact_distance: 5.0
 # rosetta_preprocess_with_score_jd2: true
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
 # rosetta_interface_targets:
-#   - pair: ["antibody", "antigen"]
-#     left_role: "antibody"
-#     right_role: "antigen"
-#   - pair: ["ab", "ag"]
-#     left_chains: ["B", "C"]
-#     right_chains: ["A"]
+#   - pair: ["ligand", "receptor"]
+#     left_role: "ligand"
+#     right_role: "receptor"
+#   - pair: ["complex_left", "complex_right"]
+#     left_role: "complex_left"
+#     right_role: "complex_right"
 # rosetta_pack_input: true
 # rosetta_pack_separated: true
 # rosetta_compute_packstat: true
@@ -78,6 +77,7 @@ contact_distance: 5.0
 
 superimpose_reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
 superimpose_on_chains: ["A", "B", "C"]
+
 keep_intermediate_outputs: false
 keep_prepared_structures: false
 # checkpoint_enabled: true
@@ -90,33 +90,14 @@ keep_prepared_structures: false
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
-  - "cdr_entropy"
 # dataset_analysis_mode: "per_chunk"
 # dataset_analysis_mode: "both"
 dataset_analysis_mode: "post_merge"
 
-dataset_analysis_params:
-  cdr_entropy:
-    roles: ["vh", "vl"]
-    regions: ["cdr1", "cdr2", "cdr3", "sequence"]
-
-numbering_roles:
-  - "vh"
-  - "vl"
-
-numbering_scheme: "imgt"
-cdr_definition: "imgt"
-# numbering_scheme: "chothia"
-# cdr_definition: "north"
-# numbering_scheme: "kabat"
-# cdr_definition: "kabat"
-# numbering_scheme: "aho"
-# cdr_definition: "north"
-
 dataset_annotations:
   project: "atomworks_example"
-  dataset_name: "antibody_antigen_full_local"
-  modality: "antibody_antigen"
-  source: "atw_pp default input"
-  reference_model: "rank_001_alphafold2_multimer_v3_model_3_seed_000_2024"
-  profile: "all_non_rosetta_features_enabled"
+  dataset_name: "protein_protein_chunked"
+  modality: "protein_protein"
+  source: "atw_pp default input reinterpreted as a generic protein complex"
+  execution_mode: "run-chunked"
+  profile: "chunked_protein_protein_no_rosetta"

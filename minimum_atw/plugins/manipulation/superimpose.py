@@ -56,6 +56,8 @@ def _matched_atom_indices(fixed: struc.AtomArray, mobile: struc.AtomArray) -> tu
 class SuperimposeHomologyManipulation(BaseManipulation):
     name = "superimpose_homology"
     prefix = "sup"
+    analysis_category = "dataset_manipulation"
+    prepare_section = "dataset"
 
     def __init__(self) -> None:
         self._reference: struc.AtomArray | None = None

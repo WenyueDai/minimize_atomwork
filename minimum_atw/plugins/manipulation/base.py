@@ -8,6 +8,7 @@ class BaseManipulation:
     prefix = ""
     extension_class = "manipulation"
     analysis_category = "manipulation"
+    prepare_section = "structure"
 
     def run(self, ctx) -> Iterable[dict]:
         raise NotImplementedError

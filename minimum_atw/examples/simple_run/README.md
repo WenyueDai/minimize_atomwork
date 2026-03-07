@@ -4,8 +4,8 @@ These configs are for small local runs and day-to-day plugin development.
 
 The examples now follow one rule:
 
-- enable all non-Rosetta features that are locally testable
-- keep the Rosetta plugin and Rosetta config present, but commented out by default
+- enable built-in local plugins that fit the example
+- keep heavy external plugins such as Rosetta and AbEpiTope present, but commented out by default
 
 ## Quick start
 
@@ -17,7 +17,7 @@ The examples now follow one rule:
 ## Example files
 
 - [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml): local antibody-antigen development profile
-- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml): full antibody-antigen example with all non-Rosetta plugins active
+- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml): full antibody-antigen example with built-in plugins active
 - [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml): VHH-focused variant
 - [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml): generic non-antibody variant
 
@@ -25,11 +25,14 @@ The examples now follow one rule:
 
 Antibody and VHH examples enable:
 
-- both built-in manipulations
-- all non-Rosetta record plugins
+- both built-in quality controls
+- the built-in per-structure manipulation
+- the built-in dataset-scale manipulation
+- the built-in record plugins
 - dataset annotations
 - interface summary
 - CDR entropy
+- `dataset_analysis_mode: post_merge`
 
 That includes both interface plugins:
 
@@ -52,6 +55,17 @@ The Rosetta block already includes:
 - packed vs no-pack settings
 - packstat options
 - native `-fixedchains` targets
+
+## Enabling AbEpiTope later
+
+The antibody-oriented example YAMLs also include a commented `abepitope_score` plugin entry and `abepitope_atom_radius`.
+
+Enable it only when:
+
+- `abepitope` is installed in the active Python environment
+- `hmmsearch` is on `PATH`
+
+The plugin is a heavy isolated external score plugin for antibody-antigen style interfaces.
 
 ## Useful staged commands
 
