@@ -10,6 +10,7 @@ try:
     import pandas as pd
     import yaml
     from minimum_atw.cli import _load_config
+    from minimum_atw.core.output_files import dataset_output_path, pdb_output_path, read_output_metadata
     from minimum_atw.core.pipeline import prepare_outputs, run_pipeline, run_plugin, run_plugins
     from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
@@ -24,6 +25,61 @@ except ModuleNotFoundError as exc:
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
 class IntegrationSmokeTests(unittest.TestCase):
+    def test_run_pipeline_respects_custom_output_filenames(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_test_") as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            out_dir = root / "out"
+            config_path = root / "config.yaml"
+            input_dir.mkdir()
+
+            (input_dir / "toy_complex.pdb").write_text(
+                textwrap.dedent(
+                    """\
+                    ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00 20.00           N
+                    ATOM      2  CA  GLY A   1       1.200   0.000   0.000  1.00 20.00           C
+                    ATOM      3  N   GLY B   1       0.000   0.000   3.000  1.00 20.00           N
+                    ATOM      4  CA  GLY B   1       1.200   0.000   3.000  1.00 20.00           C
+                    TER
+                    END
+                    """
+                )
+            )
+
+            config_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "input_dir": str(input_dir),
+                        "out_dir": str(out_dir),
+                        "roles": {"binder": ["A"], "target": ["B"]},
+                        "interface_pairs": [["binder", "target"]],
+                        "plugins": ["identity"],
+                        "dataset_analyses": ["interface_summary"],
+                        "pdb_output_name": "20250212_pdb.parquet",
+                        "dataset_output_name": "20250212_dataset.parquet",
+                    },
+                    sort_keys=False,
+                )
+            )
+
+            cfg = _load_config(str(config_path))
+            counts = run_pipeline(cfg)
+            metadata = json.loads((out_dir / "run_metadata.json").read_text())
+            resolved_metadata = read_output_metadata(out_dir)
+
+            self.assertEqual(counts["structures"], 1)
+            self.assertFalse((out_dir / "pdb.parquet").exists())
+            self.assertFalse((out_dir / "dataset.parquet").exists())
+            self.assertTrue(pdb_output_path(out_dir, metadata=resolved_metadata).exists())
+            self.assertTrue(dataset_output_path(out_dir, metadata=resolved_metadata).exists())
+            self.assertEqual(
+                metadata["output_files"],
+                {
+                    "pdb": "20250212_pdb.parquet",
+                    "dataset": "20250212_dataset.parquet",
+                },
+            )
+
     def test_clean_run_omits_top_level_plugin_status_but_keeps_summary_in_metadata(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_test_") as tmp_dir:
             root = Path(tmp_dir)

@@ -7,16 +7,13 @@ from pathlib import Path
 import pandas as pd
 import pyarrow.parquet as pq
 
+from ....core.output_files import dataset_output_path, pdb_output_path, read_output_metadata
 from . import DATASET_CALCULATION_REGISTRY, DEFAULT_DATASET_CALCULATIONS, DatasetAnalysisContext
 from ....core.registry import instantiate_unit
 
 
 def _read_dataset_metadata(out_dir: Path) -> dict[str, object]:
-    for filename in ("run_metadata.json", "dataset_metadata.json"):
-        path = out_dir / filename
-        if path.exists():
-            return json.loads(path.read_text())
-    return {}
+    return read_output_metadata(out_dir)
 
 
 def _read_output_table(
@@ -25,7 +22,8 @@ def _read_output_table(
     *,
     columns: list[str] | None = None,
 ) -> pd.DataFrame:
-    path = out_dir / "pdb.parquet"
+    metadata = _read_dataset_metadata(out_dir)
+    path = pdb_output_path(out_dir, metadata=metadata)
     legacy_filename = {"interface": "interfaces.parquet", "role": "roles.parquet"}.get(grain, f"{grain}.parquet")
     legacy_path = out_dir / legacy_filename
     if not path.exists() and legacy_path.exists():
@@ -73,7 +71,8 @@ def analyze_dataset_outputs(
     dataset_annotations: dict[str, str] | None = None,
 ) -> dict[str, int | str]:
     out_dir = Path(out_dir).resolve()
-    pdb_path = out_dir / "pdb.parquet"
+    metadata = _read_dataset_metadata(out_dir)
+    pdb_path = pdb_output_path(out_dir, metadata=metadata)
     legacy_interfaces_path = out_dir / "interfaces.parquet"
     if not pdb_path.exists() and not legacy_interfaces_path.exists():
         raise FileNotFoundError(f"Missing pdb table: {pdb_path}")
@@ -81,7 +80,7 @@ def analyze_dataset_outputs(
     analysis_dir = out_dir / "dataset_analysis"
     if analysis_dir.exists():
         shutil.rmtree(analysis_dir)
-    dataset_path = out_dir / "dataset.parquet"
+    dataset_path = dataset_output_path(out_dir, metadata=metadata)
     if dataset_path.exists():
         dataset_path.unlink()
 

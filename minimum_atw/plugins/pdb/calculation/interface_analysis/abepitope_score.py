@@ -17,7 +17,7 @@ from ..base import Context, InterfacePlugin
 
 
 def _runner_script_path() -> Path:
-    return Path(__file__).resolve().parents[2] / "externals" / "abepitope_runner.py"
+    return Path(__file__).resolve().parents[4] / "externals" / "abepitope_runner.py"
 
 
 def _resolve_hmmsearch() -> str | None:

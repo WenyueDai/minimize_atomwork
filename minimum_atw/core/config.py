@@ -5,6 +5,11 @@ from typing import Any, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .output_files import (
+    DEFAULT_DATASET_OUTPUT_NAME,
+    DEFAULT_PDB_OUTPUT_NAME,
+    normalize_output_filename,
+)
 
 PREPARE_SECTION_ORDER = ("quality_control", "structure", "dataset_quality_control", "dataset")
 DATASET_ANALYSIS_MODES = {"post_merge", "per_chunk", "both"}
@@ -142,6 +147,8 @@ class Config(BaseModel):
     manipulations: list[str] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)
     dataset_analyses: list[str] = Field(default_factory=list)
+    pdb_output_name: str = DEFAULT_PDB_OUTPUT_NAME
+    dataset_output_name: str = DEFAULT_DATASET_OUTPUT_NAME
 
     clash_distance: float = 2.0
     clash_scope: str = "all"
@@ -256,6 +263,20 @@ class Config(BaseModel):
     def _normalize_dataset_annotations(cls, value: Any) -> dict[str, str]:
         return _normalize_string_mapping(value)
 
+    @field_validator("pdb_output_name", mode="before")
+    @classmethod
+    def _normalize_pdb_output_name(cls, value: Any) -> str:
+        return normalize_output_filename(value, default=DEFAULT_PDB_OUTPUT_NAME, label="pdb_output_name")
+
+    @field_validator("dataset_output_name", mode="before")
+    @classmethod
+    def _normalize_dataset_output_name(cls, value: Any) -> str:
+        return normalize_output_filename(
+            value,
+            default=DEFAULT_DATASET_OUTPUT_NAME,
+            label="dataset_output_name",
+        )
+
     @field_validator("rosetta_interface_targets", mode="before")
     @classmethod
     def _normalize_rosetta_targets(cls, value: Any) -> list[RosettaTarget]:
@@ -323,6 +344,8 @@ class Config(BaseModel):
             raise ValueError(f"clash_scope must be one of {sorted(CLASH_SCOPES)}")
         if self.rosetta_packstat_oversample is not None and self.rosetta_packstat_oversample < 1:
             raise ValueError("rosetta_packstat_oversample must be at least 1")
+        if self.pdb_output_name == self.dataset_output_name:
+            raise ValueError("pdb_output_name and dataset_output_name must be different")
         return self
 
     def prepare_names_by_section(
@@ -403,6 +426,8 @@ class Config(BaseModel):
             "dataset_analysis_mode",
             "dataset_analysis_params",
             "dataset_annotations",
+            "pdb_output_name",
+            "dataset_output_name",
         }
         return {
             key: value

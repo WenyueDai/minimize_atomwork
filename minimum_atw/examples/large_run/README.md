@@ -5,7 +5,8 @@ This folder is for `run-chunked` and `plan-chunks`.
 The shipped config follows the same local-development rule as the small examples:
 
 - built-in local features are enabled
-- heavy external tool blocks are present but commented out
+- Rosetta blocks are present but commented out
+- AbEpiTope is enabled in antibody-oriented chunked examples
 
 ## Config
 

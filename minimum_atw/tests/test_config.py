@@ -46,6 +46,34 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.roles, {"vh": ["H"]})
         self.assertEqual(cfg.interface_pairs, [("vh", "antigen")])
 
+    def test_output_names_are_normalized_and_validated(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            pdb_output_name=" 20250212_pdb ",
+            dataset_output_name=" 20250212_dataset.parquet ",
+        )
+
+        self.assertEqual(cfg.pdb_output_name, "20250212_pdb.parquet")
+        self.assertEqual(cfg.dataset_output_name, "20250212_dataset.parquet")
+        self.assertNotIn("pdb_output_name", cfg.merge_compatibility())
+        self.assertNotIn("dataset_output_name", cfg.merge_compatibility())
+
+        with self.assertRaises(ValueError):
+            Config(
+                input_dir="/tmp/in",
+                out_dir="/tmp/out",
+                pdb_output_name="subdir/custom.parquet",
+            )
+
+        with self.assertRaises(ValueError):
+            Config(
+                input_dir="/tmp/in",
+                out_dir="/tmp/out",
+                pdb_output_name="same.parquet",
+                dataset_output_name="same.parquet",
+            )
+
     def test_numbering_options_are_normalized(self) -> None:
         cfg = Config(
             input_dir="/tmp/in",

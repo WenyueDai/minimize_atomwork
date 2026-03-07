@@ -5,7 +5,8 @@ These configs are for small local runs and day-to-day plugin development.
 The examples now follow one rule:
 
 - enable built-in local plugins that fit the example
-- keep heavy external plugins such as Rosetta and AbEpiTope present, but commented out by default
+- keep Rosetta scaffolded but commented out by default
+- enable AbEpiTope by default in antibody-oriented examples
 
 ## Quick start
 
@@ -29,6 +30,7 @@ Antibody and VHH examples enable:
 - the built-in per-structure manipulation
 - the built-in dataset-scale manipulation
 - the built-in PDB calculation plugins
+- `abepitope_score`
 - dataset annotations
 - interface summary
 - CDR entropy
@@ -56,16 +58,16 @@ The Rosetta block already includes:
 - packstat options
 - native `-fixedchains` targets
 
-## Enabling AbEpiTope later
+## AbEpiTope note
 
-The antibody-oriented example YAMLs also include a commented `abepitope_score` plugin entry and `abepitope_atom_radius`.
+The antibody-oriented example YAMLs now enable `abepitope_score` and `abepitope_atom_radius` by default.
 
-Enable it only when:
+Run those examples only when:
 
 - `abepitope` is installed in the active Python environment
 - `hmmsearch` is on `PATH`
 
-The plugin is a heavy isolated external score plugin for antibody-antigen style interfaces.
+If those dependencies are not available, comment `abepitope_score` back out in the YAML.
 
 ## Useful staged commands
 

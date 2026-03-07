@@ -201,7 +201,7 @@ python -m minimum_atw.cli merge-datasets \
 
 Final outputs in `out_dir/`:
 
-- `pdb.parquet`
+- `pdb.parquet` by default, or your configured `pdb_output_name`
 - `run_metadata.json`
 
 Merged dataset outputs also include:
@@ -210,7 +210,12 @@ Merged dataset outputs also include:
 
 Dataset analyses write:
 
-- `out_dir/dataset.parquet`
+- `out_dir/dataset.parquet` by default, or your configured `dataset_output_name`
+
+Optional naming keys in YAML:
+
+- `pdb_output_name: 20250212_pdb.parquet`
+- `dataset_output_name: 20250212_dataset.parquet`
 
 Failure/debug output:
 

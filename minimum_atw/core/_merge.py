@@ -8,11 +8,18 @@ from typing import Any
 
 import pandas as pd
 
+from .output_files import (
+    output_files_from_config,
+    output_files_from_metadata,
+    pdb_output_path,
+    read_output_metadata,
+)
 from ..runtime.workspace import (
     plugin_bad_path as _plugin_bad_path,
     plugin_pdb_path as _plugin_pdb_path,
     plugin_status_path as _plugin_status_path,
     prepared_dir as _prepared_dir,
+    clear_final_outputs as _clear_final_outputs,
 )
 from ._execute import plugin_execution_metadata as _plugin_execution_metadata
 from ._prepare import prepare_execution_metadata as _prepare_execution_metadata
@@ -102,16 +109,6 @@ def _merge_compatibility(config: Config) -> dict[str, Any]:
     return config.merge_compatibility()
 
 
-def _read_output_metadata(source_dir: Path) -> dict[str, Any]:
-    run_metadata_path = source_dir / "run_metadata.json"
-    dataset_metadata_path = source_dir / "dataset_metadata.json"
-    if run_metadata_path.exists():
-        return json.loads(run_metadata_path.read_text())
-    if dataset_metadata_path.exists():
-        return json.loads(dataset_metadata_path.read_text())
-    return {}
-
-
 def _metadata_merge_compatibility(metadata: dict[str, Any]) -> dict[str, Any] | None:
     compatibility = metadata.get("merge_compatibility")
     if compatibility is not None:
@@ -153,6 +150,8 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     prepared_dir = _prepared_dir(out_dir)
     if not prepared_dir.exists():
         raise FileNotFoundError(f"Prepared outputs not found: {prepared_dir}")
+    output_files = output_files_from_config(cfg)
+    _clear_final_outputs(out_dir, cfg=cfg)
 
     merged_pdb = _read_pdb_table(prepared_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}")
     status_frames = [_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)]
@@ -175,7 +174,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     merged_bad = _merge_tracking_frames(bad_frames)
     status_summary = _status_summary(merged_status)
 
-    _write_pdb_table(out_dir, merged_pdb)
+    _write_pdb_table(out_dir, merged_pdb, filename=output_files["pdb"])
     _write_plugin_status_if_needed(
         out_dir / f"plugin_status{TABLE_SUFFIX}",
         merged_status,
@@ -197,6 +196,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
             "plugin_execution": _plugin_execution_metadata(cfg.plugins),
             "counts": counts,
             "status_summary": status_summary,
+            "output_files": output_files,
             "merge_compatibility": _merge_compatibility(cfg),
             "table_columns": _table_columns(merged_pdb),
         },
@@ -220,11 +220,12 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
     source_status_summaries: list[dict[str, int]] = []
     reference_columns: dict[str, list[str]] = {}
     reference_compatibility: dict[str, Any] | None = None
+    target_output_files: dict[str, str] | None = None
 
     for source_dir in resolved_sources:
         if not source_dir.exists():
             raise FileNotFoundError(f"Source out_dir not found: {source_dir}")
-        metadata = _read_output_metadata(source_dir)
+        metadata = read_output_metadata(source_dir)
         compatibility = _metadata_merge_compatibility(metadata)
         if compatibility is not None:
             if reference_compatibility is None:
@@ -238,9 +239,13 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
             {
                 "out_dir": str(source_dir),
                 "output_kind": metadata.get("output_kind", "unknown"),
+                "output_files": output_files_from_metadata(metadata),
             }
         )
-        frame = _read_pdb_table(source_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}")
+        source_output_files = output_files_from_metadata(metadata)
+        if target_output_files is None:
+            target_output_files = source_output_files
+        frame = _read_pdb_table(pdb_output_path(source_dir, metadata=metadata))
         pdb_frames.append(_validate_source_table_columns(PDB_TABLE_NAME, source_dir, frame, reference_columns))
         source_status_frame = _read_frame(source_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)
         status_frames.append(source_status_frame)
@@ -253,8 +258,10 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
     merged_status = _merge_tracking_frames(status_frames)
     merged_bad = _merge_tracking_frames(bad_frames)
     status_summary = _combine_status_summaries(source_status_summaries)
+    target_output_files = target_output_files or {"pdb": "pdb.parquet", "dataset": "dataset.parquet"}
+    _clear_final_outputs(target_out_dir)
 
-    _write_pdb_table(target_out_dir, merged_pdb)
+    _write_pdb_table(target_out_dir, merged_pdb, filename=target_output_files["pdb"])
     _write_plugin_status_if_needed(
         target_out_dir / f"plugin_status{TABLE_SUFFIX}",
         merged_status,
@@ -275,6 +282,7 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
             "source_outputs": metadata_by_source,
             "counts": counts,
             "status_summary": status_summary,
+            "output_files": target_output_files,
             "merge_compatibility": reference_compatibility,
             "table_columns": _table_columns(merged_pdb),
         },

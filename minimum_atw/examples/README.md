@@ -76,7 +76,7 @@ Requirements:
 - Python package `abepitope`
 - `hmmsearch` from HMMER on `PATH`
 
-The example YAMLs include the plugin as a commented option. Enable it only when those dependencies are installed and the structure is compatible with AbEpiTope's antibody-antigen assumptions.
+The antibody-oriented example YAMLs now enable the plugin by default. If `abepitope` or `hmmsearch` is missing in your environment, comment it back out before running.
 
 ## YAML Config Reference
 
@@ -87,6 +87,8 @@ The example YAML files all use the same core config model. The sections below ex
 - `input_dir`: directory containing input `.pdb` or `.cif` files
 - `out_dir`: directory where final outputs and temporary working files are written
 - `assembly_id`: biological assembly identifier to load from each structure; usually `"1"`
+- `pdb_output_name`: optional final PDB parquet filename; defaults to `pdb.parquet`
+- `dataset_output_name`: optional final dataset parquet filename; defaults to `dataset.parquet`
 
 ### Role and interface definition
 

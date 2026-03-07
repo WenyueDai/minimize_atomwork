@@ -9,6 +9,15 @@ import pandas as pd
 from biotite.structure.io import load_structure
 
 from ..core.config import Config
+from ..core.output_files import (
+    BAD_OUTPUT_NAME,
+    DATASET_METADATA_NAME,
+    PLUGIN_STATUS_OUTPUT_NAME,
+    RUN_METADATA_NAME,
+    output_files_from_config,
+    output_files_from_metadata,
+    read_output_metadata,
+)
 from ..plugins.base import Context
 from ..core.tables import MANIFEST_COLS, PDB_TABLE_NAME, TABLE_SUFFIX, empty_pdb_rows, prefix_row, read_frame
 
@@ -17,14 +26,18 @@ PREPARED_DIRNAME = "_prepared"
 PREPARED_STRUCTURES_DIRNAME = "structures"
 PREPARED_MANIFEST_NAME = "prepared_manifest.parquet"
 PLUGINS_DIRNAME = "_plugins"
-RUN_METADATA_NAME = "run_metadata.json"
-DATASET_METADATA_NAME = "dataset_metadata.json"
-FINAL_OUTPUT_FILES = [f"{PDB_TABLE_NAME}{TABLE_SUFFIX}", f"dataset{TABLE_SUFFIX}"] + [
-    f"bad_files{TABLE_SUFFIX}",
-    RUN_METADATA_NAME,
-    DATASET_METADATA_NAME,
-]
-OPTIONAL_DEBUG_OUTPUT_FILES = [f"plugin_status{TABLE_SUFFIX}"]
+OPTIONAL_DEBUG_OUTPUT_FILES = [PLUGIN_STATUS_OUTPUT_NAME]
+
+
+def final_output_files(*, cfg: Config | None = None, metadata: dict[str, Any] | None = None) -> list[str]:
+    output_files = output_files_from_config(cfg) if cfg is not None else output_files_from_metadata(metadata)
+    return [
+        output_files["pdb"],
+        output_files["dataset"],
+        BAD_OUTPUT_NAME,
+        RUN_METADATA_NAME,
+        DATASET_METADATA_NAME,
+    ]
 
 
 def discover_inputs(input_dir: Path) -> list[Path]:
@@ -198,9 +211,13 @@ def plugin_bad_path(out_dir: Path, plugin_name: str) -> Path:
     return plugins_dir(out_dir) / f"{plugin_name}.bad_files{TABLE_SUFFIX}"
 
 
-def clear_final_outputs(out_dir: Path) -> None:
+def clear_final_outputs(out_dir: Path, *, cfg: Config | None = None) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    for filename in FINAL_OUTPUT_FILES + OPTIONAL_DEBUG_OUTPUT_FILES:
+    existing_metadata = read_output_metadata(out_dir)
+    filenames = set(final_output_files(metadata=existing_metadata))
+    filenames.update(final_output_files(cfg=cfg))
+    filenames.update(OPTIONAL_DEBUG_OUTPUT_FILES)
+    for filename in filenames:
         path = out_dir / filename
         if path.exists():
             path.unlink()
@@ -209,9 +226,11 @@ def clear_final_outputs(out_dir: Path) -> None:
         shutil.rmtree(analysis_dir)
 
 
-def copy_final_outputs(source_out_dir: Path, target_out_dir: Path) -> None:
-    clear_final_outputs(target_out_dir)
-    for filename in FINAL_OUTPUT_FILES:
+def copy_final_outputs(source_out_dir: Path, target_out_dir: Path, *, cfg: Config | None = None) -> None:
+    metadata = read_output_metadata(source_out_dir)
+    filenames = final_output_files(cfg=cfg, metadata=metadata)
+    clear_final_outputs(target_out_dir, cfg=cfg)
+    for filename in filenames:
         source_path = source_out_dir / filename
         if source_path.exists():
             shutil.copy2(source_path, target_out_dir / filename)

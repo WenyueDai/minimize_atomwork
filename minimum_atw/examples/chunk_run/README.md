@@ -5,7 +5,8 @@ This folder is for manual chunk configs: one config per chunk, one output direct
 Current example policy:
 
 - chunk YAMLs enable the built-in local features useful for chunk testing
-- heavy external tools such as Rosetta and AbEpiTope are scaffolded but commented out
+- Rosetta is scaffolded but commented out
+- AbEpiTope is enabled in the antibody chunk examples
 
 ## Files
 

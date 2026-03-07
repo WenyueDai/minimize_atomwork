@@ -46,7 +46,7 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
         prepare_outputs(temp_cfg)
         run_plugins(temp_cfg, temp_cfg.plugins)
         counts = merge_outputs(temp_cfg)
-        _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir)
+        _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir, cfg=temp_cfg)
         if cfg.dataset_analyses:
             _run_dataset_analyses(cfg, out_dir)
     return counts

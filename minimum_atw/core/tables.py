@@ -144,11 +144,17 @@ def stack_pdb_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     return sort_pdb_frame(combined)
 
 
-def write_pdb_table(dir_path: Path, frame: pd.DataFrame, *, skip_empty: bool = False) -> None:
+def write_pdb_table(
+    dir_path: Path,
+    frame: pd.DataFrame,
+    *,
+    skip_empty: bool = False,
+    filename: str | None = None,
+) -> None:
     dir_path.mkdir(parents=True, exist_ok=True)
     if skip_empty and frame.empty:
         return
-    frame.to_parquet(dir_path / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}", index=False)
+    frame.to_parquet(dir_path / (filename or f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"), index=False)
 
 
 def write_frame(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:

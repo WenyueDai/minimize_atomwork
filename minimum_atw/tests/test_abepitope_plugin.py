@@ -11,7 +11,10 @@ try:
     import yaml
     from minimum_atw.cli import _load_config
     from minimum_atw.core.pipeline import run_pipeline
-    from minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score import AbEpiTopeScorePlugin
+    from minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score import (
+        AbEpiTopeScorePlugin,
+        _runner_script_path,
+    )
     from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
@@ -21,11 +24,16 @@ except ModuleNotFoundError as exc:
     _load_config = None
     run_pipeline = None
     AbEpiTopeScorePlugin = None
+    _runner_script_path = None
     read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
 class AbEpiTopePluginTests(unittest.TestCase):
+    def test_abepitope_runner_script_path_exists(self) -> None:
+        self.assertTrue(_runner_script_path().exists())
+        self.assertEqual(_runner_script_path().name, "abepitope_runner.py")
+
     def test_abepitope_plugin_writes_interface_scores(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_abepitope_test_") as tmp_dir:
             root = Path(tmp_dir)
