@@ -16,7 +16,7 @@ interface_pairs:
 # - "superimpose_homology"
 manipulations:
   - "center_on_origin"
-  # - "superimpose_homology"
+  - "superimpose_homology"
 
 # Built-in record plugins:
 # - "identity"
@@ -26,26 +26,45 @@ manipulations:
 # - "interface_contacts"
 # - "antibody_cdr_lengths"
 # - "antibody_cdr_sequences"
-# - "rosetta_interface_example"   # requires Rosetta, disabled by default
+# - "rosetta_interface_example"
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"          # merged interfaces.parquet can include vh/vl CDR contact columns when numbering_roles is set
-  # - "antibody_cdr_lengths"
-  # - "antibody_cdr_sequences"
-  - "rosetta_interface_example"   # high-quality binding metrics; runs in parallel when chunked
+  - "interface_contacts"
+  - "antibody_cdr_lengths"
+  - "antibody_cdr_sequences"
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
-rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
-rosetta_database: "/opt/rosetta/main/database"
+
+# Rosetta InterfaceAnalyzer scaffold.
+# Uncomment the plugin above and fill these in when you want Rosetta metrics.
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_preprocess_with_score_jd2: true
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
 superimpose_reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
 superimpose_on_chains: ["A", "B", "C"]
 
-# run-chunked uses a temporary chunk workspace internally.
-# Keep this false so only the merged final outputs remain in out_dir.
 keep_intermediate_outputs: false
+keep_prepared_structures: false
+# checkpoint_enabled: true
+# checkpoint_interval: 25
 
 # Built-in dataset analyses:
 # - "dataset_annotations"
@@ -54,21 +73,16 @@ keep_intermediate_outputs: false
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
-  # - "cdr_entropy"
+  - "cdr_entropy"
 
-# dataset_analysis_params:
-#   cdr_entropy:
-#     roles: ["vh"]
-#     regions: ["cdr3"]
+dataset_analysis_params:
+  cdr_entropy:
+    roles: ["vh", "vl"]
+    regions: ["cdr1", "cdr2", "cdr3", "sequence"]
 
 numbering_roles:
   - "vh"
   - "vl"
-
-# When interface_contacts is enabled, the merged interfaces.parquet can include:
-# - iface__left_vh_cdr{1,2,3}_interface_residues
-# - iface__left_vl_cdr{1,2,3}_interface_residues
-# - matching iface__n_* count columns
 
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
@@ -85,3 +99,4 @@ dataset_annotations:
   modality: "antibody_antigen"
   source: "atw_pp default input"
   execution_mode: "run-chunked"
+  profile: "chunked_local_dev_no_rosetta"

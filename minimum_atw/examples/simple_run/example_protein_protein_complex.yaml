@@ -25,31 +25,54 @@ manipulations:
 # - "role_sequences"
 # - "role_stats"
 # - "interface_contacts"
-# - "antibody_cdr_lengths"        # antibody-only, left disabled here
-# - "antibody_cdr_sequences"      # antibody-only, left disabled here
-# - "rosetta_interface_example"   # requires Rosetta, disabled by default
+# - "antibody_cdr_lengths"
+# - "antibody_cdr_sequences"
+# - "rosetta_interface_example"
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"          # generic interface outputs only; no antibody CDR interface columns in this config
+  - "interface_contacts"
   # - "antibody_cdr_lengths"
   # - "antibody_cdr_sequences"
-  - "rosetta_interface_example"    # high-quality binding metrics (requires Rosetta)
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
-rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
-rosetta_database: "/opt/rosetta/main/database"
+
+# Rosetta InterfaceAnalyzer scaffold.
+# Uncomment the plugin above and fill these in when you want Rosetta metrics.
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_preprocess_with_score_jd2: true
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_interface_targets:
+#   - pair: ["ligand", "receptor"]
+#     left_role: "ligand"
+#     right_role: "receptor"
+#   - pair: ["complex_left", "complex_right"]
+#     left_role: "complex_left"
+#     right_role: "complex_right"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
 superimpose_reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
 superimpose_on_chains: ["A", "B", "C"]
-# One-shot runs keep only final outputs in out_dir.
 keep_intermediate_outputs: false
+keep_prepared_structures: false
+# checkpoint_enabled: true
+# checkpoint_interval: 25
 
 # Built-in dataset analyses:
 # - "dataset_annotations"
 # - "interface_summary"
-# - "cdr_entropy"                 # antibody-only, left disabled here
+# - "cdr_entropy"
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
@@ -61,4 +84,4 @@ dataset_annotations:
   modality: "protein_protein"
   source: "atw_pp default input reinterpreted as a generic protein complex"
   notes: "generic multi-chain receptor-ligand complex with semantic alias roles for plug-and-play interface analysis"
-  rosetta_plugin_note: "Configured but not enabled in plugins by default because Rosetta is an external dependency"
+  profile: "generic_non_antibody_example"

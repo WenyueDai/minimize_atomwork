@@ -1,26 +1,6 @@
 from __future__ import annotations
 
-from biotite.sequence import ProteinSequence
-
-
-def residue_code(res_name: str) -> str:
-    try:
-        return ProteinSequence.convert_letter_3to1(str(res_name))
-    except Exception:
-        return "X"
-
-
-def chain_residue_entries(chain_arr) -> list[tuple[str, int, str]]:
-    seen: set[tuple[str, int]] = set()
-    entries: list[tuple[str, int, str]] = []
-    chain_ids = chain_arr.chain_id.astype(str)
-    for chain_id, res_id, res_name in zip(chain_ids, chain_arr.res_id, chain_arr.res_name.astype(str)):
-        key = (chain_id, int(res_id))
-        if key in seen:
-            continue
-        seen.add(key)
-        entries.append((str(chain_id), int(res_id), residue_code(str(res_name))))
-    return entries
+from .interface_analysis.interface_metrics import chain_residue_entries, residue_code
 
 
 def residue_sequence(chain_arr) -> str:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from .antibody_analysis import AntibodyCDRLengthsPlugin, AntibodyCDRSequencesPlugin
-from .interface_analysis import InterfaceContactsPlugin, RosettaInterfaceExamplePlugin
+from .interface_analysis.interface_contacts import InterfaceContactsPlugin
+from .interface_analysis.rosetta_interface import RosettaInterfaceExamplePlugin
 from .structure_analysis import ChainStatsPlugin, IdentityPlugin, RoleSequencesPlugin, RoleStatsPlugin
 from ..core.registry import load_registry
 

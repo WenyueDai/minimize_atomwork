@@ -1,99 +1,60 @@
 # Simple Run Examples
 
-For **small datasets (< 10 structures)** with complete analysis including Rosetta InterfaceAnalyzer metrics.
+These configs are for small local runs and day-to-day plugin development.
 
-## Quick Start
+The examples now follow one rule:
 
-**Light mode (fast, ~2-3 min per structure):**
+- enable all non-Rosetta features that are locally testable
+- keep the Rosetta plugin and Rosetta config present, but commented out by default
+
+## Quick start
+
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
 ```
 
-**Full mode (complete analysis, ~5-10 min per structure):**
-```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
-```
+## Example files
 
-## Config Files
+- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml): local antibody-antigen development profile
+- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml): full antibody-antigen example with all non-Rosetta plugins active
+- [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml): VHH-focused variant
+- [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml): generic non-antibody variant
 
-| File | Use For |
-|------|---------|
-| `example_antibody_antigen_light.yaml` | Fast testing: minimal plugins, still includes Rosetta |
-| `example_antibody_antigen_pdb.yaml` | Complete analysis: all plugins, CDR entropy, etc. |
-| `example_vhh_antigen.yaml` | Nanobody/VHH systems |
-| `example_protein_protein_complex.yaml` | Generic protein-protein (no antibody features) |
+## What is active by default
 
-## Rosetta Setup
+Antibody and VHH examples enable:
 
-All examples require Rosetta InterfaceAnalyzer. Set paths once:
+- both built-in manipulations
+- all non-Rosetta record plugins
+- dataset annotations
+- interface summary
+- CDR entropy
 
-```bash
-export ROSETTA_INTERFACE_ANALYZER="/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-export ROSETTA_DATABASE="/path/to/rosetta/database"
-```
+The generic protein-protein example leaves antibody-only features commented because they do not apply to that role model.
 
-Or edit each config's `rosetta_executable` and `rosetta_database` fields.
+## Enabling Rosetta later
 
-**Verify:**
-```bash
-which InterfaceAnalyzer.static.linuxgccrelease && echo $ROSETTA_DATABASE
-```
+Every relevant YAML already includes the full Rosetta scaffold. To turn it on:
 
-## Rosetta Packing Options
+1. uncomment `rosetta_interface_example` in `plugins`
+2. uncomment and fill `rosetta_executable` and `rosetta_database`
+3. optionally uncomment `score_jd2` preprocessing and `rosetta_interface_targets`
 
-Customize packing behavior in YAML (all optional, defaults shown):
+The Rosetta block already includes:
 
-```yaml
-# Packing configuration
-rosetta_pack_input: true              # Repack sidechains at interface
-rosetta_pack_separated: true          # Separate chains during repacking
-rosetta_compute_packstat: true        # Calculate packing quality scores
-rosetta_atomic_burial_cutoff: 0.01    # Buried polar atom threshold
-rosetta_interface_cutoff: 8.0         # Interface distance (Å)
-```
+- preprocess-with-`score_jd2`
+- packed vs no-pack settings
+- packstat options
+- native `-fixedchains` targets
 
-### Common Packing Modes
-
-**Input sidechains only (no repacking, fastest):**
-```yaml
-rosetta_pack_input: false
-rosetta_compute_packstat: false
-```
-
-**Packed sidechains with metrics (default, recommended):**
-```yaml
-rosetta_pack_input: true
-rosetta_pack_separated: true
-rosetta_compute_packstat: true
-```
-
-**Quick testing mode:**
-```yaml
-rosetta_pack_input: true
-rosetta_compute_packstat: true
-rosetta_atomic_burial_cutoff: 0.1     # Less stringent
-```
-
-## Output
-
-All configs produce:
-- `summary.parquet` — one row per structure
-- `interfaces.parquet` — one row per interface pair
-  - Rosetta metrics: `iface__rosetta_dg_separated`, `iface__rosetta_packstat`, `iface__rosetta_dsasa`
-- `dataset_summary.parquet` — aggregated statistics
-
-Antibody configs also add CDR interface columns when numbering is enabled.
-
-## Advanced: Run Individual Plugins
+## Useful staged commands
 
 ```bash
-CONFIG=example_antibody_antigen_pdb.yaml
+CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG"
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin rosetta_interface_example
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config "$CONFIG"
 ```

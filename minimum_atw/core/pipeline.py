@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -109,19 +110,8 @@ def _append_stage_outputs(
         combined.to_parquet(path, index=False)
 
     # status and bad
-    def _append_frame_to(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
-        if not rows:
-            return
-        if path.exists():
-            existing = _read_frame(path, columns)
-            combined = pd.concat([existing, pd.DataFrame(rows, columns=columns)], ignore_index=True, sort=False)
-            combined = combined.drop_duplicates()
-        else:
-            combined = pd.DataFrame(rows, columns=columns)
-        combined.to_parquet(path, index=False)
-
-    _append_frame_to(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
-    _append_frame_to(out_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
+    _append_rows(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+    _append_rows(out_dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
 
     # compute counts from resulting files
     final_tables = {table_name: _read_table_parquet(out_dir / f"{table_name}{TABLE_SUFFIX}", table_name)
@@ -222,6 +212,132 @@ def _validate_source_table_columns(
     return frame.loc[:, expected_columns]
 
 
+@dataclass(frozen=True)
+class PluginExecutionSpec:
+    name: str
+    plugin: Any
+    resource_class: str
+    execution_mode: str
+    failure_policy: str
+
+
+@dataclass
+class PluginRunState:
+    spec: PluginExecutionSpec
+    dir: Path
+    processed: set[str]
+    counts: dict[str, int]
+
+    @classmethod
+    def from_out_dir(cls, out_dir: Path, spec: PluginExecutionSpec, checkpoint_enabled: bool) -> "PluginRunState":
+        plugin_dir = _plugin_dir(out_dir, spec.name)
+        processed: set[str] = set()
+        status_path = plugin_dir / f"plugin_status{TABLE_SUFFIX}"
+        bad_path = plugin_dir / f"bad_files{TABLE_SUFFIX}"
+
+        if checkpoint_enabled and plugin_dir.exists():
+            if status_path.exists():
+                status_frame = pd.read_parquet(status_path)
+                processed = set(status_frame["path"].tolist())
+            counts = {table: 0 for table in TABLE_NAMES}
+            for table_name in TABLE_NAMES:
+                table_path = plugin_dir / f"{table_name}{TABLE_SUFFIX}"
+                if table_path.exists():
+                    counts[table_name] = len(pd.read_parquet(table_path))
+            counts["status"] = len(pd.read_parquet(status_path)) if status_path.exists() else 0
+            counts["bad"] = len(pd.read_parquet(bad_path)) if bad_path.exists() else 0
+        else:
+            if plugin_dir.exists():
+                shutil.rmtree(plugin_dir)
+            plugin_dir.mkdir(parents=True, exist_ok=True)
+            counts = {table: 0 for table in TABLE_NAMES}
+            counts.update(status=0, bad=0)
+
+        return cls(spec=spec, dir=plugin_dir, processed=processed, counts=counts)
+
+    def record_result(
+        self,
+        tables: dict[str, list[dict[str, Any]]],
+        status_rows: list[dict[str, Any]],
+        bad_rows: list[dict[str, Any]],
+    ) -> None:
+        for table_name, rows in tables.items():
+            if not rows:
+                continue
+            _append_rows(self.dir / f"{table_name}{TABLE_SUFFIX}", rows, None)
+            self.counts[table_name] += len(rows)
+        _append_rows(self.dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+        self.counts["status"] += len(status_rows)
+        _append_rows(self.dir / f"bad_files{TABLE_SUFFIX}", bad_rows, BAD_COLS)
+        self.counts["bad"] += len(bad_rows)
+
+    def mark_bad(self, source_path: Path, exc: Exception) -> None:
+        self.record_result(
+            {table_name: [] for table_name in TABLE_NAMES},
+            [],
+            [{"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"}],
+        )
+        self.processed.add(str(source_path))
+
+
+def _plugin_execution_spec(plugin_name: str) -> PluginExecutionSpec:
+    if plugin_name not in PLUGIN_REGISTRY:
+        raise KeyError(f"Unknown plugin: {plugin_name}")
+    plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
+    return PluginExecutionSpec(
+        name=plugin_name,
+        plugin=plugin,
+        resource_class=str(getattr(plugin, "resource_class", "lightweight") or "lightweight"),
+        execution_mode=str(getattr(plugin, "execution_mode", "batched") or "batched"),
+        failure_policy=str(getattr(plugin, "failure_policy", "continue") or "continue"),
+    )
+
+
+def _resolve_plugin_specs(plugin_names: list[str]) -> list[PluginExecutionSpec]:
+    return [_plugin_execution_spec(plugin_name) for plugin_name in plugin_names]
+
+
+def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
+    lightweight_specs: list[PluginExecutionSpec] = []
+    isolated_specs: list[PluginExecutionSpec] = []
+
+    for spec in specs:
+        if spec.execution_mode == "batched" and spec.resource_class == "lightweight":
+            lightweight_specs.append(spec)
+        else:
+            isolated_specs.append(spec)
+
+    plan: list[list[PluginExecutionSpec]] = []
+    if lightweight_specs:
+        plan.append(lightweight_specs)
+    for spec in isolated_specs:
+        plan.append([spec])
+    return plan
+
+
+def _plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
+    specs = _resolve_plugin_specs(plugin_names)
+    groups = _plan_plugin_execution(specs)
+    return {
+        "plugins": {
+            spec.name: {
+                "resource_class": spec.resource_class,
+                "execution_mode": spec.execution_mode,
+                "failure_policy": spec.failure_policy,
+            }
+            for spec in specs
+        },
+        "groups": [
+            {
+                "plugins": [spec.name for spec in group],
+                "resource_class": "mixed" if len({spec.resource_class for spec in group}) > 1 else group[0].resource_class,
+                "execution_mode": "mixed" if len({spec.execution_mode for spec in group}) > 1 else group[0].execution_mode,
+            }
+            for group in groups
+        ],
+    }
+
+
 def prepare_outputs(cfg: Config) -> dict[str, int]:
     """
     Prepare structures for analysis.
@@ -276,8 +392,6 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
     done_paths: set[str] = set()
     manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
     if cfg.checkpoint_enabled and manifest_ckpt.exists():
-        import json
-
         with manifest_ckpt.open() as fh:
             for line in fh:
                 if not line.strip():
@@ -378,9 +492,6 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
 
         # after loop convert manifest log to final parquet manifest
         if manifest_ckpt.exists():
-            import json
-            import pandas as pd
-
             records: list[dict[str, str]] = []
             with manifest_ckpt.open() as fh:
                 for line in fh:
@@ -480,199 +591,101 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
         manifest_rows.close()
 
 
+def _append_rows(path: Path, rows: list[dict[str, Any]], columns: list[str] | None = None) -> None:
+    if not rows:
+        return
+    if columns:
+        df = pd.DataFrame(rows, columns=columns)
+    else:
+        df = pd.DataFrame(rows)
+    if path.exists():
+        existing = pd.read_parquet(path)
+        df = pd.concat([existing, df], ignore_index=True, sort=False)
+        df = df.drop_duplicates()
+    df.to_parquet(path, index=False)
+
+
+def _execute_plugin_group(
+    cfg: Config,
+    manifest: pd.DataFrame,
+    group: list[PluginExecutionSpec],
+    states: dict[str, PluginRunState],
+) -> None:
+    if not group:
+        return
+
+    if len(group) == 1:
+        label = f"Running isolated plugin: {group[0].name}"
+    else:
+        label = f"Running batched plugins: {', '.join(spec.name for spec in group)}"
+    print(label)
+
+    for row in manifest.itertuples(index=False):
+        source_path = Path(row.path)
+        pending_specs = [spec for spec in group if str(source_path) not in states[spec.name].processed]
+        if not pending_specs:
+            continue
+
+        prepared_path = Path(row.prepared_path)
+        try:
+            ctx = _prepare_context(source_path, prepared_path, cfg)
+        except Exception as exc:
+            for spec in pending_specs:
+                states[spec.name].mark_bad(source_path, exc)
+            continue
+
+        for spec in pending_specs:
+            local_tables: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in TABLE_NAMES}
+            local_status: list[dict[str, Any]] = []
+            local_bad: list[dict[str, Any]] = []
+            ok = _run_unit(ctx, spec.plugin, local_tables, local_status)
+            states[spec.name].record_result(local_tables, local_status, local_bad)
+            states[spec.name].processed.add(str(source_path))
+            if not ok and spec.failure_policy == "raise":
+                raise RuntimeError(f"Plugin {spec.name} failed for {source_path}")
+
+
 def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
     """
     Run a single plugin against prepared structures.
     
     Phase 2a of the pipeline. Requires prepare_outputs to have been called first.
-    
-    1. Loads prepared structures from _prepared/
-    2. Iterates through each prepared structure:
-       - Creates Context from prepared structure
-       - Runs plugin, collecting output rows
-       - Records status (ok/skipped/failed)
-    3. Writes plugin-specific tables:
-       - _plugins/<plugin_name>/structures.parquet (if plugin emits to structures)
-       - _plugins/<plugin_name>/chains.parquet (if plugin emits to chains)
-       - _plugins/<plugin_name>/roles.parquet (if plugin emits to roles)
-       - _plugins/<plugin_name>/interfaces.parquet (if plugin emits to interfaces)
-    
-    Can be called in parallel for different plugins to speed up processing.
-    
-    Args:
-        cfg: Config with out_dir, superimpose/rosetta/interface settings
-        plugin_name: Name of plugin to run (must exist in PLUGIN_REGISTRY)
-        
-    Returns:
-        dict with row counts by table:
-            {
-                "structures": int,
-                "chains": int,
-                "roles": int,
-                "interfaces": int,
-                "status": int,  # plugin execution status entries
-                "bad": int,     # structures that failed
-            }
-            
-    Raises:
-        KeyError: If plugin_name not found in PLUGIN_REGISTRY
-        FileNotFoundError: If prepared outputs don't exist
-        
-    Outputs:
-        - _plugins/<plugin_name>/{structures,chains,roles,interfaces}.parquet
-        - _plugins/<plugin_name>/plugin_status.parquet
-        - _plugins/<plugin_name>/bad_files.parquet
+    The plugin keeps its own output directory and status log regardless of how it
+    is classified for grouped execution.
     """
-    if plugin_name not in PLUGIN_REGISTRY:
-        raise KeyError(f"Unknown plugin: {plugin_name}")
-
-    out_dir = Path(cfg.out_dir).resolve()
-    plugin_dir = _plugin_dir(out_dir, plugin_name)
-    plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
-    manifest = _load_prepared_manifest(out_dir)
-
-    # checkpointing logic: if enabled, read existing results and avoid
-    # deleting the plugin directory so that work can be resumed.
-    processed: set[str] = set()
-    counts: dict[str, int]
-    if cfg.checkpoint_enabled and plugin_dir.exists():
-        # build processed set from previous status log
-        status_path = plugin_dir / f"plugin_status{TABLE_SUFFIX}"
-        if status_path.exists():
-            df = pd.read_parquet(status_path)
-            processed = set(df["path"].tolist())
-        # prepopulate counts from existing files
-        counts = {table: 0 for table in TABLE_NAMES}
-        for table in TABLE_NAMES:
-            path = plugin_dir / f"{table}{TABLE_SUFFIX}"
-            if path.exists():
-                counts[table] = len(pd.read_parquet(path))
-        counts["status"] = len(pd.read_parquet(status_path)) if status_path.exists() else 0
-        bad_path = plugin_dir / f"bad_files{TABLE_SUFFIX}"
-        counts["bad"] = len(pd.read_parquet(bad_path)) if bad_path.exists() else 0
-    else:
-        # fresh start
-        if plugin_dir.exists():
-            shutil.rmtree(plugin_dir)
-        plugin_dir.mkdir(parents=True, exist_ok=True)
-        processed = set()
-        counts = {table: 0 for table in TABLE_NAMES}
-        counts.update(status=0, bad=0)
-
-    # helper to append to parquet tables for each structure
-    def _append_rows(path: Path, rows: list[dict[str, Any]], columns: list[str] | None = None) -> None:
-        if not rows:
-            return
-        if columns:
-            df = pd.DataFrame(rows, columns=columns)
-        else:
-            df = pd.DataFrame(rows)
-        if path.exists():
-            existing = pd.read_parquet(path)
-            df = pd.concat([existing, df], ignore_index=True, sort=False)
-            df = df.drop_duplicates()
-        df.to_parquet(path, index=False)
-
-    # iterate only unprocessed structures
-    for row in manifest.itertuples(index=False):
-        source_path = Path(row.path)
-        if str(source_path) in processed:
-            continue
-        prepared_path = Path(row.prepared_path)
-        try:
-            ctx = _prepare_context(source_path, prepared_path, cfg)
-        except Exception as exc:
-            _append_rows(plugin_dir / f"bad_files{TABLE_SUFFIX}", [{"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"}], BAD_COLS)
-            counts["bad"] += 1
-            processed.add(str(source_path))
-            continue
-
-        # collect output for this structure
-        local_tables: dict[str, list[dict[str, Any]]] = {t: [] for t in TABLE_NAMES}
-        local_status: list[dict[str, Any]] = []
-        local_bad: list[dict[str, Any]] = []
-        _run_unit(ctx, plugin, local_tables, local_status)
-
-        # flush results to disk immediately
-        for table_name, rows in local_tables.items():
-            if rows:
-                _append_rows(plugin_dir / f"{table_name}{TABLE_SUFFIX}", rows, None)
-                counts[table_name] += len(rows)
-        _append_rows(plugin_dir / f"plugin_status{TABLE_SUFFIX}", local_status, STATUS_COLS)
-        counts["status"] += len(local_status)
-        if local_bad:
-            _append_rows(plugin_dir / f"bad_files{TABLE_SUFFIX}", local_bad, BAD_COLS)
-            counts["bad"] += len(local_bad)
-
-        processed.add(str(source_path))
-
-    return counts
+    return run_plugins(cfg, [plugin_name])
 
 
 def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
     """
     Run multiple plugins against prepared structures.
     
-    Phase 2a (incremental) of the pipeline. Requires prepare_outputs to have been called first.
-    
-    This is the incremental plugin development workflow - run multiple plugins efficiently
-    against the same prepared structures without re-preparation. Each plugin runs in sequence
-    but shares the expensive structure loading and preparation work.
-    
-    1. Loads prepared structures from _prepared/ once
-    2. For each plugin in sequence:
-       - Iterates through each prepared structure
-       - Runs plugin, collecting output rows
-       - Records status (ok/skipped/failed)
-       - Writes plugin-specific tables
-    3. Returns combined counts across all plugins
-    
-    Can be called during plugin development to test multiple plugins quickly.
-    
-    Args:
-        cfg: Config with out_dir, superimpose/rosetta/interface settings
-        plugin_names: List of plugin names to run (must exist in PLUGIN_REGISTRY)
-        
-    Returns:
-        dict with combined row counts across all plugins:
-            {
-                "structures": int,     # total structures rows across all plugins
-                "chains": int,         # total chains rows across all plugins
-                "roles": int,          # total roles rows across all plugins
-                "interfaces": int,     # total interfaces rows across all plugins
-                "status": int,         # all status entries (across all plugins)
-                "bad": int,            # structures that failed for any plugin
-            }
-            
-    Raises:
-        KeyError: If any plugin_name not found in PLUGIN_REGISTRY
-        FileNotFoundError: If prepared outputs don't exist
-        
-    Outputs:
-        - _plugins/<plugin_name>/{structures,chains,roles,interfaces}.parquet for each plugin
-        - _plugins/<plugin_name>/plugin_status.parquet for each plugin
-        - _plugins/<plugin_name>/bad_files.parquet for each plugin
+    Phase 2a (incremental) of the pipeline. Lightweight plugins run in one
+    shared pass over prepared structures, while heavy or isolated plugins run
+    in separate passes with their own output/state directories.
     """
-    # Validate all plugins exist
-    missing_plugins = [name for name in plugin_names if name not in PLUGIN_REGISTRY]
-    if missing_plugins:
-        raise KeyError(f"Unknown plugins: {', '.join(missing_plugins)}")
+    specs = _resolve_plugin_specs(plugin_names)
 
     out_dir = Path(cfg.out_dir).resolve()
     manifest = _load_prepared_manifest(out_dir)
-    
-    # Track combined counts across all plugins
+    states = {
+        spec.name: PluginRunState.from_out_dir(out_dir, spec, cfg.checkpoint_enabled)
+        for spec in specs
+    }
+
+    for group in _plan_plugin_execution(specs):
+        _execute_plugin_group(cfg, manifest, group, states)
+
     total_counts = {table: 0 for table in TABLE_NAMES}
     total_counts.update(status=0, bad=0)
-    
-    # Run each plugin in sequence
-    for plugin_name in plugin_names:
-        print(f"Running plugin: {plugin_name}")
-        plugin_counts = run_plugin(cfg, plugin_name)
-        # Accumulate counts
-        for key, value in plugin_counts.items():
+    for state in states.values():
+        for key, value in state.counts.items():
             total_counts[key] += value
-    
+
+    prepared_dir = _prepared_dir(out_dir)
+    for table_name in TABLE_NAMES:
+        prepared_count = len(_read_table_parquet(prepared_dir / f"{table_name}{TABLE_SUFFIX}", table_name))
+        total_counts[table_name] = max(total_counts[table_name], prepared_count)
     return total_counts
 
 
@@ -946,6 +959,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
         {
             "output_kind": "run",
             "config": cfg.model_dump(),
+            "plugin_execution": _plugin_execution_metadata(cfg.plugins),
             "counts": counts,
             "merge_compatibility": _merge_compatibility(cfg),
             "table_columns": _table_columns(merged_tables),
@@ -991,8 +1005,7 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
     out_dir = Path(cfg.out_dir).resolve()
     if cfg.keep_intermediate_outputs:
         prepare_outputs(cfg)
-        for plugin_name in cfg.plugins:
-            run_plugin(cfg, plugin_name)
+        run_plugins(cfg, cfg.plugins)
         counts = merge_outputs(cfg)
         _run_dataset_analyses(cfg, out_dir)
         return counts
@@ -1000,8 +1013,7 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
     with tempfile.TemporaryDirectory(prefix="minimum_atw_run_") as tmp_dir:
         temp_cfg = cfg.model_copy(update={"out_dir": str(Path(tmp_dir).resolve())})
         prepare_outputs(temp_cfg)
-        for plugin_name in temp_cfg.plugins:
-            run_plugin(temp_cfg, plugin_name)
+        run_plugins(temp_cfg, temp_cfg.plugins)
         counts = merge_outputs(temp_cfg)
         _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir)
         _run_dataset_analyses(cfg, out_dir)

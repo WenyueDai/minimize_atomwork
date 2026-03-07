@@ -39,6 +39,9 @@ class BasePlugin:
     prefix = ""
     table: TableName = "structures"
     execution = "in_process"
+    resource_class = "lightweight"
+    execution_mode = "batched"
+    failure_policy = "continue"
     extension_class = "record_plugin"
     analysis_category = "structure_analysis"
 

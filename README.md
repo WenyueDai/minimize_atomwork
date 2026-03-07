@@ -100,6 +100,8 @@ Examples:
 - `iface__n_contact_atom_pairs`
 - `abseq__cdr3_sequence`
 
+Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
+
 ## Installation
 
 ```bash
@@ -232,6 +234,10 @@ Detailed guides:
 - [simple_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md)
 - [chunk_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md)
 - [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md)
+
+YAML config field meanings:
+
+- [examples/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md)
 
 ## Tests
 

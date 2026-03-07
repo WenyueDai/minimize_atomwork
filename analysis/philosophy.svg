@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" role="img" aria-labelledby="title desc">
+  <title id="title">minimum_atomworks Philosophy Overview</title>
+  <desc id="desc">Unified yet flexible biological analysis: roles define semantics, pipeline executes uniformly, plugins provide extensions.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#1f2f3a"/>
+    </marker>
+    <style>
+      .bg { fill: #f6f7f3; }
+      .title { font: 700 32px Helvetica, Arial, sans-serif; fill: #15202a; }
+      .subtitle { font: 400 14px Helvetica, Arial, sans-serif; fill: #5a6976; }
+      .box { stroke-width: 2.2; rx: 12; ry: 12; }
+      .philosophy { fill: #e8f1ff; stroke: #2e5c8a; stroke-width: 2.2; }
+      .roles { fill: #e8f5e9; stroke: #2d6e4a; stroke-width: 2.2; }
+      .unified { fill: #fff3e0; stroke: #8b5a2b; stroke-width: 2.2; }
+      .flexible { fill: #f3e5f5; stroke: #5a3e7f; stroke-width: 2; }
+      .label { font: 700 18px Helvetica, Arial, sans-serif; fill: #15202a; }
+      .label-sm { font: 700 16px Helvetica, Arial, sans-serif; fill: #15202a; }
+      .body { font: 400 14px Helvetica, Arial, sans-serif; fill: #233240; }
+      .small { font: 400 13px Helvetica, Arial, sans-serif; fill: #5a6976; }
+      .line { stroke: #1f2f3a; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .soft { stroke: #5a6976; stroke-width: 2; fill: none; marker-end: url(#arrow); stroke-dasharray: 5,5; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1280" height="900"/>
+  <text class="title" x="60" y="55">minimum_atomworks: Philosophy</text>
+  <text class="subtitle" x="60" y="75">Unified yet Flexible Biological Analysis</text>
+
+  <!-- Main Philosophy Box -->
+  <rect class="box philosophy" x="500" y="100" width="280" height="80"/>
+  <text class="label" x="520" y="135">minimum_atomworks Philosophy</text>
+  <text class="body" x="520" y="155">Biological roles → Unified pipeline → Flexible plugins</text>
+
+  <!-- Biological Roles -->
+  <rect class="box roles" x="100" y="220" width="260" height="160"/>
+  <text class="label-sm" x="120" y="245">Biological Roles Define Semantics</text>
+  <text class="small" x="120" y="268">• Antibody: H/L chains</text>
+  <text class="small" x="120" y="284">• Antigen: target chains</text>
+  <text class="small" x="120" y="300">• Other: custom roles</text>
+  <text class="small" x="120" y="316">• Roles group chains by function</text>
+  <text class="small" x="120" y="332">• Enable uniform processing</text>
+
+  <!-- Unified Pipeline -->
+  <rect class="box unified" x="420" y="220" width="260" height="160"/>
+  <text class="label-sm" x="440" y="245">Unified Pipeline Execution</text>
+  <text class="small" x="440" y="268">• Standard stages: Prepare, Run, Merge</text>
+  <text class="small" x="440" y="284">• Load structures & apply manipulations</text>
+  <text class="small" x="440" y="300">• Execute plugins in parallel</text>
+  <text class="small" x="440" y="316">• Consolidate results into tables</text>
+  <text class="small" x="440" y="332">• Same flow for all biological roles</text>
+
+  <!-- Flexible Extensions -->
+  <rect class="box flexible" x="740" y="220" width="260" height="160"/>
+  <text class="label-sm" x="760" y="245">Flexible Plugin Extensions</text>
+  <text class="small" x="760" y="268">• Plugin categories:</text>
+  <text class="small" x="760" y="284">  - Structure analysis</text>
+  <text class="small" x="760" y="300">  - Interface analysis</text>
+  <text class="small" x="760" y="316">  - Dataset analysis</text>
+  <text class="small" x="760" y="332">  - Manipulations</text>
+  <text class="small" x="760" y="348">• Extensible for domain needs</text>
+
+  <!-- Arrows from main to branches -->
+  <path class="line" d="M 640 180 L 230 220"/>
+  <path class="line" d="M 640 180 L 550 220"/>
+  <path class="line" d="M 640 180 L 870 220"/>
+
+  <!-- Unified Handling -->
+  <rect class="box roles" x="100" y="420" width="260" height="100"/>
+  <text class="label-sm" x="120" y="445">Unified Handling</text>
+  <text class="small" x="120" y="465">• All roles processed identically</text>
+  <text class="small" x="120" y="481">• Consistent data structures</text>
+  <text class="small" x="120" y="497">• Standardized outputs</text>
+
+  <!-- Same Pipeline Flow -->
+  <rect class="box unified" x="420" y="420" width="260" height="100"/>
+  <text class="label-sm" x="440" y="445">Same Pipeline Flow</text>
+  <text class="small" x="440" y="465">• Reusable across projects</text>
+  <text class="small" x="440" y="481">• Efficient execution</text>
+  <text class="small" x="440" y="497">• Predictable results</text>
+
+  <!-- Flexible via Plugins -->
+  <rect class="box flexible" x="740" y="420" width="260" height="100"/>
+  <text class="label-sm" x="760" y="445">Flexible via Plugins</text>
+  <text class="small" x="760" y="465">• Customize analyses</text>
+  <text class="small" x="760" y="481">• Add domain logic</text>
+  <text class="small" x="760" y="497">• Extend without core changes</text>
+
+  <!-- Arrows from roles to unified -->
+  <path class="soft" d="M 230 380 L 230 420"/>
+  <path class="soft" d="M 550 380 L 550 420"/>
+  <path class="soft" d="M 870 380 L 870 420"/>
+
+  <!-- Arrows connecting unified handling -->
+  <path class="line" d="M 360 470 L 420 470"/>
+  <path class="line" d="M 680 470 L 740 470"/>
+</svg>

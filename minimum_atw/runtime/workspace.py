@@ -89,11 +89,7 @@ def base_rows_for_context(ctx: Context) -> dict[str, list[dict[str, Any]]]:
     for role_name in sorted(ctx.roles):
         tables["roles"].append({"path": ctx.path, "assembly_id": ctx.assembly_id, "role": role_name})
 
-    for left_role, right_role in ctx.config.interface_pairs:
-        left = ctx.roles.get(left_role)
-        right = ctx.roles.get(right_role)
-        if left is None or right is None or len(left) == 0 or len(right) == 0:
-            continue
+    for left_role, right_role in ctx.config.interface_pairs_for_outputs():
         tables["interfaces"].append(
             {
                 "path": ctx.path,

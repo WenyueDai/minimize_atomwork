@@ -44,6 +44,7 @@
     <text class="small" x="120" y="350">• Interface pairs</text>
     <text class="small" x="120" y="366">• Plugin/manip list</text>
     <text class="small" x="120" y="382">• Dataset analysis</text>
+    <text class="small" x="120" y="398">• Extension classes</text>
 
     <rect class="box core" x="420" y="270" width="260" height="160"/>
     <text class="label-sm" x="440" y="295">tables.py</text>

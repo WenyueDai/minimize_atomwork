@@ -26,24 +26,44 @@ manipulations:
 # - "interface_contacts"
 # - "antibody_cdr_lengths"
 # - "antibody_cdr_sequences"
-# - "rosetta_interface_example"   # requires Rosetta, disabled by default
+# - "rosetta_interface_example"
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "interface_contacts"          # writes vh/vl CDR interface columns into the chunk interfaces table
+  - "interface_contacts"
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
-  - "rosetta_interface_example"    # high-quality binding metrics
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
-rosetta_executable: "/opt/rosetta/main/source/bin/InterfaceAnalyzer.static.linuxgccrelease"
-rosetta_database: "/opt/rosetta/main/database"
+
+# Rosetta InterfaceAnalyzer scaffold.
+# Uncomment the plugin above and fill these in when you want Rosetta metrics.
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_preprocess_with_score_jd2: true
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
 superimpose_reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb"
 superimpose_on_chains: ["A", "B", "C"]
-# Chunk runs keep only final outputs in each chunk out_dir.
 keep_intermediate_outputs: false
+keep_prepared_structures: false
+# checkpoint_enabled: true
+# checkpoint_interval: 25
 
 # Built-in dataset analyses:
 # - "dataset_annotations"
@@ -54,17 +74,14 @@ dataset_analyses:
   - "interface_summary"
   - "cdr_entropy"
 
-# dataset_analysis_params:
-#   cdr_entropy:
-#     roles: ["vh"]
-#     regions: ["cdr3"]
+dataset_analysis_params:
+  cdr_entropy:
+    roles: ["vh", "vl"]
+    regions: ["cdr1", "cdr2", "cdr3", "sequence"]
 
 numbering_roles:
   - "vh"
   - "vl"
-
-# This chunk config also writes antibody CDR-specific interface columns such as
-# iface__left_vh_cdr3_interface_residues and iface__left_vl_cdr3_interface_residues.
 
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
@@ -81,3 +98,4 @@ dataset_annotations:
   modality: "antibody_antigen"
   chunk_id: "01"
   source: "local chunked input"
+  profile: "chunk_local_dev_no_rosetta"
