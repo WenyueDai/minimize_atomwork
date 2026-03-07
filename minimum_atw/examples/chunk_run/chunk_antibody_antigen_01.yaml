@@ -1,18 +1,18 @@
 # Chunk 01 — antibody-antigen manual chunk workflow.
 #
 # Run this chunk:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
 #
-# Merge manual chunks:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
-#     --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
-#     --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_01 \
-#     --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
+# Merge manual chunks after both chunks finish:
+#   python -m minimum_atw.cli merge-datasets \
+#     --out-dir /path/to/your/out_antibody_antigen_merged \
+#     --source-out-dir /path/to/your/out_chunk_antibody_antigen_01 \
+#     --source-out-dir /path/to/your/out_chunk_antibody_antigen_02
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01"
-out_dir: "/home/eva/minimum_atomworks/out_chunk_antibody_antigen_01"
+input_dir: "/path/to/your/structures/chunk_01"
+out_dir: "/path/to/your/out_chunk_antibody_antigen_01"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"
@@ -65,7 +65,7 @@ abepitope_atom_radius: 4.0
 # ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
   superimpose_to_reference:
-    reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb"
+    reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────

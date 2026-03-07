@@ -4,3 +4,7 @@ build/
 dist/
 *.egg-info/
 .pytest_cache/
+
+# Example output directories (runtime artifacts, not source)
+minimum_atw/examples/**/out_*/
+minimum_atw/examples/**/_prepared/

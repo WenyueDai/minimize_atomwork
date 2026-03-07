@@ -1,13 +1,13 @@
 # Generic protein-protein complex profile for chunked / distributed runs.
 #
 # Run:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
+#   python -m minimum_atw.cli run-chunked \
+#     --config minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
 #     --chunk-size 50 --workers 4
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_protein_protein_chunked"
+input_dir: "/path/to/your/protein_protein_pdb_files"
+out_dir: "/path/to/your/out_protein_protein_chunked"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"

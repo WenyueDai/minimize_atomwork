@@ -1,21 +1,22 @@
 # Antibody-antigen profile for chunked / distributed runs.
 #
 # Internal chunk workers:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+#   python -m minimum_atw.cli run-chunked \
+#     --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
 #     --chunk-size 50 --workers 4
 #
-# Offline plan -> cluster -> merge:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli plan-chunks \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
-#     --chunk-size 50 --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-planned-chunks \
-#     --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan \
-#     --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunked
+# Offline plan -> scheduler -> merge:
+#   python -m minimum_atw.cli plan-chunks \
+#     --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+#     --chunk-size 50 --plan-dir /path/to/your/chunk_plan
+#   # (run each planned chunk config with your scheduler)
+#   python -m minimum_atw.cli merge-planned-chunks \
+#     --plan-dir /path/to/your/chunk_plan \
+#     --out-dir /path/to/your/out_antibody_antigen_chunked
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_chunked"
+input_dir: "/path/to/your/pdb_files"
+out_dir: "/path/to/your/out_antibody_antigen_chunked"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"
@@ -68,7 +69,7 @@ abepitope_atom_radius: 4.0
 # ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
   superimpose_to_reference:
-    reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
+    reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────

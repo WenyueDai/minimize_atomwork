@@ -1,18 +1,18 @@
 # VHH-antigen profile: single-domain antibody against a multi-chain antigen.
 #
 # Run:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/simple_run/example_vhh_antigen.yaml
 #
 # Staged workflow:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config ...
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config ... --plugin abepitope_score
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config ...
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config ...
+#   python -m minimum_atw.cli prepare          --config <this_file>
+#   python -m minimum_atw.cli run-plugin       --config <this_file> --plugin abepitope_score
+#   python -m minimum_atw.cli merge            --config <this_file>
+#   python -m minimum_atw.cli analyze-dataset  --config <this_file>
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_vhh_antigen"
+input_dir: "/path/to/your/vhh_antigen_pdb_files"
+out_dir: "/path/to/your/out_vhh_antigen"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"
@@ -65,7 +65,7 @@ abepitope_atom_radius: 4.0
 # ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
   superimpose_to_reference:
-    reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
+    reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]
 # superimpose_reference_path: "/path/to/reference.pdb"
 # superimpose_on_chains: ["A", "B", "C"]

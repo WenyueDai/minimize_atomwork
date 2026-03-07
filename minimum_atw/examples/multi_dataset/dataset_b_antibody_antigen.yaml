@@ -1,15 +1,15 @@
 # Dataset B: antibody-antigen run with the same antigen-only superposition anchor.
 #
 # Run:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
 #
 # Keep this config aligned with dataset_a_antibody_antigen.yaml so the merged
 # comparison is meaningful.
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_02"
-out_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/out_data/chunk_02"
+input_dir: "/path/to/your/dataset_b_pdb_files"
+out_dir: "/path/to/your/out_dataset_b"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"
@@ -64,7 +64,7 @@ abepitope_atom_radius: 4.0
 # ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
   superimpose_to_reference:
-    reference_path: "/home/eva/minimum_atomworks/path/to/reference_antigen_chain_A_only.pdb"
+    reference_path: "/path/to/your/reference_antigen_chain_A_only.pdb"
     on_chains: ["A"]  # align on antigen only; transform the full complex before downstream calculations
 # superimpose_reference_path: "/path/to/reference.pdb"
 # superimpose_on_chains: ["A"]

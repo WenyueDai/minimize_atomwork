@@ -15,20 +15,46 @@ This folder is for chunk-aware workflows:
 ## Run with internal chunk workers
 
 ```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+python -m minimum_atw.cli run-chunked \
+  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --workers 2
 ```
 
 ## Plan chunk configs for a scheduler
 
+Use `plan-chunks` to generate one config file per chunk, run them independently (e.g. via SLURM array job), then merge with `merge-planned-chunks`.
+
+**Step 1 — plan:**
+
 ```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli plan-chunks \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+python -m minimum_atw.cli plan-chunks \
+  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
-  --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan
+  --plan-dir /path/to/your/chunk_plan
 ```
+
+This writes one YAML per chunk into `chunk_plan/`, each with its own `input_dir` and `out_dir`.
+
+**Step 2 — run each chunk** (e.g. SLURM array job; see the scheduler pattern in [chunk_run/README.md](../chunk_run/README.md)):
+
+```bash
+python -m minimum_atw.cli run \
+  --config /path/to/your/chunk_plan/chunk_000.yaml
+# repeat for chunk_001.yaml, chunk_002.yaml, ...
+```
+
+**Step 3 — merge planned chunks:**
+
+```bash
+python -m minimum_atw.cli merge-planned-chunks \
+  --plan-dir /path/to/your/chunk_plan \
+  --out-dir /path/to/your/out_antibody_antigen_chunked
+```
+
+`merge-planned-chunks` reads each chunk's `out_dir` from the plan, stacks their outputs, and runs dataset analysis once on the merged result.
+
+> **Note:** Unlike `run-chunked` (which deletes temporary chunk workspaces after merging), `merge-planned-chunks` preserves each chunk's `_prepared/` directory. Use `plan-chunks` + `merge-planned-chunks` when you need `prepared__path` to remain valid after the run — for example, to rerun `analyze-dataset` with different clustering settings later.
 
 ## What these configs show
 

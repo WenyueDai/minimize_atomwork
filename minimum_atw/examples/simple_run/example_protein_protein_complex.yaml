@@ -2,18 +2,18 @@
 # No antibody-specific plugins by default.
 #
 # Run:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
 #
 # Stage-by-stage:
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config ...
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugins --config ... --plugins interface_contacts interface_metrics
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config ...
-#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config ...
+#   python -m minimum_atw.cli prepare          --config <this_file>
+#   python -m minimum_atw.cli run-plugins      --config <this_file> --plugins interface_contacts interface_metrics
+#   python -m minimum_atw.cli merge            --config <this_file>
+#   python -m minimum_atw.cli analyze-dataset  --config <this_file>
 
 # ── Input / output ─────────────────────────────────────────────────────────────
-input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
-out_dir: "/home/eva/minimum_atomworks/out_protein_protein"
+input_dir: "/path/to/your/protein_protein_pdb_files"
+out_dir: "/path/to/your/out_protein_protein"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"

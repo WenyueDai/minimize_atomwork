@@ -2,26 +2,26 @@
 #
 # Workflow:
 #   1. Run dataset A:
-#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#      python -m minimum_atw.cli run \
+#        --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
 #   2. Run dataset B:
-#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+#      python -m minimum_atw.cli run \
+#        --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
 #   3. Merge those finished out_dirs:
-#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
-#        --out-dir /home/eva/minimum_atomworks/out_compare_ab \
-#        --source-out-dir /home/eva/minimum_atomworks/out_dataset_a \
-#        --source-out-dir /home/eva/minimum_atomworks/out_dataset_b
+#      python -m minimum_atw.cli merge-datasets \
+#        --out-dir /path/to/your/out_compare_ab \
+#        --source-out-dir /path/to/your/out_dataset_a \
+#        --source-out-dir /path/to/your/out_dataset_b
 #   4. Analyze the merged output:
-#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
-#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
+#      python -m minimum_atw.cli analyze-dataset \
+#        --config minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
 #
 # Note:
 #   `analyze-dataset` only reads `out_dir` plus dataset-analysis settings below.
 #   `input_dir` is still required by the shared config schema, but is not used here.
 
 input_dir: "JUST_A_PLACEHOLDER_TO_SATISFY_SCHEMA"
-out_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/out_merge_ab"
+out_dir: "/path/to/your/out_compare_ab"
 
 # These analyses run on the merged pooled interfaces.
 dataset_analyses:
