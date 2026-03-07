@@ -19,6 +19,7 @@ class ConfigTests(unittest.TestCase):
             plugins=[" identity ", "identity", "", "role_stats"],
             quality_controls=[" chain_continuity ", "chain_continuity"],
             structure_manipulations=[" center_on_origin ", "center_on_origin"],
+            dataset_quality_controls=[" dataset_schema ", "dataset_schema"],
             dataset_manipulations=[" superimpose_homology ", "superimpose_homology"],
             manipulations=[" center_on_origin ", "center_on_origin"],
             dataset_analyses=[" interface_summary ", "interface_summary"],
@@ -28,6 +29,7 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(cfg.plugins, ["identity", "role_stats"])
         self.assertEqual(cfg.quality_controls, ["chain_continuity"])
         self.assertEqual(cfg.structure_manipulations, ["center_on_origin"])
+        self.assertEqual(cfg.dataset_quality_controls, ["dataset_schema"])
         self.assertEqual(cfg.dataset_manipulations, ["superimpose_homology"])
         self.assertEqual(cfg.manipulations, ["center_on_origin"])
         self.assertEqual(cfg.dataset_analyses, ["interface_summary"])
@@ -54,6 +56,22 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(cfg.numbering_scheme, "chothia")
         self.assertEqual(cfg.cdr_definition, "north")
+
+    def test_clash_options_are_normalized_and_validated(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            clash_scope=" Interface_Only ",
+        )
+
+        self.assertEqual(cfg.clash_distance, 2.0)
+        self.assertEqual(cfg.clash_scope, "interface_only")
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", clash_distance=0)
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", clash_scope="local_only")
 
     def test_checkpoint_defaults_and_validation(self) -> None:
         cfg = Config(input_dir="/tmp/in", out_dir="/tmp/out")

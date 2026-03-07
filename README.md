@@ -2,12 +2,9 @@
 
 `minimum_atomworks` is a structural data-processing package for protein complexes.
 
-It produces four normalized tables:
+It produces one unified PDB table:
 
-- `structures`
-- `chains`
-- `roles`
-- `interfaces`
+- `pdb.parquet`
 
 It is designed for:
 
@@ -19,7 +16,7 @@ The package is built around a simple idea:
 
 1. prepare structures once
 2. run plugins that add prefixed columns
-3. merge into final normalized tables
+3. merge into the final PDB table
 4. optionally run dataset-level analyses
 
 ## 🚀 Large-Scale Processing Optimizations (March 2026)
@@ -66,7 +63,7 @@ Large-dataset paths:
 The package has three internal layers:
 
 - [minimum_atw/core](/home/eva/minimum_atomworks/minimum_atw/core)
-  config, normalized-table rules, registries, orchestration
+  config, row-identity rules, registries, orchestration
 - [minimum_atw/runtime](/home/eva/minimum_atomworks/minimum_atw/runtime)
   execution mechanics, chunk planning, workspace layout, spill buffers
 - [minimum_atw/plugins](/home/eva/minimum_atomworks/minimum_atw/plugins)
@@ -79,14 +76,25 @@ Public entrypoints:
 
 ![High-Level Architecture](analysis/highlevel_architecture.svg)
 
-## Normalized Tables
+## PDB Table
 
-Identity keys:
+`pdb.parquet` stores all PDB-side outputs together. Row grain is encoded in `grain`:
 
-- `structures`: `path`, `assembly_id`
-- `chains`: `path`, `assembly_id`, `chain_id`
-- `roles`: `path`, `assembly_id`, `role`
-- `interfaces`: `path`, `assembly_id`, `pair`, `role_left`, `role_right`
+- `structure`
+- `chain`
+- `role`
+- `interface`
+
+Identity columns:
+
+- `path`
+- `assembly_id`
+- `grain`
+- `chain_id`
+- `role`
+- `pair`
+- `role_left`
+- `role_right`
 
 Plugin outputs are merged by identity keys. Non-identity fields are prefixed:
 
@@ -100,7 +108,7 @@ Examples:
 - `iface__n_contact_atom_pairs`
 - `abseq__cdr3_sequence`
 
-Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
+Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/pdb/calculation/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
 
 ## Installation
 
@@ -193,12 +201,7 @@ python -m minimum_atw.cli merge-datasets \
 
 Final outputs in `out_dir/`:
 
-- `structures.parquet`
-- `chains.parquet`
-- `roles.parquet`
-- `interfaces.parquet`
-- `plugin_status.parquet`
-- `bad_files.parquet`
+- `pdb.parquet`
 - `run_metadata.json`
 
 Merged dataset outputs also include:
@@ -207,8 +210,12 @@ Merged dataset outputs also include:
 
 Dataset analyses write:
 
-- `out_dir/dataset_analysis/*.parquet`
-- `out_dir/dataset_analysis/summary.json`
+- `out_dir/dataset.parquet`
+
+Failure/debug output:
+
+- `plugin_status.parquet` is only written for intermediate/checkpointed runs or when any plugin status is non-`ok`
+- `bad_files.parquet` is only written when failures occur
 
 Intermediate outputs are only kept when `keep_intermediate_outputs: true`.
 

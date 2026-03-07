@@ -11,6 +11,7 @@ try:
     import yaml
     from minimum_atw.cli import _load_config
     from minimum_atw.core.pipeline import run_pipeline
+    from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -18,6 +19,7 @@ except ModuleNotFoundError as exc:
     yaml = None
     _load_config = None
     run_pipeline = None
+    read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
@@ -60,7 +62,7 @@ class InterfaceContactsTests(unittest.TestCase):
             cfg = _load_config(str(config_path))
             run_pipeline(cfg)
 
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            interfaces = read_pdb_grain(out_dir, "interface")
 
             self.assertIn("iface__left_interface_residues", interfaces.columns)
             self.assertIn("iface__right_interface_residues", interfaces.columns)
@@ -107,17 +109,17 @@ class InterfaceContactsTests(unittest.TestCase):
             cfg = _load_config(str(config_path))
             with (
                 patch(
-                    "minimum_atw.plugins.interface_analysis.interface_contacts.antibody_role_sequences",
+                    "minimum_atw.plugins.pdb.calculation.interface_analysis.interface_contacts.antibody_role_sequences",
                     return_value=[("vh", ["A"], "G")],
                 ),
                 patch(
-                    "minimum_atw.plugins.interface_analysis.interface_contacts.cdr_indices",
+                    "minimum_atw.plugins.pdb.calculation.interface_analysis.interface_contacts.cdr_indices",
                     return_value={"cdr1": [0], "cdr2": [], "cdr3": []},
                 ),
             ):
                 run_pipeline(cfg)
 
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            interfaces = read_pdb_grain(out_dir, "interface")
 
             self.assertEqual(int(interfaces.iloc[0]["iface__n_left_vh_cdr1_interface_residues"]), 1)
             self.assertEqual(interfaces.iloc[0]["iface__left_vh_cdr1_interface_residues"], "A:1:G")

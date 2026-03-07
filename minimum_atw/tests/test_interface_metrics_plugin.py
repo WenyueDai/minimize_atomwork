@@ -10,6 +10,7 @@ try:
     import yaml
     from minimum_atw.cli import _load_config
     from minimum_atw.core.pipeline import run_pipeline
+    from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -17,6 +18,7 @@ except ModuleNotFoundError as exc:
     yaml = None
     _load_config = None
     run_pipeline = None
+    read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
@@ -60,7 +62,7 @@ class InterfaceMetricsPluginTests(unittest.TestCase):
             cfg = _load_config(str(config_path))
             run_pipeline(cfg)
 
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            interfaces = read_pdb_grain(out_dir, "interface")
             row = interfaces.iloc[0]
 
             self.assertEqual(float(row["ifm__contact_distance"]), 5.0)

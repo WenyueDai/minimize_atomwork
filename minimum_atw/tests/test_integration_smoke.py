@@ -11,6 +11,7 @@ try:
     import yaml
     from minimum_atw.cli import _load_config
     from minimum_atw.core.pipeline import prepare_outputs, run_pipeline, run_plugin, run_plugins
+    from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -18,10 +19,51 @@ except ModuleNotFoundError as exc:
     yaml = None
     _load_config = None
     run_pipeline = None
+    read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
 class IntegrationSmokeTests(unittest.TestCase):
+    def test_clean_run_omits_top_level_plugin_status_but_keeps_summary_in_metadata(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_test_") as tmp_dir:
+            root = Path(tmp_dir)
+            input_dir = root / "input"
+            out_dir = root / "out"
+            config_path = root / "config.yaml"
+            input_dir.mkdir()
+
+            (input_dir / "toy_complex.pdb").write_text(
+                textwrap.dedent(
+                    """\
+                    ATOM      1  N   GLY A   1       0.000   0.000   0.000  1.00 20.00           N
+                    ATOM      2  CA  GLY A   1       1.200   0.000   0.000  1.00 20.00           C
+                    TER
+                    END
+                    """
+                )
+            )
+
+            config_path.write_text(
+                yaml.safe_dump(
+                    {
+                        "input_dir": str(input_dir),
+                        "out_dir": str(out_dir),
+                        "roles": {"binder": ["A"]},
+                        "plugins": ["identity"],
+                    },
+                    sort_keys=False,
+                )
+            )
+
+            cfg = _load_config(str(config_path))
+            counts = run_pipeline(cfg)
+            metadata = json.loads((out_dir / "run_metadata.json").read_text())
+
+            self.assertEqual(counts["structures"], 1)
+            self.assertFalse((out_dir / "plugin_status.parquet").exists())
+            self.assertEqual(metadata["counts"]["status"], 1)
+            self.assertEqual(metadata["status_summary"], {"ok": 1})
+
     def test_identity_pipeline_writes_expected_tables(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_test_") as tmp_dir:
             root = Path(tmp_dir)
@@ -65,10 +107,10 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(counts["roles"], 2)
             self.assertEqual(counts["interfaces"], 1)
 
-            structures = pd.read_parquet(out_dir / "structures.parquet")
-            chains = pd.read_parquet(out_dir / "chains.parquet")
-            roles = pd.read_parquet(out_dir / "roles.parquet")
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            structures = read_pdb_grain(out_dir, "structure")
+            chains = read_pdb_grain(out_dir, "chain")
+            roles = read_pdb_grain(out_dir, "role")
+            interfaces = read_pdb_grain(out_dir, "interface")
             metadata = json.loads((out_dir / "run_metadata.json").read_text())
 
             self.assertEqual(len(structures), 1)
@@ -80,16 +122,15 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertIn("id__n_atoms", roles.columns)
             self.assertEqual(metadata["output_kind"], "run")
             self.assertEqual(metadata["counts"]["structures"], 1)
+            self.assertEqual(metadata["status_summary"], {"ok": 1})
             self.assertEqual(metadata["config"]["plugins"], ["identity"])
             self.assertEqual(metadata["merge_compatibility"]["plugins"], ["identity"])
-            self.assertIn("structures", metadata["table_columns"])
-            self.assertIn("id__n_atoms_total", metadata["table_columns"]["structures"])
+            self.assertIn("pdb", metadata["table_columns"])
+            self.assertIn("id__n_atoms_total", metadata["table_columns"]["pdb"])
+            self.assertFalse((out_dir / "bad_files.parquet").exists())
+            self.assertTrue((out_dir / "plugin_status.parquet").exists())
 
-            identity_plugin_dir = out_dir / "_plugins" / "identity"
-            self.assertTrue((identity_plugin_dir / "structures.parquet").exists())
-            self.assertTrue((identity_plugin_dir / "chains.parquet").exists())
-            self.assertTrue((identity_plugin_dir / "roles.parquet").exists())
-            self.assertFalse((identity_plugin_dir / "interfaces.parquet").exists())
+            self.assertTrue((out_dir / "_plugins" / "identity.pdb.parquet").exists())
 
             # simulate a later resume with checkpointing enabled
             input2 = input_dir / "toy_complex2.pdb"
@@ -99,7 +140,7 @@ class IntegrationSmokeTests(unittest.TestCase):
             counts2 = run_pipeline(cfg2)
 
             self.assertEqual(counts2["structures"], 2)
-            resumed_structures = pd.read_parquet(out_dir / "structures.parquet")
+            resumed_structures = read_pdb_grain(out_dir, "structure")
             self.assertEqual(len(resumed_structures), 2)
 
     def test_checkpoint_allows_plugin_resume(self) -> None:
@@ -142,8 +183,7 @@ class IntegrationSmokeTests(unittest.TestCase):
             cfg = cfg.model_copy(update={"checkpoint_enabled": True})
             prepare_counts = run_pipeline(cfg)
             # plugin results exist for one structure (first run)
-            identity_plugin_dir = out_dir / "_plugins" / "identity"
-            first_status = pd.read_parquet(identity_plugin_dir / "plugin_status.parquet")
+            first_status = pd.read_parquet(out_dir / "_plugins" / "identity.plugin_status.parquet")
             self.assertEqual(len(first_status), 2)
 
             # now add a third structure and resume only plugin stage
@@ -157,7 +197,7 @@ class IntegrationSmokeTests(unittest.TestCase):
             # run plugin again, checkpointing should skip already processed entries
             plugin_counts2 = run_plugin(cfg, "identity")
             # expect exactly one new status row added (third structure)
-            new_status = pd.read_parquet(identity_plugin_dir / "plugin_status.parquet")
+            new_status = pd.read_parquet(out_dir / "_plugins" / "identity.plugin_status.parquet")
             self.assertEqual(len(new_status), 3)
 
     def test_run_plugins_runs_multiple_plugins_incrementally(self) -> None:
@@ -208,11 +248,7 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(plugins_counts["interfaces"], 1)
 
             # Check that plugin outputs exist
-            identity_plugin_dir = out_dir / "_plugins" / "identity"
-            self.assertTrue((identity_plugin_dir / "structures.parquet").exists())
-            self.assertTrue((identity_plugin_dir / "chains.parquet").exists())
-            self.assertTrue((identity_plugin_dir / "roles.parquet").exists())
-            self.assertFalse((identity_plugin_dir / "interfaces.parquet").exists())  # identity plugin doesn't emit interfaces
+            self.assertTrue((out_dir / "_plugins" / "identity.pdb.parquet").exists())
 
 
 

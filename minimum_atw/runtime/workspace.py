@@ -10,7 +10,7 @@ from biotite.structure.io import load_structure
 
 from ..core.config import Config
 from ..plugins.base import Context
-from ..core.tables import MANIFEST_COLS, TABLE_NAMES, TABLE_SUFFIX, empty_tables, prefix_row, read_frame
+from ..core.tables import MANIFEST_COLS, PDB_TABLE_NAME, TABLE_SUFFIX, empty_pdb_rows, prefix_row, read_frame
 
 
 PREPARED_DIRNAME = "_prepared"
@@ -19,12 +19,12 @@ PREPARED_MANIFEST_NAME = "prepared_manifest.parquet"
 PLUGINS_DIRNAME = "_plugins"
 RUN_METADATA_NAME = "run_metadata.json"
 DATASET_METADATA_NAME = "dataset_metadata.json"
-FINAL_OUTPUT_FILES = [f"{table_name}{TABLE_SUFFIX}" for table_name in TABLE_NAMES] + [
-    f"plugin_status{TABLE_SUFFIX}",
+FINAL_OUTPUT_FILES = [f"{PDB_TABLE_NAME}{TABLE_SUFFIX}", f"dataset{TABLE_SUFFIX}"] + [
     f"bad_files{TABLE_SUFFIX}",
     RUN_METADATA_NAME,
     DATASET_METADATA_NAME,
 ]
+OPTIONAL_DEBUG_OUTPUT_FILES = [f"plugin_status{TABLE_SUFFIX}"]
 
 
 def discover_inputs(input_dir: Path) -> list[Path]:
@@ -79,19 +79,40 @@ def prepare_context(source_path: Path, structure_path: Path, cfg: Config) -> Con
     return ctx
 
 
-def base_rows_for_context(ctx: Context) -> dict[str, list[dict[str, Any]]]:
-    tables = empty_tables()
-    tables["structures"].append({"path": ctx.path, "assembly_id": ctx.assembly_id})
+def base_rows_for_context(ctx: Context) -> list[dict[str, Any]]:
+    rows = empty_pdb_rows()
+    rows.append(
+        {
+            "grain": "structure",
+            "path": ctx.path,
+            "assembly_id": ctx.assembly_id,
+        }
+    )
 
     for chain_id in sorted(ctx.chains):
-        tables["chains"].append({"path": ctx.path, "assembly_id": ctx.assembly_id, "chain_id": chain_id})
+        rows.append(
+            {
+                "grain": "chain",
+                "path": ctx.path,
+                "assembly_id": ctx.assembly_id,
+                "chain_id": chain_id,
+            }
+        )
 
     for role_name in sorted(ctx.roles):
-        tables["roles"].append({"path": ctx.path, "assembly_id": ctx.assembly_id, "role": role_name})
+        rows.append(
+            {
+                "grain": "role",
+                "path": ctx.path,
+                "assembly_id": ctx.assembly_id,
+                "role": role_name,
+            }
+        )
 
     for left_role, right_role in ctx.config.interface_pairs_for_outputs():
-        tables["interfaces"].append(
+        rows.append(
             {
+                "grain": "interface",
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
                 "pair": f"{left_role}__{right_role}",
@@ -99,30 +120,18 @@ def base_rows_for_context(ctx: Context) -> dict[str, list[dict[str, Any]]]:
                 "role_right": right_role,
             }
         )
-    return tables
+    return rows
 
 
 def run_unit(
     ctx: Context,
     unit: Any,
-    tables: Any,
-    status_rows: Any,
+    pdb_rows: list[dict[str, Any]],
+    status_rows: list[dict[str, Any]],
 ) -> bool:
-    def add_status(row: dict[str, Any]) -> None:
-        if hasattr(status_rows, "add"):
-            status_rows.add(row)
-            return
-        status_rows.append(row)
-
-    def add_table_row(table_name: str, row: dict[str, Any]) -> None:
-        if hasattr(tables, "add"):
-            tables.add(table_name, row)
-            return
-        tables[table_name].append(row)
-
     available, message = unit.available(ctx) if hasattr(unit, "available") else (True, "")
     if not available:
-        add_status(
+        status_rows.append(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
@@ -137,9 +146,8 @@ def run_unit(
         emitted = 0
         for raw in unit.run(ctx) or []:
             emitted += 1
-            table = raw.get("__table__", getattr(unit, "table", "structures"))
-            add_table_row(table, prefix_row(raw, unit.prefix))
-        add_status(
+            pdb_rows.append(prefix_row(raw, unit.prefix, default_grain=getattr(unit, "grain", "structure")))
+        status_rows.append(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
@@ -150,7 +158,7 @@ def run_unit(
         )
         return True
     except Exception as exc:
-        add_status(
+        status_rows.append(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
@@ -178,13 +186,21 @@ def plugins_dir(out_dir: Path) -> Path:
     return out_dir / PLUGINS_DIRNAME
 
 
-def plugin_dir(out_dir: Path, plugin_name: str) -> Path:
-    return plugins_dir(out_dir) / plugin_name
+def plugin_pdb_path(out_dir: Path, plugin_name: str) -> Path:
+    return plugins_dir(out_dir) / f"{plugin_name}.pdb{TABLE_SUFFIX}"
+
+
+def plugin_status_path(out_dir: Path, plugin_name: str) -> Path:
+    return plugins_dir(out_dir) / f"{plugin_name}.plugin_status{TABLE_SUFFIX}"
+
+
+def plugin_bad_path(out_dir: Path, plugin_name: str) -> Path:
+    return plugins_dir(out_dir) / f"{plugin_name}.bad_files{TABLE_SUFFIX}"
 
 
 def clear_final_outputs(out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    for filename in FINAL_OUTPUT_FILES:
+    for filename in FINAL_OUTPUT_FILES + OPTIONAL_DEBUG_OUTPUT_FILES:
         path = out_dir / filename
         if path.exists():
             path.unlink()
@@ -196,6 +212,10 @@ def clear_final_outputs(out_dir: Path) -> None:
 def copy_final_outputs(source_out_dir: Path, target_out_dir: Path) -> None:
     clear_final_outputs(target_out_dir)
     for filename in FINAL_OUTPUT_FILES:
+        source_path = source_out_dir / filename
+        if source_path.exists():
+            shutil.copy2(source_path, target_out_dir / filename)
+    for filename in OPTIONAL_DEBUG_OUTPUT_FILES:
         source_path = source_out_dir / filename
         if source_path.exists():
             shutil.copy2(source_path, target_out_dir / filename)

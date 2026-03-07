@@ -3,8 +3,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import patch
 
-from minimum_atw.plugins.antibody_analysis import antibody_numbering
-from minimum_atw.plugins.antibody_analysis.antibody_numbering import cdr_lengths, cdr_sequences
+from minimum_atw.plugins.pdb.calculation.antibody_analysis import antibody_numbering
+from minimum_atw.plugins.pdb.calculation.antibody_analysis.antibody_numbering import cdr_lengths, cdr_sequences
 
 
 class _FakeChain:

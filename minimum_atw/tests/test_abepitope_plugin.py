@@ -11,7 +11,8 @@ try:
     import yaml
     from minimum_atw.cli import _load_config
     from minimum_atw.core.pipeline import run_pipeline
-    from minimum_atw.plugins.interface_analysis.abepitope_score import AbEpiTopeScorePlugin
+    from minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score import AbEpiTopeScorePlugin
+    from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -20,6 +21,7 @@ except ModuleNotFoundError as exc:
     _load_config = None
     run_pipeline = None
     AbEpiTopeScorePlugin = None
+    read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
@@ -70,7 +72,7 @@ class AbEpiTopePluginTests(unittest.TestCase):
             ):
                 run_pipeline(cfg)
 
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            interfaces = read_pdb_grain(out_dir, "interface")
             row = interfaces.iloc[0]
             self.assertEqual(float(row["abepitope__atom_radius"]), 4.5)
             self.assertEqual(float(row["abepitope__score"]), 0.75)
@@ -79,8 +81,8 @@ class AbEpiTopePluginTests(unittest.TestCase):
     def test_abepitope_preflight_requires_hmmsearch(self) -> None:
         plugin = AbEpiTopeScorePlugin()
         with (
-            patch("minimum_atw.plugins.interface_analysis.abepitope_score.find_spec", return_value=object()),
-            patch("minimum_atw.plugins.interface_analysis.abepitope_score._resolve_hmmsearch", return_value=None),
+            patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score.find_spec", return_value=object()),
+            patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score._resolve_hmmsearch", return_value=None),
         ):
             available, message = plugin.available(None)
 

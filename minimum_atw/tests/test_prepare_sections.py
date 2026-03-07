@@ -10,6 +10,7 @@ try:
     import yaml
     from minimum_atw.core.config import Config
     from minimum_atw.core.pipeline import _prepare_execution_metadata, run_pipeline
+    from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -18,6 +19,7 @@ except ModuleNotFoundError as exc:
     Config = None
     _prepare_execution_metadata = None
     run_pipeline = None
+    read_pdb_grain = None
 
 
 @unittest.skipIf(run_pipeline is None, "pipeline dependencies are not installed")
@@ -77,8 +79,8 @@ class PrepareSectionsTests(unittest.TestCase):
             cfg = Config(**yaml.safe_load(config_path.read_text()))
             run_pipeline(cfg)
 
-            structures = pd.read_parquet(out_dir / "structures.parquet")
-            chains = pd.read_parquet(out_dir / "chains.parquet")
+            structures = read_pdb_grain(out_dir, "structure")
+            chains = read_pdb_grain(out_dir, "chain")
 
             self.assertTrue(bool(structures.iloc[0]["clash__has_clash"]))
             self.assertGreater(int(structures.iloc[0]["clash__n_clashing_atom_pairs"]), 0)

@@ -6,10 +6,11 @@ from typing import Any, Mapping
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-PREPARE_SECTION_ORDER = ("quality_control", "structure", "dataset")
+PREPARE_SECTION_ORDER = ("quality_control", "structure", "dataset_quality_control", "dataset")
 DATASET_ANALYSIS_MODES = {"post_merge", "per_chunk", "both"}
 NUMBERING_SCHEMES = {"imgt", "chothia", "kabat", "aho"}
 CDR_DEFINITIONS = {"imgt", "north", "kabat"}
+CLASH_SCOPES = {"all", "inter_chain", "interface_only"}
 
 
 def _normalize_optional_str(value: Any) -> str | None:
@@ -94,6 +95,8 @@ def _normalize_prepare_section(value: str | None) -> str:
         "structure": "structure",
         "structure_manipulation": "structure",
         "structure_manipulations": "structure",
+        "dataset_quality_control": "dataset_quality_control",
+        "dataset_quality_controls": "dataset_quality_control",
         "dataset": "dataset",
         "dataset_manipulation": "dataset",
         "dataset_manipulations": "dataset",
@@ -134,11 +137,14 @@ class Config(BaseModel):
 
     quality_controls: list[str] = Field(default_factory=list)
     structure_manipulations: list[str] = Field(default_factory=list)
+    dataset_quality_controls: list[str] = Field(default_factory=list)
     dataset_manipulations: list[str] = Field(default_factory=list)
     manipulations: list[str] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)
     dataset_analyses: list[str] = Field(default_factory=list)
 
+    clash_distance: float = 2.0
+    clash_scope: str = "all"
     contact_distance: float = 5.0
     interface_cell_size: float | None = None
     abepitope_atom_radius: float = 4.0
@@ -176,6 +182,7 @@ class Config(BaseModel):
     @field_validator(
         "quality_controls",
         "structure_manipulations",
+        "dataset_quality_controls",
         "dataset_manipulations",
         "manipulations",
         "plugins",
@@ -213,6 +220,7 @@ class Config(BaseModel):
 
     @field_validator(
         "dataset_analysis_mode",
+        "clash_scope",
         "numbering_scheme",
         "cdr_definition",
         mode="before",
@@ -309,6 +317,10 @@ class Config(BaseModel):
             raise ValueError("numbering_scheme='aho' requires cdr_definition")
         if self.checkpoint_interval < 1:
             raise ValueError("checkpoint_interval must be at least 1")
+        if self.clash_distance <= 0:
+            raise ValueError("clash_distance must be positive")
+        if self.clash_scope not in CLASH_SCOPES:
+            raise ValueError(f"clash_scope must be one of {sorted(CLASH_SCOPES)}")
         if self.rosetta_packstat_oversample is not None and self.rosetta_packstat_oversample < 1:
             raise ValueError("rosetta_packstat_oversample must be at least 1")
         return self
@@ -321,6 +333,7 @@ class Config(BaseModel):
         grouped = {
             "quality_control": list(self.quality_controls),
             "structure": list(self.structure_manipulations),
+            "dataset_quality_control": list(self.dataset_quality_controls),
             "dataset": list(self.dataset_manipulations),
         }
         seen = {name for names in grouped.values() for name in names}

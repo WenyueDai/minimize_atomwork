@@ -3,9 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from ..plugins import PLUGIN_REGISTRY
-from ..plugins.dataset_analysis import DATASET_ANALYSIS_REGISTRY
-from ..plugins.manipulation import MANIPULATION_REGISTRY
+from ..plugins.dataset.calculation import DATASET_CALCULATION_REGISTRY
+from ..plugins.dataset.manipulation import DATASET_MANIPULATION_REGISTRY
+from ..plugins.dataset.quality_control import DATASET_QUALITY_CONTROL_REGISTRY
+from ..plugins.pdb.calculation import PDB_CALCULATION_REGISTRY
+from ..plugins.pdb.manipulation import PDB_MANIPULATION_REGISTRY
+from ..plugins.pdb.quality_control import PDB_QUALITY_CONTROL_REGISTRY
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,23 +31,44 @@ class ExtensionInfo:
 
 
 EXTENSION_CLASSES: dict[str, ExtensionClassSpec] = {
-    "manipulation": ExtensionClassSpec(
-        name="manipulation",
-        display_name="Prepare Units",
-        config_key="prepare",
+    "pdb_quality_control": ExtensionClassSpec(
+        name="pdb_quality_control",
+        display_name="PDB Quality Controls",
+        config_key="quality_controls",
         stage="prepare",
-        description="Prepare-stage quality controls and structure/dataset manipulations that modify or annotate the shared context.",
+        description="Per-structure checks that annotate PDB-derived records without changing coordinates.",
     ),
-    "record_plugin": ExtensionClassSpec(
-        name="record_plugin",
-        display_name="Record Plugins",
+    "pdb_manipulation": ExtensionClassSpec(
+        name="pdb_manipulation",
+        display_name="PDB Manipulations",
+        config_key="structure_manipulations",
+        stage="prepare",
+        description="Prepare-stage transforms applied independently to each structure.",
+    ),
+    "dataset_quality_control": ExtensionClassSpec(
+        name="dataset_quality_control",
+        display_name="Dataset Quality Controls",
+        config_key="dataset_quality_controls",
+        stage="prepare",
+        description="Dataset-scope validation that depends on shared dataset context.",
+    ),
+    "dataset_manipulation": ExtensionClassSpec(
+        name="dataset_manipulation",
+        display_name="Dataset Manipulations",
+        config_key="dataset_manipulations",
+        stage="prepare",
+        description="Prepare-stage transforms that depend on shared dataset context or cross-structure state.",
+    ),
+    "pdb_calculation": ExtensionClassSpec(
+        name="pdb_calculation",
+        display_name="PDB Calculations",
         config_key="plugins",
         stage="run-plugin",
         description="Per-structure/per-chain/per-role/per-interface calculations merged into normalized output tables.",
     ),
-    "dataset_analysis": ExtensionClassSpec(
-        name="dataset_analysis",
-        display_name="Dataset Analyses",
+    "dataset_calculation": ExtensionClassSpec(
+        name="dataset_calculation",
+        display_name="Dataset Calculations",
         config_key="dataset_analyses",
         stage="analyze-dataset",
         description="Post-merge analyses that aggregate across the full dataset outputs.",
@@ -55,14 +79,7 @@ EXTENSION_CLASSES: dict[str, ExtensionClassSpec] = {
 def _config_key_for_unit(unit: Any, spec: ExtensionClassSpec | None) -> str:
     if spec is None:
         return ""
-    if spec.name != "manipulation":
-        return spec.config_key
-    section = str(getattr(unit, "prepare_section", "structure") or "structure").strip().lower()
-    if section == "quality_control":
-        return "quality_controls"
-    if section == "dataset":
-        return "dataset_manipulations"
-    return "structure_manipulations"
+    return spec.config_key
 
 
 def _info_from_unit(name: str, unit: Any) -> ExtensionInfo:
@@ -81,12 +98,18 @@ def _info_from_unit(name: str, unit: Any) -> ExtensionInfo:
 def extension_catalog() -> dict[str, list[ExtensionInfo]]:
     grouped: dict[str, list[ExtensionInfo]] = {key: [] for key in EXTENSION_CLASSES}
 
-    for name, unit in sorted(MANIPULATION_REGISTRY.items()):
-        grouped["manipulation"].append(_info_from_unit(name, unit))
-    for name, unit in sorted(PLUGIN_REGISTRY.items()):
-        grouped["record_plugin"].append(_info_from_unit(name, unit))
-    for name, unit in sorted(DATASET_ANALYSIS_REGISTRY.items()):
-        grouped["dataset_analysis"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(PDB_QUALITY_CONTROL_REGISTRY.items()):
+        grouped["pdb_quality_control"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(PDB_MANIPULATION_REGISTRY.items()):
+        grouped["pdb_manipulation"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(DATASET_QUALITY_CONTROL_REGISTRY.items()):
+        grouped["dataset_quality_control"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(DATASET_MANIPULATION_REGISTRY.items()):
+        grouped["dataset_manipulation"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(PDB_CALCULATION_REGISTRY.items()):
+        grouped["pdb_calculation"].append(_info_from_unit(name, unit))
+    for name, unit in sorted(DATASET_CALCULATION_REGISTRY.items()):
+        grouped["dataset_calculation"].append(_info_from_unit(name, unit))
     return grouped
 
 

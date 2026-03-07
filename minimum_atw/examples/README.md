@@ -69,7 +69,7 @@ AbEpiTope is available as an optional external plugin:
 
 - plugin name: `abepitope_score`
 - output prefix: `abepitope__`
-- target table: `interfaces.parquet`
+- target rows: `pdb.parquet` with `grain=interface`
 
 Requirements:
 
@@ -92,31 +92,41 @@ The example YAML files all use the same core config model. The sections below ex
 
 - `roles`: semantic chain groups, written as `{role_name: [chain_ids]}`
   Example: `antibody: ["B", "C"]`
-- `interface_pairs`: role pairs that should produce rows in `interfaces.parquet`
+- `interface_pairs`: role pairs that should produce `grain=interface` rows in `pdb.parquet`
   Example: `- ["antibody", "antigen"]`
 
 `roles` define the semantic groups. `interface_pairs` define which of those groups are analyzed as interfaces.
 
 ### Prepare-stage sections
 
-- `quality_controls`: prepare-time checks that annotate structures/chains without changing coordinates
-- `structure_manipulations`: transforms applied independently to each structure
-- `dataset_manipulations`: transforms that depend on a dataset reference or shared dataset context
+- `quality_controls`: PDB-level checks that annotate structures/chains without changing coordinates
+- `structure_manipulations`: PDB-level transforms applied independently to each structure
+- `dataset_quality_controls`: dataset-level checks that depend on shared dataset context
+- `dataset_manipulations`: dataset-level transforms that depend on a dataset reference or shared dataset context
 - `manipulations`: legacy combined prepare list kept for backward compatibility
 
-Built-in prepare units:
+Built-in prepare units by scope:
+
+- `pdb/quality_control`: `chain_continuity`, `structure_clashes`
+- `pdb/manipulation`: `center_on_origin`
+- `dataset/quality_control`: none built in yet
+- `dataset/manipulation`: `superimpose_homology`
+
+Unit details:
 
 - `chain_continuity`: per-chain continuity/gap check
-- `structure_clashes`: structure-level steric clash check
+- `structure_clashes`: nonlocal atom-pair clash check using a strict `< 2.0 Å` cutoff by default
 - `center_on_origin`: translate coordinates so the structure is centered
 - `superimpose_homology`: align to a reference structure using `superimpose_reference_path` and `superimpose_on_chains`
 
 Related keys:
 
+- `clash_distance`: atom-atom distance cutoff in Angstroms for `structure_clashes`; defaults to `2.0`
+- `clash_scope`: clash scope for `structure_clashes`; use `all`, `inter_chain`, or `interface_only`
 - `superimpose_reference_path`: path to the reference structure used for superposition
 - `superimpose_on_chains`: chain IDs used to define the alignment subset
 
-### Record plugins
+### PDB Calculations
 
 - `plugins`: per-structure/per-chain/per-role/per-interface calculations to run
 
@@ -131,15 +141,15 @@ Built-in plugins used in the examples:
 - `interface_contacts`: interface atom-contact and interface-residue metrics
 - `interface_metrics`: interface residue-property and residue-contact-pair metrics
 - `abepitope_score`: external AbEpiTope interface scoring for antibody-antigen complexes
-- `antibody_cdr_lengths`: antibody/VHH CDR length fields on `roles.parquet`
-- `antibody_cdr_sequences`: antibody/VHH CDR sequence fields on `roles.parquet`
-- `rosetta_interface_example`: Rosetta InterfaceAnalyzer metrics on `interfaces.parquet`
+- `antibody_cdr_lengths`: antibody/VHH CDR length fields on `pdb.parquet` role rows
+- `antibody_cdr_sequences`: antibody/VHH CDR sequence fields on `pdb.parquet` role rows
+- `rosetta_interface_example`: Rosetta InterfaceAnalyzer metrics on `pdb.parquet` interface rows
 
 Use plugin names explicitly. Commenting a plugin out cleanly removes its output columns from the final tables.
 
 Related internal helper modules:
 
-- `minimum_atw.plugins.interface_analysis.interface_metrics`: shared interface-analysis helper code used by both `interface_contacts` and `interface_metrics`; this is not a standalone YAML extension by itself
+- `minimum_atw.plugins.pdb.calculation.interface_analysis.interface_metrics`: shared interface-analysis helper code used by both `interface_contacts` and `interface_metrics`; this is not a standalone YAML extension by itself
 
 ### Interface analysis settings
 
@@ -169,14 +179,14 @@ These keys only matter when `rosetta_interface_example` is enabled.
 
 ### Output retention and checkpointing
 
-- `keep_intermediate_outputs`: keep `_prepared/` and `_plugins/` directories after the run
+- `keep_intermediate_outputs`: keep `_prepared/` and flat plugin-record files in `_plugins/` after the run
 - `keep_prepared_structures`: keep cached prepared structure files instead of discarding them after use
 - `checkpoint_enabled`: persist incremental progress so a rerun can resume after failure
 - `checkpoint_interval`: flush progress every N structures when checkpointing is on
 
 Use the defaults unless you are debugging, re-running plugins, or dealing with long failure-prone jobs.
 
-### Dataset analyses
+### Dataset Calculations
 
 - `dataset_analyses`: dataset-level analyses such as interface summary or CDR entropy
 - `dataset_analysis_mode`: when those analyses run in chunk-aware workflows
@@ -193,7 +203,7 @@ Notes:
 
 Built-in dataset analyses used in the examples:
 
-- `dataset_annotations`: writes dataset-level metadata into the dataset analysis output
+- `dataset_annotations`: writes dataset-level metadata rows into `dataset.parquet`
 - `interface_summary`: aggregates interface-level metrics across the full dataset
 - `cdr_entropy`: computes sequence entropy over chosen antibody/VHH regions
 

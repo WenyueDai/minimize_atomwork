@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from minimum_atw.plugins.dataset_analysis.runtime import analyze_dataset_outputs
+from minimum_atw.plugins.dataset.calculation.runtime import analyze_dataset_outputs
+from minimum_atw.tests.helpers import read_dataset_analysis
 
 
 class DatasetAnalysisRuntimeTests(unittest.TestCase):
@@ -68,7 +69,7 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
                 },
             )
 
-            result = pd.read_parquet(out_dir / "dataset_analysis" / "cdr_entropy.parquet")
+            result = read_dataset_analysis(out_dir, "cdr_entropy")
 
             self.assertEqual(summary["dataset_analyses"], "cdr_entropy")
             self.assertEqual(len(result), 1)
@@ -95,7 +96,7 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
                 dataset_analyses=("interface_summary",),
             )
 
-            result = pd.read_parquet(out_dir / "dataset_analysis" / "interface_summary.parquet")
+            result = read_dataset_analysis(out_dir, "interface_summary")
 
             self.assertEqual(summary["dataset_analyses"], "interface_summary")
             self.assertEqual(len(result), 1)
@@ -148,7 +149,7 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
 
             self.assertEqual(summary["n_interfaces"], 7)
             self.assertFalse((analysis_dir / "stale.parquet").exists())
-            self.assertTrue((analysis_dir / "cdr_entropy.parquet").exists())
+            self.assertTrue((out_dir / "dataset.parquet").exists())
 
 
 if __name__ == "__main__":

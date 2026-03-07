@@ -19,7 +19,7 @@ from .core.pipeline import (
     run_plugin,
     run_plugins,
 )
-from .plugins.dataset_analysis.runtime import analyze_dataset_outputs
+from .plugins.dataset.calculation.runtime import analyze_dataset_outputs
 
 
 def _load_config(config_path: str) -> Config:

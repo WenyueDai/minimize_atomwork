@@ -9,7 +9,7 @@ from unittest import mock
 try:
     from minimum_atw.core.config import Config
     from minimum_atw.plugins.base import Context
-    from minimum_atw.plugins.interface_analysis.rosetta_interface import (
+    from minimum_atw.plugins.pdb.calculation.interface_analysis.rosetta_interface import (
         RosettaInterfaceExamplePlugin,
         _build_fixedchains_pose,
         _build_interface_analyzer_command,
@@ -221,17 +221,17 @@ class RosettaInterfacePluginTests(unittest.TestCase):
 
             with (
                 mock.patch(
-                    "minimum_atw.plugins.interface_analysis.rosetta_interface.save_structure",
+                    "minimum_atw.plugins.pdb.calculation.interface_analysis.rosetta_interface.save_structure",
                     side_effect=lambda path, atoms: Path(path).write_text("ATOM\nEND\n"),
                 ),
                 mock.patch(
-                    "minimum_atw.plugins.interface_analysis.rosetta_interface._build_fixedchains_pose",
+                    "minimum_atw.plugins.pdb.calculation.interface_analysis.rosetta_interface._build_fixedchains_pose",
                     side_effect=[
                         (object(), ["A", "B"]),
                         (object(), ["A"]),
                     ],
                 ),
-                mock.patch("minimum_atw.plugins.interface_analysis.rosetta_interface.subprocess.run", side_effect=fake_run),
+                mock.patch("minimum_atw.plugins.pdb.calculation.interface_analysis.rosetta_interface.subprocess.run", side_effect=fake_run),
                 mock.patch("builtins.print") as mock_print,
             ):
                 rows = list(plugin.run(ctx))

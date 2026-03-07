@@ -1,0 +1,406 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 1000" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,6 L10,3 z" fill="#4a6fa5"/>
+    </marker>
+    <marker id="arr-dashed" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,6 L10,3 z" fill="#888"/>
+    </marker>
+    <clipPath id="clip-p1"><rect x="10" y="82" width="426" height="730"/></clipPath>
+    <clipPath id="clip-p2"><rect x="448" y="82" width="440" height="730"/></clipPath>
+    <clipPath id="clip-p3"><rect x="900" y="82" width="490" height="730"/></clipPath>
+  </defs>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- BACKGROUND                                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <rect width="1400" height="1000" fill="#eef0f4"/>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- HEADER                                                          -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <rect x="0" y="0" width="1400" height="74" fill="#1c2541"/>
+  <text x="22" y="28" font-size="24" font-weight="700" fill="white">minimum_atomworks</text>
+  <text x="22" y="56" font-size="12.5" fill="#8899bb">Scientific Protein Structure Analysis Pipeline  ·  Architecture · Runtime · Extension Model</text>
+  <text x="1378" y="44" font-size="11" fill="#55668a" text-anchor="end" dominant-baseline="middle">pdb.parquet  ·  grain model  ·  plugin extensions  ·  chunked execution</text>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PANEL SHELLS                                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <rect x="10"  y="82" width="426" height="730" rx="5" fill="white" stroke="#ccd3e0" stroke-width="1.2"/>
+  <rect x="448" y="82" width="440" height="730" rx="5" fill="white" stroke="#ccd3e0" stroke-width="1.2"/>
+  <rect x="900" y="82" width="490" height="730" rx="5" fill="white" stroke="#ccd3e0" stroke-width="1.2"/>
+
+  <!-- Panel title bars — dark band across top of each panel -->
+  <rect x="10"  y="82" width="426" height="30" rx="5" fill="#1c2541"/>
+  <rect x="10"  y="98" width="426" height="14" fill="#1c2541"/>
+  <text x="22"  y="97" font-size="13" font-weight="600" fill="white" dominant-baseline="middle">Pipeline Flow</text>
+
+  <rect x="448" y="82" width="440" height="30" rx="5" fill="#1c2541"/>
+  <rect x="448" y="98" width="440" height="14" fill="#1c2541"/>
+  <text x="460" y="97" font-size="13" font-weight="600" fill="white" dominant-baseline="middle">Extension Classes</text>
+
+  <rect x="900" y="82" width="490" height="30" rx="5" fill="#1c2541"/>
+  <rect x="900" y="98" width="490" height="14" fill="#1c2541"/>
+  <text x="912" y="97" font-size="13" font-weight="600" fill="white" dominant-baseline="middle">Data Model</text>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PANEL 1 — PIPELINE FLOW                                        -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- [Input] -->
+  <rect x="62" y="122" width="312" height="46" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.5"/>
+  <text x="218" y="141" font-size="11.5" font-weight="600" fill="#2d6a4f" text-anchor="middle">Raw Input</text>
+  <text x="218" y="158" font-size="10.5" fill="#555" text-anchor="middle">*.pdb  /  *.cif  (cfg.input_dir)</text>
+
+  <!-- Arrow -->
+  <line x1="218" y1="168" x2="218" y2="186" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- [PREPARE] -->
+  <rect x="42" y="188" width="352" height="130" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="2"/>
+  <rect x="42" y="188" width="352" height="27" rx="4" fill="#2d6a4f"/>
+  <rect x="42" y="204" width="352" height="11" fill="#2d6a4f"/>
+  <text x="218" y="205" font-size="12" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle">PREPARE</text>
+  <rect x="54" y="224" width="328" height="19" rx="3" fill="#c8ecd8" stroke="#2d6a4f" stroke-width="0.7"/>
+  <text x="62"  y="234" font-size="10" fill="#1a4a35" dominant-baseline="middle">❶  quality_controls      →  pdb_quality_control units</text>
+  <rect x="54" y="247" width="328" height="19" rx="3" fill="#c8ecd8" stroke="#2d6a4f" stroke-width="0.7"/>
+  <text x="62"  y="257" font-size="10" fill="#1a4a35" dominant-baseline="middle">❷  structure_manipulations →  pdb_manipulation units</text>
+  <rect x="54" y="270" width="328" height="19" rx="3" fill="#c8ecd8" stroke="#2d6a4f" stroke-width="0.7"/>
+  <text x="62"  y="280" font-size="10" fill="#1a4a35" dominant-baseline="middle">❸  dataset_manipulations  →  dataset_manipulation units</text>
+  <text x="218" y="307" font-size="9.5" fill="#666" text-anchor="middle">each unit:  run(ctx) → rows  ·  available(ctx) → (bool, reason)</text>
+
+  <!-- Cache boundary stripe -->
+  <rect x="42" y="325" width="352" height="17" rx="3" fill="#fff8d6" stroke="#d4a017" stroke-width="1"/>
+  <text x="218" y="334" font-size="10" fill="#7a5c00" text-anchor="middle" dominant-baseline="middle">cache boundary  ──  _prepared/pdb.parquet  ·  prepared_manifest.parquet</text>
+
+  <!-- Arrow -->
+  <line x1="218" y1="342" x2="218" y2="362" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- [EXECUTE] -->
+  <rect x="42" y="364" width="352" height="100" rx="4" fill="#eef3fa" stroke="#1d3557" stroke-width="2"/>
+  <rect x="42" y="364" width="352" height="27" rx="4" fill="#1d3557"/>
+  <rect x="42" y="380" width="352" height="11" fill="#1d3557"/>
+  <text x="218" y="381" font-size="12" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle">EXECUTE  (run-plugin)</text>
+  <text x="56" y="404" font-size="10.5" fill="#1d3565">• Loads each structure from prepared cache</text>
+  <text x="56" y="420" font-size="10.5" fill="#1d3565">• Runs configured pdb_calculation plugins in grain order</text>
+  <text x="56" y="436" font-size="10.5" fill="#1d3565">• Plugin outputs → _plugins/&lt;name&gt;/pdb.parquet</text>
+  <text x="56" y="455" font-size="9.5" fill="#888">lightweight plugins batched; heavy/isolated plugins run separately</text>
+
+  <!-- Arrow -->
+  <line x1="218" y1="464" x2="218" y2="482" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- [MERGE] -->
+  <rect x="42" y="484" width="352" height="88" rx="4" fill="#eaf3f8" stroke="#457b9d" stroke-width="2"/>
+  <rect x="42" y="484" width="352" height="27" rx="4" fill="#457b9d"/>
+  <rect x="42" y="500" width="352" height="11" fill="#457b9d"/>
+  <text x="218" y="501" font-size="12" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle">MERGE</text>
+  <text x="56" y="524" font-size="10.5" fill="#1e3d5c">• Reads base pdb from _prepared/</text>
+  <text x="56" y="539" font-size="10.5" fill="#1e3d5c">• Left-joins each plugin output on identity key columns</text>
+  <text x="56" y="564" font-size="9.5" fill="#888">validates: no duplicate identity rows · no overlapping column names</text>
+
+  <!-- Output stripe -->
+  <rect x="42" y="579" width="352" height="17" rx="3" fill="#d6ecf7" stroke="#457b9d" stroke-width="1"/>
+  <text x="218" y="588" font-size="10" fill="#1e3d5c" text-anchor="middle" dominant-baseline="middle">out_dir/pdb.parquet  ·  plugin_status.parquet  ·  bad_files.parquet</text>
+
+  <!-- Dashed arrow (optional) -->
+  <line x1="218" y1="596" x2="218" y2="616" stroke="#888" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr-dashed)"/>
+  <text x="226" y="608" font-size="9" fill="#999">optional</text>
+
+  <!-- [DATASET ANALYSIS] -->
+  <rect x="42" y="618" width="352" height="88" rx="4" fill="#f7eef7" stroke="#6d2e46" stroke-width="2"/>
+  <rect x="42" y="618" width="352" height="27" rx="4" fill="#6d2e46"/>
+  <rect x="42" y="634" width="352" height="11" fill="#6d2e46"/>
+  <text x="218" y="635" font-size="12" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle">DATASET ANALYSIS  (analyze-dataset)</text>
+  <text x="56" y="657" font-size="10.5" fill="#4a1a30">• Reads final pdb.parquet, filters rows by grain</text>
+  <text x="56" y="672" font-size="10.5" fill="#4a1a30">• Runs dataset_calculation plugins → DataFrames</text>
+  <text x="56" y="697" font-size="9.5" fill="#888">runs post-merge, or per-chunk (dataset_analysis_mode setting)</text>
+
+  <!-- Dataset output -->
+  <rect x="42" y="712" width="352" height="17" rx="3" fill="#e4d1e4" stroke="#6d2e46" stroke-width="1"/>
+  <text x="218" y="721" font-size="10" fill="#4a1a30" text-anchor="middle" dominant-baseline="middle">out_dir/dataset.parquet</text>
+
+  <!-- Chunked note -->
+  <rect x="42" y="737" width="352" height="62" rx="4" fill="#fffdf0" stroke="#c9a92c" stroke-width="1"/>
+  <text x="218" y="754" font-size="10.5" font-weight="600" fill="#7a5c00" text-anchor="middle">Chunked Execution  (run-chunked / plan-chunks)</text>
+  <text x="56" y="770" font-size="10" fill="#666">Splits input_dir into N independent chunk runs.</text>
+  <text x="56" y="784" font-size="10" fill="#666">Each chunk runs the full prepare → execute → merge cycle.</text>
+  <text x="56" y="798" font-size="10" fill="#666">merge-datasets stacks all chunks → final dataset.</text>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PANEL 2 — EXTENSION CLASSES                                    -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- PREPARE STAGE section -->
+  <text x="460" y="126" font-size="10.5" font-weight="700" fill="#2d6a4f" letter-spacing="1">▶  PREPARE STAGE</text>
+  <line x1="460" y1="130" x2="878" y2="130" stroke="#2d6a4f" stroke-width="0.8"/>
+
+  <!-- pdb_quality_control -->
+  <rect x="460" y="136" width="416" height="74" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
+  <rect x="460" y="136" width="165" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="148" width="165" height="10" fill="#2d6a4f"/>
+  <text x="468" y="152" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_quality_control</text>
+  <text x="638" y="146" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: quality_controls</text>
+  <text x="468" y="172" font-size="10" fill="#1a4a35">Per-structure checks that annotate rows without changing coordinates.</text>
+  <text x="468" y="186" font-size="10" fill="#1a4a35">Runs first, before any coordinate transforms.</text>
+  <text x="468" y="202" font-size="9.5" fill="#888">builtins:  chain_continuity  ·  structure_clashes</text>
+
+  <!-- pdb_manipulation -->
+  <rect x="460" y="217" width="416" height="63" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
+  <rect x="460" y="217" width="150" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="229" width="150" height="10" fill="#2d6a4f"/>
+  <text x="468" y="233" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_manipulation</text>
+  <text x="624" y="227" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: structure_manipulations</text>
+  <text x="468" y="252" font-size="10" fill="#1a4a35">Per-structure coordinate transforms. May mutate ctx.aa.</text>
+  <text x="468" y="272" font-size="9.5" fill="#888">builtins:  center_on_origin</text>
+
+  <!-- dataset_quality_control -->
+  <rect x="460" y="287" width="416" height="63" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
+  <rect x="460" y="287" width="188" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="299" width="188" height="10" fill="#2d6a4f"/>
+  <text x="468" y="303" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">dataset_quality_control</text>
+  <text x="662" y="297" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: dataset_quality_controls</text>
+  <text x="468" y="322" font-size="10" fill="#1a4a35">Dataset-scope validation after all structures are prepared.</text>
+  <text x="468" y="342" font-size="9.5" fill="#888">builtins:  (none — extend via entry_points)</text>
+
+  <!-- dataset_manipulation -->
+  <rect x="460" y="357" width="416" height="63" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
+  <rect x="460" y="357" width="170" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="369" width="170" height="10" fill="#2d6a4f"/>
+  <text x="468" y="373" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">dataset_manipulation</text>
+  <text x="644" y="367" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: dataset_manipulations</text>
+  <text x="468" y="392" font-size="10" fill="#1a4a35">Cross-structure transforms that depend on shared state.</text>
+  <text x="468" y="412" font-size="9.5" fill="#888">builtins:  superimpose_homology</text>
+
+  <!-- EXECUTE section -->
+  <text x="460" y="436" font-size="10.5" font-weight="700" fill="#1d3557" letter-spacing="1">▶  EXECUTE STAGE</text>
+  <line x1="460" y1="440" x2="878" y2="440" stroke="#1d3557" stroke-width="0.8"/>
+
+  <!-- pdb_calculation -->
+  <rect x="460" y="446" width="416" height="106" rx="4" fill="#eef3fa" stroke="#1d3557" stroke-width="1.2"/>
+  <rect x="460" y="446" width="142" height="22" rx="4" fill="#1d3557"/>
+  <rect x="460" y="458" width="142" height="10" fill="#1d3557"/>
+  <text x="468" y="462" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_calculation</text>
+  <text x="616" y="456" font-size="9.5" fill="#1d3557" dominant-baseline="middle">config key: plugins</text>
+  <text x="468" y="481" font-size="10" fill="#1d3565">Per-structure/chain/role/interface metrics. Emits prefixed columns</text>
+  <text x="468" y="495" font-size="10" fill="#1d3565">into the shared pdb table. grain attr selects the output scope.</text>
+  <text x="468" y="509" font-size="10" fill="#1d3565">resource_class: lightweight (batch) | heavy (isolated)</text>
+  <text x="468" y="527" font-size="9.5" fill="#888">builtins: identity · chain_stats · role_stats · role_sequences</text>
+  <text x="468" y="541" font-size="9.5" fill="#888">  interface_contacts · interface_metrics · abepitope_score</text>
+  <text x="468" y="555" font-size="9.5" fill="#888">  antibody_cdr_lengths · antibody_cdr_sequences · rosetta_interface</text>
+
+  <!-- DATASET ANALYSIS section -->
+  <text x="460" y="574" font-size="10.5" font-weight="700" fill="#6d2e46" letter-spacing="1">▶  DATASET ANALYSIS STAGE</text>
+  <line x1="460" y1="578" x2="878" y2="578" stroke="#6d2e46" stroke-width="0.8"/>
+
+  <!-- dataset_calculation -->
+  <rect x="460" y="584" width="416" height="94" rx="4" fill="#f7eef7" stroke="#6d2e46" stroke-width="1.2"/>
+  <rect x="460" y="584" width="162" height="22" rx="4" fill="#6d2e46"/>
+  <rect x="460" y="596" width="162" height="10" fill="#6d2e46"/>
+  <text x="468" y="600" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">dataset_calculation</text>
+  <text x="636" y="594" font-size="9.5" fill="#6d2e46" dominant-baseline="middle">config key: dataset_analyses</text>
+  <text x="468" y="618" font-size="10" fill="#4a1a30">Post-merge analyses over the full dataset (aggregate statistics).</text>
+  <text x="468" y="632" font-size="10" fill="#4a1a30">Receives grain-filtered DataFrames via DatasetAnalysisContext.</text>
+  <text x="468" y="646" font-size="10" fill="#4a1a30">Returns a DataFrame; rows stacked into dataset.parquet.</text>
+  <text x="468" y="666" font-size="9.5" fill="#888">builtins:  interface_summary  ·  cdr_entropy  ·  dataset_annotations</text>
+
+  <!-- Extension protocol box -->
+  <rect x="460" y="686" width="416" height="112" rx="4" fill="#f5f5f8" stroke="#aaa" stroke-width="1"/>
+  <text x="468" y="702" font-size="11" font-weight="600" fill="#333">Extension Protocol  (common to all types)</text>
+  <line x1="468" y1="707" x2="868" y2="707" stroke="#ccc" stroke-width="0.8"/>
+  <text x="468" y="722" font-size="10" fill="#444" font-family="'Courier New', monospace">name = ""          # unique identifier within its class</text>
+  <text x="468" y="736" font-size="10" fill="#444" font-family="'Courier New', monospace">prefix = ""        # column namespace (required, pdb_* types)</text>
+  <text x="468" y="750" font-size="10" fill="#444" font-family="'Courier New', monospace">def run(ctx)       # yields row dicts  /  returns DataFrame</text>
+  <text x="468" y="764" font-size="10" fill="#444" font-family="'Courier New', monospace">def available(ctx) # → (bool, reason_str)   skip check</text>
+  <text x="468" y="782" font-size="9.5" fill="#888">Register via setuptools entry_points or extend registries in-process.</text>
+  <text x="468" y="796" font-size="9.5" fill="#888">Prefix collision and name collision are rejected at registry load time.</text>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- PANEL 3 — DATA MODEL                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+
+  <!-- pdb.parquet heading -->
+  <text x="912" y="120" font-size="11.5" font-weight="600" fill="#1d3557">pdb.parquet  —  unified output table  (grain column discriminates rows)</text>
+  <line x1="912" y1="124" x2="1380" y2="124" stroke="#1d3557" stroke-width="0.8"/>
+
+  <!-- Table header -->
+  <rect x="912" y="130" width="466" height="21" rx="2" fill="#1c2541"/>
+  <text x="916" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">path</text>
+  <text x="980" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">asm_id</text>
+  <text x="1038" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">grain</text>
+  <text x="1110" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">chain</text>
+  <text x="1160" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">role</text>
+  <text x="1210" y="141" font-size="8.5" fill="white" dominant-baseline="middle" font-family="'Courier New', monospace">pair</text>
+  <text x="1265" y="141" font-size="8.5" fill="#ffd700" dominant-baseline="middle" font-family="'Courier New', monospace">prefix__column …</text>
+
+  <!-- Row: structure -->
+  <rect x="912" y="151" width="466" height="19" fill="#f0faf4"/>
+  <line x1="912" y1="151" x2="1378" y2="151" stroke="#dde4ee" stroke-width="0.5"/>
+  <text x="916" y="161" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">…/x.pdb</text>
+  <text x="980" y="161" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">1</text>
+  <rect x="1034" y="154" width="56" height="13" rx="2" fill="#2d6a4f"/>
+  <text x="1062" y="161" font-size="8.5" fill="white" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', monospace">structure</text>
+  <text x="1110" y="161" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1160" y="161" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1210" y="161" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1265" y="161" font-size="8.5" fill="#666" dominant-baseline="middle" font-family="'Courier New', monospace">id__n_atoms_total=438</text>
+
+  <!-- Row: chain A -->
+  <rect x="912" y="170" width="466" height="19" fill="white"/>
+  <line x1="912" y1="170" x2="1378" y2="170" stroke="#dde4ee" stroke-width="0.5"/>
+  <text x="916" y="180" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">…/x.pdb</text>
+  <text x="980" y="180" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">1</text>
+  <rect x="1034" y="173" width="42" height="13" rx="2" fill="#457b9d"/>
+  <text x="1055" y="180" font-size="8.5" fill="white" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', monospace">chain</text>
+  <text x="1110" y="180" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">A</text>
+  <text x="1160" y="180" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1210" y="180" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1265" y="180" font-size="8.5" fill="#666" dominant-baseline="middle" font-family="'Courier New', monospace">id__n_atoms=218</text>
+
+  <!-- Row: chain B -->
+  <rect x="912" y="189" width="466" height="19" fill="#f8f9fa"/>
+  <line x1="912" y1="189" x2="1378" y2="189" stroke="#dde4ee" stroke-width="0.5"/>
+  <text x="916" y="199" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">…/x.pdb</text>
+  <text x="980" y="199" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">1</text>
+  <rect x="1034" y="192" width="42" height="13" rx="2" fill="#457b9d"/>
+  <text x="1055" y="199" font-size="8.5" fill="white" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', monospace">chain</text>
+  <text x="1110" y="199" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">B</text>
+  <text x="1160" y="199" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1210" y="199" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1265" y="199" font-size="8.5" fill="#666" dominant-baseline="middle" font-family="'Courier New', monospace">continuity__n_breaks=1</text>
+
+  <!-- Row: role -->
+  <rect x="912" y="208" width="466" height="19" fill="white"/>
+  <line x1="912" y1="208" x2="1378" y2="208" stroke="#dde4ee" stroke-width="0.5"/>
+  <text x="916" y="218" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">…/x.pdb</text>
+  <text x="980" y="218" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">1</text>
+  <rect x="1034" y="211" width="36" height="13" rx="2" fill="#6d2e46"/>
+  <text x="1052" y="218" font-size="8.5" fill="white" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', monospace">role</text>
+  <text x="1110" y="218" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1160" y="218" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">binder</text>
+  <text x="1210" y="218" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1265" y="218" font-size="8.5" fill="#666" dominant-baseline="middle" font-family="'Courier New', monospace">rs__sequence=MAGV…</text>
+
+  <!-- Row: interface -->
+  <rect x="912" y="227" width="466" height="19" fill="#f8f9fa"/>
+  <line x1="912" y1="227" x2="1378" y2="227" stroke="#dde4ee" stroke-width="0.5"/>
+  <text x="916" y="237" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">…/x.pdb</text>
+  <text x="980" y="237" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">1</text>
+  <rect x="1030" y="230" width="52" height="13" rx="2" fill="#1d3557"/>
+  <text x="1056" y="237" font-size="8.5" fill="white" dominant-baseline="middle" text-anchor="middle" font-family="'Courier New', monospace">interface</text>
+  <text x="1110" y="237" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1160" y="237" font-size="8.5" fill="#bbb" dominant-baseline="middle" font-family="'Courier New', monospace">—</text>
+  <text x="1210" y="237" font-size="8.5" fill="#333" dominant-baseline="middle" font-family="'Courier New', monospace">b__t</text>
+  <text x="1265" y="237" font-size="8.5" fill="#666" dominant-baseline="middle" font-family="'Courier New', monospace">iface__n_contacts=14</text>
+
+  <!-- Table border -->
+  <rect x="912" y="130" width="466" height="116" rx="2" fill="none" stroke="#1d3557" stroke-width="1.2"/>
+
+  <!-- Column prefix legend -->
+  <rect x="912" y="254" width="466" height="50" rx="4" fill="#fffbf0" stroke="#d4a017" stroke-width="1"/>
+  <text x="920" y="270" font-size="11" font-weight="600" fill="#7a5c00">Column naming:  prefix__column</text>
+  <text x="920" y="284" font-size="10" fill="#555">Each plugin defines a unique prefix (e.g. prefix="iface") → "iface__n_contacts".</text>
+  <text x="920" y="297" font-size="10" fill="#555">Prefix collision is caught at registry load. Overlapping columns rejected at merge.</text>
+
+  <!-- Identity keys -->
+  <text x="912" y="322" font-size="11.5" font-weight="600" fill="#1d3557">Identity Keys  (merge anchor)</text>
+  <line x1="912" y1="326" x2="1380" y2="326" stroke="#1d3557" stroke-width="0.8"/>
+  <rect x="912" y="332" width="466" height="66" rx="4" fill="#eef3fa" stroke="#457b9d" stroke-width="1"/>
+  <text x="920" y="347" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">path         # absolute path to source structure file</text>
+  <text x="920" y="361" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">assembly_id  # biological assembly id  (default "1")</text>
+  <text x="920" y="375" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">grain        # structure | chain | role | interface</text>
+  <text x="920" y="389" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">chain_id  ·  role  ·  pair  ·  role_left  ·  role_right</text>
+
+  <!-- Merge semantics -->
+  <text x="912" y="416" font-size="11.5" font-weight="600" fill="#1d3557">Merge Semantics</text>
+  <line x1="912" y1="420" x2="1380" y2="420" stroke="#1d3557" stroke-width="0.8"/>
+  <rect x="912" y="426" width="224" height="78" rx="4" fill="#f0faf4" stroke="#2d6a4f" stroke-width="1"/>
+  <text x="920" y="441" font-size="10.5" font-weight="600" fill="#2d6a4f">Plugin → Base  (LEFT JOIN)</text>
+  <text x="920" y="456" font-size="10" fill="#333">Adds plugin columns to base rows.</text>
+  <text x="920" y="470" font-size="10" fill="#333">All base rows preserved always.</text>
+  <text x="920" y="484" font-size="10" fill="#333">Missing plugin output → NaN.</text>
+  <text x="920" y="498" font-size="9.5" fill="#888">validate: no duplicate identity rows</text>
+  <rect x="1144" y="426" width="234" height="78" rx="4" fill="#f7eef7" stroke="#6d2e46" stroke-width="1"/>
+  <text x="1152" y="441" font-size="10.5" font-weight="600" fill="#6d2e46">Dataset Merge  (STACK)</text>
+  <text x="1152" y="456" font-size="10" fill="#333">Concatenates rows from N runs.</text>
+  <text x="1152" y="470" font-size="10" fill="#333">Schema must match across chunks.</text>
+  <text x="1152" y="484" font-size="10" fill="#333">Global identity uniqueness enforced.</text>
+  <text x="1152" y="498" font-size="9.5" fill="#888">merge_compatibility validated</text>
+
+  <!-- Plugin Context -->
+  <text x="912" y="524" font-size="11.5" font-weight="600" fill="#1d3557">Plugin Context  (per-structure, pdb_* types)</text>
+  <line x1="912" y1="528" x2="1380" y2="528" stroke="#1d3557" stroke-width="0.8"/>
+  <rect x="912" y="534" width="466" height="100" rx="4" fill="#eef3fa" stroke="#1d3557" stroke-width="1"/>
+  <text x="920" y="549" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.path           # source file path (for row identity)</text>
+  <text x="920" y="563" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.assembly_id    # biological assembly</text>
+  <text x="920" y="577" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.aa             # biotite AtomArray (full structure)</text>
+  <text x="920" y="591" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.chains         # {chain_id: AtomArray}</text>
+  <text x="920" y="605" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.roles          # {role_name: AtomArray}</text>
+  <text x="920" y="619" font-size="10" fill="#1d3557" font-family="'Courier New', monospace">ctx.config         # full Config object</text>
+  <text x="920" y="627" font-size="9.5" fill="#888">  manipulations may mutate ctx.aa then call ctx.rebuild_views()</text>
+
+  <!-- Configuration YAML -->
+  <text x="912" y="652" font-size="11.5" font-weight="600" fill="#1d3557">Configuration  (YAML, validated by pydantic)</text>
+  <line x1="912" y1="656" x2="1380" y2="656" stroke="#1d3557" stroke-width="0.8"/>
+  <rect x="912" y="662" width="222" height="130" rx="4" fill="#f5f5f8" stroke="#aaa" stroke-width="1"/>
+  <text x="920" y="678" font-size="10" fill="#333" font-family="'Courier New', monospace">input_dir: /data/pdbs</text>
+  <text x="920" y="692" font-size="10" fill="#333" font-family="'Courier New', monospace">out_dir:   /results</text>
+  <text x="920" y="706" font-size="10" fill="#333" font-family="'Courier New', monospace">assembly_id: "1"</text>
+  <text x="920" y="720" font-size="10" fill="#333" font-family="'Courier New', monospace">roles:</text>
+  <text x="920" y="734" font-size="10" fill="#333" font-family="'Courier New', monospace">  binder: [A, B]</text>
+  <text x="920" y="748" font-size="10" fill="#333" font-family="'Courier New', monospace">  target: [C]</text>
+  <text x="920" y="762" font-size="10" fill="#333" font-family="'Courier New', monospace">interface_pairs:</text>
+  <text x="920" y="776" font-size="10" fill="#333" font-family="'Courier New', monospace">  - [binder, target]</text>
+  <rect x="1144" y="662" width="234" height="130" rx="4" fill="#f5f5f8" stroke="#aaa" stroke-width="1"/>
+  <text x="1152" y="678" font-size="10" fill="#333" font-family="'Courier New', monospace">quality_controls:</text>
+  <text x="1152" y="692" font-size="10" fill="#333" font-family="'Courier New', monospace">  - structure_clashes</text>
+  <text x="1152" y="706" font-size="10" fill="#333" font-family="'Courier New', monospace">plugins:</text>
+  <text x="1152" y="720" font-size="10" fill="#333" font-family="'Courier New', monospace">  - identity</text>
+  <text x="1152" y="734" font-size="10" fill="#333" font-family="'Courier New', monospace">  - interface_contacts</text>
+  <text x="1152" y="748" font-size="10" fill="#333" font-family="'Courier New', monospace">dataset_analyses:</text>
+  <text x="1152" y="762" font-size="10" fill="#333" font-family="'Courier New', monospace">  - interface_summary</text>
+  <text x="1152" y="776" font-size="10" fill="#333" font-family="'Courier New', monospace">  - cdr_entropy</text>
+
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- FOOTER — ARCHITECTURAL INVARIANTS                              -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <rect x="0" y="826" width="1400" height="174" fill="#1c2541"/>
+  <text x="22" y="848" font-size="12.5" font-weight="600" fill="#8899bb" letter-spacing="0.5">Architectural Invariants</text>
+
+  <!-- Row 1 -->
+  <rect x="18"  y="856" width="418" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="28"  y="874" font-size="11"  font-weight="600" fill="#7ec8a4">Prepare is a cache boundary</text>
+  <text x="28"  y="890" font-size="10" fill="#8899bb">Expensive structure I/O happens once. All plugin stages</text>
+  <text x="28"  y="903" font-size="10" fill="#8899bb">read from the cached _prepared/ directory.</text>
+
+  <rect x="448" y="856" width="418" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="458" y="874" font-size="11"  font-weight="600" fill="#7ec8a4">Plugins emit prefixed columns</text>
+  <text x="458" y="890" font-size="10" fill="#8899bb">prefix__column naming guarantees zero namespace collision.</text>
+  <text x="458" y="903" font-size="10" fill="#8899bb">Registry rejects duplicate names and prefixes at load time.</text>
+
+  <rect x="878" y="856" width="504" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="888" y="874" font-size="11"  font-weight="600" fill="#7ec8a4">Dataset merge stacks rows without schema change</text>
+  <text x="888" y="890" font-size="10" fill="#8899bb">Chunked outputs are concatenated. Identity key uniqueness is</text>
+  <text x="888" y="903" font-size="10" fill="#8899bb">enforced. merge_compatibility checked before stacking.</text>
+
+  <!-- Row 2 -->
+  <rect x="18"  y="918" width="418" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="28"  y="936" font-size="11"  font-weight="600" fill="#7ec8a4">Normalized tabular outputs around one table</text>
+  <text x="28"  y="952" font-size="10" fill="#8899bb">One pdb.parquet with grain column unifies structure/chain/</text>
+  <text x="28"  y="965" font-size="10" fill="#8899bb">role/interface rows. All grains share the same identity schema.</text>
+
+  <rect x="448" y="918" width="418" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="458" y="936" font-size="11"  font-weight="600" fill="#7ec8a4">Plug-and-play extension model</text>
+  <text x="458" y="952" font-size="10" fill="#8899bb">name + prefix + run() is sufficient. Register via entry_points</text>
+  <text x="458" y="965" font-size="10" fill="#8899bb">or directly in registries. No framework boilerplate required.</text>
+
+  <rect x="878" y="918" width="504" height="54" rx="4" fill="#243050" stroke="#334466" stroke-width="1"/>
+  <text x="888" y="936" font-size="11"  font-weight="600" fill="#7ec8a4">Human-readable configuration</text>
+  <text x="888" y="952" font-size="10" fill="#8899bb">Plain YAML. Config validated via pydantic on load. Extra fields</text>
+  <text x="888" y="965" font-size="10" fill="#8899bb">allowed for third-party plugin parameters.</text>
+
+</svg>

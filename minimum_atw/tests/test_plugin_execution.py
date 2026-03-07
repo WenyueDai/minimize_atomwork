@@ -12,12 +12,14 @@ try:
     from minimum_atw.core.config import Config
     from minimum_atw.core.pipeline import merge_outputs, prepare_outputs, run_plugins
     from minimum_atw.plugins.base import BasePlugin, InterfacePlugin
-    import minimum_atw.core.pipeline as pipeline_module
+    from minimum_atw.tests.helpers import read_pdb_grain
+    import minimum_atw.core._execute as execute_module
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "pandas", "pyarrow"}:
         raise
     pd = None
     Config = None
+    read_pdb_grain = None
 
 
 class TestLightStructurePlugin(BasePlugin):
@@ -98,7 +100,7 @@ class PluginExecutionModelTests(unittest.TestCase):
 
             prepare_outputs(cfg)
 
-            real_prepare_context = pipeline_module._prepare_context
+            real_prepare_context = execute_module._prepare_context
             load_calls: list[str] = []
 
             def counting_prepare_context(source_path, prepared_path, runtime_cfg):
@@ -107,7 +109,7 @@ class PluginExecutionModelTests(unittest.TestCase):
 
             with (
                 mock.patch.dict(
-                    pipeline_module.PLUGIN_REGISTRY,
+                    execute_module.PLUGIN_REGISTRY,
                     {
                         "test_light_structure": TestLightStructurePlugin(),
                         "test_light_interface": TestLightInterfacePlugin(),
@@ -115,7 +117,7 @@ class PluginExecutionModelTests(unittest.TestCase):
                     },
                     clear=True,
                 ),
-                mock.patch("minimum_atw.core.pipeline._prepare_context", side_effect=counting_prepare_context),
+                mock.patch("minimum_atw.core._execute._prepare_context", side_effect=counting_prepare_context),
             ):
                 plugin_counts = run_plugins(cfg, cfg.plugins)
                 merged_counts = merge_outputs(cfg)
@@ -128,8 +130,8 @@ class PluginExecutionModelTests(unittest.TestCase):
             self.assertEqual(merged_counts["structures"], 1)
             self.assertEqual(merged_counts["interfaces"], 1)
 
-            structures = pd.read_parquet(out_dir / "structures.parquet")
-            interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
+            structures = read_pdb_grain(out_dir, "structure")
+            interfaces = read_pdb_grain(out_dir, "interface")
             statuses = pd.read_parquet(out_dir / "plugin_status.parquet")
             metadata = json.loads((out_dir / "run_metadata.json").read_text())
 

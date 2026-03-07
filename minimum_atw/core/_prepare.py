@@ -1,0 +1,388 @@
+"""Prepare phase: load, validate, manipulate, and cache structures."""
+
+from __future__ import annotations
+
+import json
+import shutil
+from pathlib import Path
+from typing import Any
+
+import pandas as pd
+from biotite.structure.io import save_structure
+
+from ..plugins.dataset.manipulation import DATASET_MANIPULATION_REGISTRY
+from ..plugins.dataset.quality_control import DATASET_QUALITY_CONTROL_REGISTRY
+from ..plugins.pdb.manipulation import PDB_MANIPULATION_REGISTRY
+from ..plugins.pdb.quality_control import PDB_QUALITY_CONTROL_REGISTRY
+from ..runtime.stage_buffer import FrameBuffer, TableBuffer
+from ..runtime.workspace import (
+    base_rows_for_context as _base_rows_for_context,
+    discover_inputs as _discover,
+    prepare_context as _prepare_context,
+    prepared_filename as _prepared_filename,
+    prepared_manifest_path as _prepared_manifest_path,
+    run_unit as _run_unit,
+)
+from .config import Config, PREPARE_SECTION_ORDER
+from .registry import instantiate_unit
+from .tables import (
+    BAD_COLS,
+    MANIFEST_COLS,
+    PDB_KEY_COLS,
+    PDB_TABLE_NAME,
+    STATUS_COLS,
+    TABLE_SUFFIX,
+    append_rows as _append_rows,
+    count_pdb_rows as _count_pdb_rows,
+    merge_pdb_frames as _merge_pdb_frames,
+    read_frame as _read_frame,
+    read_pdb_table as _read_pdb_table,
+    rows_to_pdb_frame as _rows_to_pdb_frame,
+    write_frame as _write_frame,
+    write_pdb_table as _write_pdb_table,
+)
+
+
+def _empty_pdb_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=PDB_KEY_COLS)
+
+
+def _write_stage_outputs(
+    out_dir: Path,
+    pdb_frame: pd.DataFrame,
+    status_rows: list[dict[str, Any]],
+    bad_rows: list[dict[str, Any]],
+    *,
+    skip_empty_tables: bool = False,
+) -> dict[str, int]:
+    _write_pdb_table(out_dir, pdb_frame, skip_empty=skip_empty_tables)
+    _write_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+    bad_path = out_dir / f"bad_files{TABLE_SUFFIX}"
+    if bad_rows:
+        _write_frame(bad_path, bad_rows, BAD_COLS)
+    elif bad_path.exists():
+        bad_path.unlink()
+    return {
+        **_count_pdb_rows(pdb_frame),
+        "status": len(status_rows),
+        "bad": len(bad_rows),
+    }
+
+
+def _append_stage_outputs(
+    out_dir: Path,
+    pdb_frame: pd.DataFrame,
+    status_rows: list[dict[str, Any]],
+    bad_rows: list[dict[str, Any]],
+) -> dict[str, int]:
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if not pdb_frame.empty:
+        path = out_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"
+        if path.exists():
+            existing = _read_pdb_table(path)
+            combined = pd.concat([existing, pdb_frame], ignore_index=True, sort=False)
+            combined = combined.drop_duplicates(subset=PDB_KEY_COLS)
+        else:
+            combined = pdb_frame
+        combined.to_parquet(path, index=False)
+
+    _append_rows(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
+    bad_path = out_dir / f"bad_files{TABLE_SUFFIX}"
+    _append_rows(bad_path, bad_rows, BAD_COLS)
+
+    final_pdb = _read_pdb_table(out_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}")
+    final_status = _read_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)
+    final_bad = _read_frame(bad_path, BAD_COLS)
+    return {**_count_pdb_rows(final_pdb), "status": len(final_status), "bad": len(final_bad)}
+
+
+def _prepare_counts_from_dir(prepared_dir: Path) -> dict[str, int]:
+    counts = _count_pdb_rows(_read_pdb_table(prepared_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"))
+    counts["status"] = len(_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
+    counts["bad"] = len(_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
+    return counts
+
+
+def _load_manifest_checkpoint_paths(manifest_ckpt: Path) -> set[str]:
+    done_paths: set[str] = set()
+    if not manifest_ckpt.exists():
+        return done_paths
+    with manifest_ckpt.open() as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            done_paths.add(row["path"])
+    return done_paths
+
+
+def _finalize_manifest_checkpoint(out_dir: Path, manifest_ckpt: Path) -> None:
+    if not manifest_ckpt.exists():
+        return
+    records: list[dict[str, str]] = []
+    with manifest_ckpt.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    _write_frame(_prepared_manifest_path(out_dir), records, MANIFEST_COLS)
+
+
+def _prepared_manifest_entry(
+    cfg: Config,
+    source_path: Path,
+    prepared_structures_dir: Path,
+    *,
+    prepared_source_path: str,
+) -> tuple[Path | None, dict[str, str]]:
+    prepared_path = prepared_structures_dir / _prepared_filename(source_path) if cfg.keep_prepared_structures else None
+    return prepared_path, {
+        "path": prepared_source_path,
+        "prepared_path": str(prepared_path.resolve()) if prepared_path else str(source_path.resolve()),
+    }
+
+
+def _write_prepared_structure(prepared_path: Path | None, ctx: Any) -> None:
+    if prepared_path is None:
+        return
+    prepared_path.parent.mkdir(parents=True, exist_ok=True)
+    save_structure(prepared_path, ctx.aa)
+
+
+def _rows_to_stage_frame(base_rows: list[dict[str, Any]], extra_rows: list[dict[str, Any]]) -> pd.DataFrame:
+    rows = list(base_rows)
+    rows.extend(extra_rows)
+    return _rows_to_pdb_frame(rows)
+
+
+def _prepare_units_by_section(cfg: Config) -> dict[str, list[Any]]:
+    prepare_registry = dict(PDB_QUALITY_CONTROL_REGISTRY)
+    for registry_name, registry in (
+        ("pdb_manipulation", PDB_MANIPULATION_REGISTRY),
+        ("dataset_quality_control", DATASET_QUALITY_CONTROL_REGISTRY),
+        ("dataset_manipulation", DATASET_MANIPULATION_REGISTRY),
+    ):
+        overlap = set(prepare_registry) & set(registry)
+        if overlap:
+            raise ValueError(
+                f"Duplicate prepare unit names across prepare registries (current={registry_name}): {sorted(overlap)}"
+            )
+        prepare_registry.update(registry)
+    section_by_name = {
+        name: str(getattr(unit, "prepare_section", "structure") or "structure")
+        for name, unit in prepare_registry.items()
+    }
+    grouped_names = cfg.prepare_names_by_section(section_by_name=section_by_name)
+    grouped_units: dict[str, list[Any]] = {section: [] for section in PREPARE_SECTION_ORDER}
+    for section in PREPARE_SECTION_ORDER:
+        for unit_name in grouped_names[section]:
+            grouped_units[section].append(instantiate_unit(prepare_registry[unit_name]))
+    return grouped_units
+
+
+def _ordered_prepare_units(cfg: Config) -> list[Any]:
+    grouped_units = _prepare_units_by_section(cfg)
+    ordered: list[Any] = []
+    for section in PREPARE_SECTION_ORDER:
+        ordered.extend(grouped_units[section])
+    return ordered
+
+
+def prepare_execution_metadata(cfg: Config) -> dict[str, Any]:
+    grouped_units = _prepare_units_by_section(cfg)
+    return {
+        "sections": {
+            section: [unit.name for unit in grouped_units[section]]
+            for section in PREPARE_SECTION_ORDER
+        }
+    }
+
+
+def _prepare_outputs_checkpointed(
+    cfg: Config,
+    *,
+    input_dir: Path,
+    out_dir: Path,
+    prepared_dir: Path,
+    prepared_structures_dir: Path,
+    manipulation_units: list[Any],
+    manifest_ckpt: Path,
+) -> dict[str, int]:
+    done_paths = _load_manifest_checkpoint_paths(manifest_ckpt)
+    prepared_dir.mkdir(parents=True, exist_ok=True)
+    if cfg.keep_prepared_structures:
+        prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+
+    for source_path in _discover(input_dir):
+        src_str = str(source_path.resolve())
+        if src_str in done_paths:
+            continue
+
+        try:
+            ctx = _prepare_context(source_path, source_path, cfg)
+        except Exception as exc:
+            _append_stage_outputs(prepared_dir, _empty_pdb_frame(), [], [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}])
+            done_paths.add(src_str)
+            continue
+
+        manipulation_ok = True
+        manipulation_rows: list[dict[str, Any]] = []
+        status_rows: list[dict[str, Any]] = []
+        bad_rows: list[dict[str, Any]] = []
+        for unit in manipulation_units:
+            manipulation_ok = _run_unit(ctx, unit, manipulation_rows, status_rows) and manipulation_ok
+        if not manipulation_ok:
+            bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
+            _append_stage_outputs(prepared_dir, _empty_pdb_frame(), status_rows, bad_rows)
+            done_paths.add(src_str)
+            continue
+
+        base_rows = _base_rows_for_context(ctx)
+        prepared_path, manifest_entry = _prepared_manifest_entry(
+            cfg,
+            source_path,
+            prepared_structures_dir,
+            prepared_source_path=ctx.path,
+        )
+        with manifest_ckpt.open("a") as fh:
+            fh.write(json.dumps(manifest_entry) + "\n")
+
+        _write_prepared_structure(prepared_path, ctx)
+        _append_stage_outputs(
+            prepared_dir,
+            _rows_to_stage_frame(base_rows, manipulation_rows),
+            status_rows,
+            bad_rows,
+        )
+        done_paths.add(src_str)
+
+    _finalize_manifest_checkpoint(out_dir, manifest_ckpt)
+    return _prepare_counts_from_dir(prepared_dir)
+
+
+def _prepare_outputs_buffered(
+    cfg: Config,
+    *,
+    input_dir: Path,
+    out_dir: Path,
+    prepared_dir: Path,
+    prepared_structures_dir: Path,
+    manipulation_units: list[Any],
+) -> dict[str, int]:
+    if cfg.keep_prepared_structures:
+        prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+
+    base_tables = TableBuffer()
+    manipulation_tables_by_name = {unit.name: TableBuffer() for unit in manipulation_units}
+    status_rows = FrameBuffer(columns=STATUS_COLS)
+    bad_rows = FrameBuffer(columns=BAD_COLS)
+    manifest_rows = FrameBuffer(columns=MANIFEST_COLS)
+
+    try:
+        for source_path in _discover(input_dir):
+            try:
+                ctx = _prepare_context(source_path, source_path, cfg)
+            except Exception as exc:
+                bad_rows.add({"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"})
+                continue
+
+            manipulation_ok = True
+            for unit in manipulation_units:
+                local_rows: list[dict[str, Any]] = []
+                local_status: list[dict[str, Any]] = []
+                ok = _run_unit(ctx, unit, local_rows, local_status)
+                manipulation_tables_by_name[unit.name].add_rows(local_rows)
+                for row in local_status:
+                    status_rows.add(row)
+                manipulation_ok = ok and manipulation_ok
+            if not manipulation_ok:
+                bad_rows.add({"path": ctx.path, "error": "prepare_failed"})
+                continue
+
+            base_rows_data = _base_rows_for_context(ctx)
+            base_tables.add_rows(base_rows_data)
+
+            prepared_path, manifest_entry = _prepared_manifest_entry(
+                cfg,
+                source_path,
+                prepared_structures_dir,
+                prepared_source_path=ctx.path,
+            )
+            manifest_rows.add(manifest_entry)
+            _write_prepared_structure(prepared_path, ctx)
+
+        merged_pdb = base_tables.finalize()
+        for unit in manipulation_units:
+            unit_pdb = manipulation_tables_by_name[unit.name].finalize()
+            merged_pdb = _merge_pdb_frames(merged_pdb, unit_pdb)
+
+        status_frame = status_rows.finalize()
+        bad_frame = bad_rows.finalize()
+        counts = _write_stage_outputs(
+            prepared_dir,
+            merged_pdb,
+            status_frame.to_dict(orient="records"),
+            bad_frame.to_dict(orient="records"),
+        )
+        _write_frame(
+            _prepared_manifest_path(out_dir),
+            manifest_rows.finalize().to_dict(orient="records"),
+            MANIFEST_COLS,
+        )
+        return counts
+    finally:
+        base_tables.close()
+        for table_buffer in manipulation_tables_by_name.values():
+            table_buffer.close()
+        status_rows.close()
+        bad_rows.close()
+        manifest_rows.close()
+
+
+def prepare_outputs(cfg: Config) -> dict[str, int]:
+    """Run the prepare phase: load, validate, manipulate, and cache all structures."""
+    from ..runtime.workspace import (
+        prepared_dir as _prepared_dir,
+        prepared_structures_dir as _prepared_structures_dir,
+        plugins_dir as _plugins_dir,
+    )
+
+    input_dir = Path(cfg.input_dir).resolve()
+    out_dir = Path(cfg.out_dir).resolve()
+    prepared_dir = _prepared_dir(out_dir)
+    prepared_structures_dir = _prepared_structures_dir(out_dir)
+    manipulation_units = _ordered_prepare_units(cfg)
+    plugins_dir = _plugins_dir(out_dir)
+    manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
+
+    if not cfg.checkpoint_enabled:
+        if prepared_dir.exists():
+            shutil.rmtree(prepared_dir)
+        if plugins_dir.exists():
+            shutil.rmtree(plugins_dir)
+    else:
+        prepared_dir.mkdir(parents=True, exist_ok=True)
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        if cfg.keep_prepared_structures:
+            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+
+    if cfg.checkpoint_enabled:
+        return _prepare_outputs_checkpointed(
+            cfg,
+            input_dir=input_dir,
+            out_dir=out_dir,
+            prepared_dir=prepared_dir,
+            prepared_structures_dir=prepared_structures_dir,
+            manipulation_units=manipulation_units,
+            manifest_ckpt=manifest_ckpt,
+        )
+
+    return _prepare_outputs_buffered(
+        cfg,
+        input_dir=input_dir,
+        out_dir=out_dir,
+        prepared_dir=prepared_dir,
+        prepared_structures_dir=prepared_structures_dir,
+        manipulation_units=manipulation_units,
+    )

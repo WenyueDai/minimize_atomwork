@@ -8,7 +8,8 @@ from pathlib import Path
 import pandas as pd
 
 from minimum_atw.core.pipeline import merge_dataset_outputs
-from minimum_atw.core.tables import BAD_COLS, KEY_COLS, STATUS_COLS, TABLE_NAMES
+from minimum_atw.core.tables import BAD_COLS, PDB_KEY_COLS, PDB_TABLE_NAME, STATUS_COLS
+from minimum_atw.tests.helpers import read_pdb_grain
 
 
 def _write_source_dataset(
@@ -20,31 +21,30 @@ def _write_source_dataset(
 ) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    base_rows = {
-        "structures": [{"path": path_value, "assembly_id": "1"}],
-        "chains": [{"path": path_value, "assembly_id": "1", "chain_id": "A"}],
-        "roles": [{"path": path_value, "assembly_id": "1", "role": "binder"}],
-        "interfaces": [
-            {
-                "path": path_value,
-                "assembly_id": "1",
-                "pair": "binder__target",
-                "role_left": "binder",
-                "role_right": "target",
-            }
-        ],
-    }
+    base_rows = [
+        {"path": path_value, "assembly_id": "1", "grain": "structure", "chain_id": "", "role": "", "pair": "", "role_left": "", "role_right": ""},
+        {"path": path_value, "assembly_id": "1", "grain": "chain", "chain_id": "A", "role": "", "pair": "", "role_left": "", "role_right": ""},
+        {"path": path_value, "assembly_id": "1", "grain": "role", "chain_id": "", "role": "binder", "pair": "", "role_left": "", "role_right": ""},
+        {
+            "path": path_value,
+            "assembly_id": "1",
+            "grain": "interface",
+            "chain_id": "",
+            "role": "",
+            "pair": "binder__target",
+            "role_left": "binder",
+            "role_right": "target",
+        },
+    ]
     if structures_extra:
-        base_rows["structures"][0].update(structures_extra)
+        base_rows[0].update(structures_extra)
 
-    table_columns: dict[str, list[str]] = {}
-    for table_name in TABLE_NAMES:
-        frame = pd.DataFrame(base_rows[table_name])
-        ordered = [col for col in KEY_COLS[table_name] if col in frame.columns]
-        ordered.extend(col for col in frame.columns if col not in ordered)
-        frame = frame.loc[:, ordered]
-        frame.to_parquet(out_dir / f"{table_name}.parquet", index=False)
-        table_columns[table_name] = list(frame.columns)
+    frame = pd.DataFrame(base_rows)
+    ordered = [col for col in PDB_KEY_COLS if col in frame.columns]
+    ordered.extend(col for col in frame.columns if col not in ordered)
+    frame = frame.loc[:, ordered]
+    frame.to_parquet(out_dir / f"{PDB_TABLE_NAME}.parquet", index=False)
+    table_columns = {PDB_TABLE_NAME: list(frame.columns)}
 
     pd.DataFrame(
         [{"path": path_value, "assembly_id": "1", "plugin": "identity", "status": "ok", "message": "rows=1"}],
@@ -110,14 +110,20 @@ class DatasetMergeTests(unittest.TestCase):
             counts = merge_dataset_outputs([source_one, source_two], merged_out)
 
             metadata = json.loads((merged_out / "dataset_metadata.json").read_text())
-            structures = pd.read_parquet(merged_out / "structures.parquet")
+            structures = read_pdb_grain(merged_out, "structure")
 
             self.assertEqual(counts["structures"], 2)
             self.assertEqual(len(structures), 2)
             self.assertEqual(metadata["output_kind"], "merged_dataset")
+            self.assertEqual(metadata["counts"]["status"], 2)
+            self.assertEqual(metadata["status_summary"], {"ok": 2})
             self.assertEqual(metadata["merge_compatibility"], compatibility)
-            self.assertEqual(metadata["table_columns"]["structures"], ["path", "assembly_id", "id__n_atoms_total"])
+            self.assertEqual(
+                metadata["table_columns"]["pdb"],
+                ["path", "assembly_id", "grain", "chain_id", "role", "pair", "role_left", "role_right", "id__n_atoms_total"],
+            )
             self.assertEqual(metadata["source_outputs"][0]["output_kind"], "run")
+            self.assertFalse((merged_out / "plugin_status.parquet").exists())
 
     def test_merge_dataset_outputs_rejects_incompatible_runtime_config(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_merge_") as tmp_dir:

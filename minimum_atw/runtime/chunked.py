@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 from ..core.config import Config
-from ..plugins.dataset_analysis.runtime import analyze_dataset_outputs
+from ..plugins.dataset.calculation.runtime import analyze_dataset_outputs
 from .workspace import (
     chunk_dir_name,
     chunk_input_paths,

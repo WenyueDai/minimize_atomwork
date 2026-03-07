@@ -128,7 +128,7 @@ class ChunkPlanningTests(unittest.TestCase):
             self.assertEqual(counts["structures"], 3)
             self.assertEqual(counts["chunks"], 2)
             self.assertTrue((root / "merged_out" / "dataset_metadata.json").exists())
-            self.assertTrue((root / "merged_out" / "dataset_analysis" / "interface_summary.parquet").exists())
+            self.assertTrue((root / "merged_out" / "dataset.parquet").exists())
 
     def test_merge_planned_chunks_skips_post_merge_dataset_analysis_in_per_chunk_mode(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_chunk_plan_") as tmp_dir:
@@ -154,12 +154,12 @@ class ChunkPlanningTests(unittest.TestCase):
             for chunk in plan["chunks"]:
                 chunk_cfg = Config(**yaml.safe_load(Path(chunk["chunk_config_path"]).read_text()))
                 run_pipeline(chunk_cfg)
-                self.assertTrue((Path(chunk["chunk_out_dir"]) / "dataset_analysis" / "interface_summary.parquet").exists())
+                self.assertTrue((Path(chunk["chunk_out_dir"]) / "dataset.parquet").exists())
 
             counts = merge_planned_chunks(root / "plan")
 
             self.assertEqual(counts["structures"], 3)
-            self.assertFalse((root / "merged_out" / "dataset_analysis").exists())
+            self.assertFalse((root / "merged_out" / "dataset.parquet").exists())
 
 
 if __name__ == "__main__":

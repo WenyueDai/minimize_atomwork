@@ -107,7 +107,7 @@ EOF
 
 ## Notes
 
-- These manual chunk examples keep `numbering_roles` and `interface_contacts` enabled, so merged `interfaces.parquet` can contain antibody CDR interface columns.
+- These manual chunk examples keep `numbering_roles` and `interface_contacts` enabled, so merged interface rows in `pdb.parquet` can contain antibody CDR interface columns.
 - Chunk outputs must still be compatible before merge. Different numbering setup or different final table columns are expected to fail the merge.
 - `merge-datasets` is intentionally merge-only. If you want dataset analyses on the merged output, run `minimum_atw.cli analyze-dataset --config ...` afterward or use `plan-chunks` plus `merge-planned-chunks`.
 - If you want automatically generated scheduler-ready chunk configs from one large config, use `plan-chunks` in [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md).

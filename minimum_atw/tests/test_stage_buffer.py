@@ -9,14 +9,14 @@ class StageBufferTests(unittest.TestCase):
     def test_table_buffer_spills_and_reassembles_rows(self) -> None:
         buffer = TableBuffer(row_limit=1)
         try:
-            buffer.add("structures", {"path": "/tmp/a.pdb", "assembly_id": "1", "metric": 1})
-            buffer.add("structures", {"path": "/tmp/b.pdb", "assembly_id": "1", "metric": 2})
-            frames = buffer.finalize()
+            buffer.add({"path": "/tmp/a.pdb", "assembly_id": "1", "grain": "structure", "metric": 1})
+            buffer.add({"path": "/tmp/b.pdb", "assembly_id": "1", "grain": "structure", "metric": 2})
+            frame = buffer.finalize()
         finally:
             buffer.close()
 
-        self.assertEqual(len(frames["structures"]), 2)
-        self.assertEqual(frames["structures"]["metric"].tolist(), [1, 2])
+        self.assertEqual(len(frame), 2)
+        self.assertEqual(frame["metric"].tolist(), [1, 2])
 
     def test_frame_buffer_spills_and_deduplicates_rows(self) -> None:
         buffer = FrameBuffer(columns=["path", "error"], row_limit=1)

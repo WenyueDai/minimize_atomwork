@@ -28,7 +28,7 @@ Antibody and VHH examples enable:
 - both built-in quality controls
 - the built-in per-structure manipulation
 - the built-in dataset-scale manipulation
-- the built-in record plugins
+- the built-in PDB calculation plugins
 - dataset annotations
 - interface summary
 - CDR entropy

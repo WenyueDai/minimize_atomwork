@@ -7,11 +7,10 @@ from typing import Any
 import pandas as pd
 
 from ..core.tables import (
-    TABLE_NAMES,
     read_frame,
-    read_table,
-    rows_to_frame,
-    stack_table_frames,
+    read_pdb_table,
+    rows_to_pdb_frame,
+    stack_pdb_frames,
 )
 
 
@@ -21,38 +20,33 @@ DEFAULT_ROW_LIMIT = 10_000
 class TableBuffer:
     def __init__(self, *, row_limit: int = DEFAULT_ROW_LIMIT) -> None:
         self._row_limit = max(1, int(row_limit))
-        self._pending: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in TABLE_NAMES}
-        self._spilled: dict[str, list[Path]] = {table_name: [] for table_name in TABLE_NAMES}
+        self._pending: list[dict[str, Any]] = []
+        self._spilled: list[Path] = []
         self._tmp_dir = tempfile.TemporaryDirectory(prefix="minimum_atw_table_buffer_")
         self._tmp_path = Path(self._tmp_dir.name)
 
-    def add(self, table_name: str, row: dict[str, Any]) -> None:
-        rows = self._pending[table_name]
-        rows.append(row)
-        if len(rows) >= self._row_limit:
-            self._flush_table(table_name)
+    def add(self, row: dict[str, Any]) -> None:
+        self._pending.append(row)
+        if len(self._pending) >= self._row_limit:
+            self._flush()
 
-    def add_rows(self, table_name: str, rows: list[dict[str, Any]]) -> None:
+    def add_rows(self, rows: list[dict[str, Any]]) -> None:
         for row in rows:
-            self.add(table_name, row)
+            self.add(row)
 
-    def _flush_table(self, table_name: str) -> None:
-        rows = self._pending[table_name]
-        if not rows:
+    def _flush(self) -> None:
+        if not self._pending:
             return
-        part_index = len(self._spilled[table_name])
-        part_path = self._tmp_path / f"{table_name}_{part_index:04d}.parquet"
-        rows_to_frame(rows, table_name).to_parquet(part_path, index=False)
-        self._spilled[table_name].append(part_path)
-        self._pending[table_name] = []
+        part_index = len(self._spilled)
+        part_path = self._tmp_path / f"pdb_{part_index:04d}.parquet"
+        rows_to_pdb_frame(self._pending).to_parquet(part_path, index=False)
+        self._spilled.append(part_path)
+        self._pending = []
 
-    def finalize(self) -> dict[str, pd.DataFrame]:
-        frames: dict[str, pd.DataFrame] = {}
-        for table_name in TABLE_NAMES:
-            self._flush_table(table_name)
-            spilled_frames = [read_table(path, table_name) for path in self._spilled[table_name]]
-            frames[table_name] = stack_table_frames(spilled_frames, table_name)
-        return frames
+    def finalize(self) -> pd.DataFrame:
+        self._flush()
+        spilled_frames = [read_pdb_table(path) for path in self._spilled]
+        return stack_pdb_frames(spilled_frames)
 
     def close(self) -> None:
         self._tmp_dir.cleanup()

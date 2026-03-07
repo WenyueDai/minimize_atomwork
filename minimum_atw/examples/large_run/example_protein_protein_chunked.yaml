@@ -29,7 +29,7 @@ structure_manipulations:
 dataset_manipulations:
   - "superimpose_homology"
 
-# Built-in record plugins:
+# Built-in PDB calculation plugins:
 # - "identity"
 # - "chain_stats"
 # - "role_sequences"

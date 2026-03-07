@@ -8,7 +8,7 @@ import numpy as np
 import biotite.structure as struc
 
 
-TableName = Literal["structures", "chains", "roles", "interfaces"]
+GrainName = Literal["structure", "chain", "role", "interface"]
 
 
 @dataclass
@@ -37,12 +37,12 @@ class Context:
 class BasePlugin:
     name = ""
     prefix = ""
-    table: TableName = "structures"
+    grain: GrainName = "structure"
     execution = "in_process"
     resource_class = "lightweight"
     execution_mode = "batched"
     failure_policy = "continue"
-    extension_class = "record_plugin"
+    extension_class = "pdb_calculation"
     analysis_category = "structure_analysis"
 
     def run(self, ctx: Context) -> Iterable[dict]:
@@ -53,7 +53,7 @@ class BasePlugin:
 
 
 class InterfacePlugin(BasePlugin):
-    table: TableName = "interfaces"
+    grain: GrainName = "interface"
     analysis_category = "interface_analysis"
 
     def iter_role_pairs(self, ctx: Context):
@@ -75,7 +75,7 @@ class InterfacePlugin(BasePlugin):
 
 
 class ChainPlugin(BasePlugin):
-    table: TableName = "chains"
+    grain: GrainName = "chain"
     analysis_category = "structure_analysis"
 
     def iter_chains(self, ctx: Context):
@@ -93,7 +93,7 @@ class ChainPlugin(BasePlugin):
 
 
 class RolePlugin(BasePlugin):
-    table: TableName = "roles"
+    grain: GrainName = "role"
     analysis_category = "structure_analysis"
 
     def iter_roles(self, ctx: Context):

@@ -7,7 +7,7 @@ from pathlib import Path
 
 try:
     from biotite.structure.io import load_structure
-    from minimum_atw.plugins.interface_analysis.interface_metrics import (
+    from minimum_atw.plugins.pdb.calculation.interface_analysis.interface_metrics import (
         chain_residue_entries,
         interface_contact_summary,
         interface_residue_contact_pairs,
