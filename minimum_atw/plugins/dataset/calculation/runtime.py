@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 import json
 import shutil
 from pathlib import Path
@@ -15,18 +16,23 @@ from ....core.output_files import (
     read_output_metadata,
 )
 from ....core.tables import (
-    PDB_GRAINS,
-    PDB_KEY_COLS,
     count_pdb_rows,
     empty_pdb_frame,
-    merge_pdb_frames,
+    merge_pdb_frames_bulk,
     read_pdb_table,
-    stack_pdb_frames,
     write_pdb_table,
 )
 from . import DATASET_CALCULATION_REGISTRY, DEFAULT_DATASET_CALCULATIONS, DatasetAnalysisContext, DatasetAnalysisResult
 from ....core.registry import instantiate_unit
 from ....runtime.workspace import prepared_dir as _prepared_dir
+
+
+@dataclass(frozen=True)
+class _DatasetAnalysisSpec:
+    name: str
+    plugin: object
+    params: dict[str, object]
+    required: dict[str, tuple[str, ...] | None]
 
 
 def _read_dataset_metadata(out_dir: Path) -> dict[str, object]:
@@ -41,22 +47,6 @@ def _read_output_table(
 ) -> pd.DataFrame:
     metadata = _read_dataset_metadata(out_dir)
     path = pdb_output_path(out_dir, metadata=metadata)
-    legacy_filename = {"interface": "interfaces.parquet", "role": "roles.parquet"}.get(grain, f"{grain}.parquet")
-    legacy_path = out_dir / legacy_filename
-    if not path.exists() and legacy_path.exists():
-        if not columns:
-            return pd.read_parquet(legacy_path)
-        parquet = pq.ParquetFile(legacy_path)
-        available = set(parquet.schema.names)
-        present = [column for column in columns if column in available]
-        missing = [column for column in columns if column not in available]
-        if not present:
-            frame = pd.DataFrame(index=range(parquet.metadata.num_rows))
-        else:
-            frame = pd.read_parquet(legacy_path, columns=present)
-        for column in missing:
-            frame[column] = pd.NA
-        return frame.loc[:, [column for column in columns if column in frame.columns]].reset_index(drop=True)
     if not path.exists():
         return pd.DataFrame(columns=columns or [])
     if not columns:
@@ -80,37 +70,11 @@ def _read_output_table(
     return frame.loc[:, ordered].reset_index(drop=True)
 
 
-def _legacy_grain_path(out_dir: Path, grain: str) -> Path:
-    legacy_filename = {"interface": "interfaces.parquet", "role": "roles.parquet"}.get(grain, f"{grain}.parquet")
-    return out_dir / legacy_filename
-
-
-def _load_legacy_pdb_table(out_dir: Path) -> pd.DataFrame:
-    frames: list[pd.DataFrame] = []
-    for grain in PDB_GRAINS:
-        legacy_path = _legacy_grain_path(out_dir, grain)
-        if not legacy_path.exists():
-            continue
-        frame = pd.read_parquet(legacy_path).copy()
-        frame["grain"] = grain
-        for key in PDB_KEY_COLS:
-            if key not in frame.columns:
-                frame[key] = ""
-            else:
-                frame[key] = frame[key].fillna("")
-        ordered = [column for column in PDB_KEY_COLS if column in frame.columns]
-        ordered.extend(column for column in frame.columns if column not in ordered)
-        frames.append(frame.loc[:, ordered])
-    if not frames:
-        return empty_pdb_frame()
-    return stack_pdb_frames(frames)
-
-
 def _load_existing_pdb_table(out_dir: Path, metadata: dict[str, object]) -> pd.DataFrame:
     path = pdb_output_path(out_dir, metadata=metadata)
     if path.exists():
         return read_pdb_table(path)
-    return _load_legacy_pdb_table(out_dir)
+    return empty_pdb_frame()
 
 
 def _metadata_path(out_dir: Path) -> Path | None:
@@ -165,6 +129,92 @@ def _cleanup_prepared_outputs(out_dir: Path) -> bool:
     return True
 
 
+def _normalize_required_columns(required: dict[str, list[str]] | None) -> dict[str, tuple[str, ...] | None]:
+    if not required:
+        return {"interface": None, "role": None}
+    normalized: dict[str, tuple[str, ...] | None] = {}
+    for grain, columns in dict(required).items():
+        if not columns:
+            normalized[str(grain)] = None
+            continue
+        normalized[str(grain)] = tuple(dict.fromkeys(str(column) for column in columns))
+    return normalized
+
+
+def _collect_analysis_specs(
+    analysis_names: tuple[str, ...],
+    dataset_analysis_params: dict[str, dict[str, object]] | None,
+) -> list[_DatasetAnalysisSpec]:
+    specs: list[_DatasetAnalysisSpec] = []
+    for analysis_name in analysis_names:
+        if analysis_name not in DATASET_CALCULATION_REGISTRY:
+            raise ValueError(
+                f"Unknown dataset analysis '{analysis_name}'. Available: {sorted(DATASET_CALCULATION_REGISTRY)}"
+            )
+        plugin = instantiate_unit(DATASET_CALCULATION_REGISTRY[analysis_name])
+        params = dict((dataset_analysis_params or {}).get(analysis_name, {}))
+        required = plugin.required_columns(params) if hasattr(plugin, "required_columns") else {}
+        specs.append(
+            _DatasetAnalysisSpec(
+                name=analysis_name,
+                plugin=plugin,
+                params=params,
+                required=_normalize_required_columns(required),
+            )
+        )
+    return specs
+
+
+def _union_required_columns(specs: list[_DatasetAnalysisSpec]) -> dict[str, tuple[str, ...] | None]:
+    combined: dict[str, list[str] | None] = {}
+    for spec in specs:
+        for grain, columns in spec.required.items():
+            if grain not in combined:
+                combined[grain] = None if columns is None else list(columns)
+                continue
+            if combined[grain] is None or columns is None:
+                combined[grain] = None
+                continue
+            existing = combined[grain]
+            assert existing is not None
+            for column in columns:
+                if column not in existing:
+                    existing.append(column)
+    return {
+        grain: None if columns is None else tuple(columns)
+        for grain, columns in combined.items()
+    }
+
+
+def _load_grain_frames(
+    out_dir: Path,
+    requested: dict[str, tuple[str, ...] | None],
+) -> dict[str, pd.DataFrame]:
+    return {
+        grain: _read_output_table(out_dir, grain, columns=list(columns) if columns is not None else None)
+        for grain, columns in requested.items()
+    }
+
+
+def _select_analysis_grains(
+    loaded_grains: dict[str, pd.DataFrame],
+    required: dict[str, tuple[str, ...] | None],
+) -> dict[str, pd.DataFrame]:
+    selected: dict[str, pd.DataFrame] = {}
+    for grain, columns in required.items():
+        frame = loaded_grains.get(grain, pd.DataFrame())
+        if columns is None:
+            selected[grain] = frame.copy()
+            continue
+        present = [column for column in columns if column in frame.columns]
+        missing = [column for column in columns if column not in frame.columns]
+        subset = frame.loc[:, present].copy() if present else pd.DataFrame(index=range(len(frame)))
+        for column in missing:
+            subset[column] = pd.NA
+        selected[grain] = subset.loc[:, list(columns)].reset_index(drop=True)
+    return selected
+
+
 def analyze_dataset_outputs(
     out_dir: Path,
     *,
@@ -178,9 +228,8 @@ def analyze_dataset_outputs(
     print(f"[dataset] start out_dir={out_dir}", flush=True)
     metadata = _read_dataset_metadata(out_dir)
     pdb_path = pdb_output_path(out_dir, metadata=metadata)
-    legacy_paths = [out_dir / "interfaces.parquet", out_dir / "roles.parquet"]
-    if not pdb_path.exists() and not any(path.exists() for path in legacy_paths):
-        raise FileNotFoundError(f"Missing pdb table or legacy grain tables in: {out_dir}")
+    if not pdb_path.exists():
+        raise FileNotFoundError(f"Missing pdb table in: {out_dir}")
 
     analysis_dir = out_dir / "dataset_analysis"
     if analysis_dir.exists():
@@ -192,54 +241,40 @@ def analyze_dataset_outputs(
     analysis_names = tuple(dataset_analyses or DEFAULT_DATASET_CALCULATIONS)
     metadata = _read_dataset_metadata(out_dir)
     metadata_counts = metadata.get("counts") if isinstance(metadata.get("counts"), dict) else {}
+    analysis_specs = _collect_analysis_specs(analysis_names, dataset_analysis_params)
+    requested_grains = _union_required_columns(analysis_specs)
+    loaded_grains = _load_grain_frames(out_dir, requested_grains)
     n_interfaces = metadata_counts.get("interfaces")
     if n_interfaces is None:
-        n_interfaces = len(_read_output_table(out_dir, "interface", columns=["path"]))
+        interface_frame = loaded_grains.get("interface")
+        if interface_frame is not None:
+            n_interfaces = len(interface_frame)
+        else:
+            n_interfaces = len(_read_output_table(out_dir, "interface", columns=["path"]))
     summary: dict[str, int | str] = {
         "n_interfaces": int(n_interfaces),
         "dataset_analyses": ",".join(analysis_names),
     }
-    cache: dict[tuple[str, tuple[str, ...]], pd.DataFrame] = {}
+    if reference_dataset_dir is not None:
+        ref_dir = Path(reference_dataset_dir).resolve()
+        reference_loaded_grains = _load_grain_frames(ref_dir, requested_grains)
+    else:
+        reference_loaded_grains = {}
     analysis_frames: list[pd.DataFrame] = []
     pdb_update_frames: list[pd.DataFrame] = []
-    for analysis_name in analysis_names:
+    for spec in analysis_specs:
+        analysis_name = spec.name
         print(f"[dataset:{analysis_name}] start", flush=True)
-        if analysis_name not in DATASET_CALCULATION_REGISTRY:
-            raise ValueError(
-                f"Unknown dataset analysis '{analysis_name}'. Available: {sorted(DATASET_CALCULATION_REGISTRY)}"
-            )
-        plugin = instantiate_unit(DATASET_CALCULATION_REGISTRY[analysis_name])
-        params = dict((dataset_analysis_params or {}).get(analysis_name, {}))
-        required = plugin.required_columns(params) if hasattr(plugin, "required_columns") else {}
-
-        def load_table(table_name: str) -> pd.DataFrame:
-            columns = tuple(required.get(table_name, []))
-            cache_key = (table_name, columns)
-            if cache_key not in cache:
-                cache[cache_key] = _read_output_table(
-                    out_dir,
-                    table_name,
-                    columns=list(columns) if columns else None,
-                )
-            return cache[cache_key]
-
-        grain_names = list(required.keys()) if required else ["interface", "role"]
-        grains = {grain_name: load_table(grain_name) for grain_name in grain_names}
-        if reference_dataset_dir is not None:
-            ref_dir = Path(reference_dataset_dir).resolve()
-            ref_metadata = _read_dataset_metadata(ref_dir)
-            ref_grain_names = list(required.keys()) if required else ["interface", "role"]
-            reference_grains = {g: _read_output_table(ref_dir, g) for g in ref_grain_names}
-        else:
-            reference_grains = {}
+        grains = _select_analysis_grains(loaded_grains, spec.required)
+        reference_grains = _select_analysis_grains(reference_loaded_grains, spec.required) if reference_loaded_grains else {}
         analysis_ctx = DatasetAnalysisContext(
             out_dir=out_dir,
             grains=grains,
-            params=params,
+            params=spec.params,
             annotations=dict(dataset_annotations or {}),
             reference_grains=reference_grains,
         )
-        dataset_frame, pdb_frame = _normalize_analysis_result(analysis_name, plugin.run(analysis_ctx))
+        dataset_frame, pdb_frame = _normalize_analysis_result(analysis_name, spec.plugin.run(analysis_ctx))
         if "analysis" in dataset_frame.columns:
             dataset_frame["analysis"] = dataset_frame["analysis"].fillna(str(analysis_name)).astype(str)
         elif not dataset_frame.empty:
@@ -263,8 +298,7 @@ def analyze_dataset_outputs(
     combined.to_parquet(dataset_path, index=False)
     if pdb_update_frames:
         merged_pdb = _load_existing_pdb_table(out_dir, metadata)
-        for pdb_frame in pdb_update_frames:
-            merged_pdb = merge_pdb_frames(merged_pdb, pdb_frame)
+        merged_pdb = merge_pdb_frames_bulk(merged_pdb, pdb_update_frames)
         write_pdb_table(
             out_dir,
             merged_pdb,

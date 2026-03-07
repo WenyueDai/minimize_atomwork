@@ -42,35 +42,11 @@ class DatasetClusterTests(unittest.TestCase):
 
             pd.DataFrame(
                 [
-                    {
-                        "path": str(p1),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
-                    {
-                        "path": str(p2),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
-                    {
-                        "path": str(p3),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
+                    {"grain": "interface", "path": str(p1), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
+                    {"grain": "interface", "path": str(p2), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
+                    {"grain": "interface", "path": str(p3), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
                 ]
-            ).to_parquet(root / "interfaces.parquet", index=False)
+            ).to_parquet(root / "pdb.parquet", index=False)
 
             summary = analyze_dataset_outputs(
                 root,
@@ -108,24 +84,10 @@ class DatasetClusterTests(unittest.TestCase):
 
             pd.DataFrame(
                 [
-                    {
-                        "path": str(p1),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                    },
-                    {
-                        "path": str(p2),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                    },
+                    {"grain": "interface", "path": str(p1), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G"},
+                    {"grain": "interface", "path": str(p2), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G"},
                 ]
-            ).to_parquet(root / "interfaces.parquet", index=False)
+            ).to_parquet(root / "pdb.parquet", index=False)
 
             summary = analyze_dataset_outputs(
                 root,
@@ -160,35 +122,11 @@ class DatasetClusterTests(unittest.TestCase):
 
             pd.DataFrame(
                 [
-                    {
-                        "path": str(p1),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
-                    {
-                        "path": str(p2),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
-                    {
-                        "path": str(p3),
-                        "assembly_id": "1",
-                        "pair": "antibody__antigen",
-                        "role_left": "antibody",
-                        "role_right": "antigen",
-                        "iface__left_interface_residues": "A:1:G;A:2:G",
-                        "iface__right_interface_residues": "B:1:G;B:2:G",
-                    },
+                    {"grain": "interface", "path": str(p1), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
+                    {"grain": "interface", "path": str(p2), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
+                    {"grain": "interface", "path": str(p3), "assembly_id": "1", "pair": "antibody__antigen", "role_left": "antibody", "role_right": "antigen", "iface__left_interface_residues": "A:1:G;A:2:G", "iface__right_interface_residues": "B:1:G;B:2:G"},
                 ]
-            ).to_parquet(root / "interfaces.parquet", index=False)
+            ).to_parquet(root / "pdb.parquet", index=False)
 
             summary = analyze_dataset_outputs(
                 root,

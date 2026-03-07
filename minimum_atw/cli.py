@@ -169,9 +169,7 @@ def main() -> None:
             spec = EXTENSION_CLASSES[extension_class]
             print(f"{spec.display_name} ({extension_class})")
             for item in items:
-                print(
-                    f"  {item.name}: stage={item.stage}, config={item.config_key or 'n/a'}, category={item.analysis_category}"
-                )
+                print(f"  {item.name}: stage={item.stage}, config={item.config_key or 'n/a'}")
         return
 
     if args.command == "analyze-dataset":

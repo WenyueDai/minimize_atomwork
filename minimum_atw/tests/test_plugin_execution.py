@@ -122,7 +122,7 @@ class PluginExecutionModelTests(unittest.TestCase):
                 plugin_counts = run_plugins(cfg, cfg.plugins)
                 merged_counts = merge_outputs(cfg)
 
-            self.assertEqual(len(load_calls), 2)
+            self.assertEqual(len(load_calls), 1)
             self.assertEqual(plugin_counts["structures"], 1)
             self.assertEqual(plugin_counts["interfaces"], 1)
             self.assertEqual(plugin_counts["status"], 3)

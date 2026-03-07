@@ -31,7 +31,7 @@ from .tables import (
     STATUS_COLS,
     TABLE_SUFFIX,
     count_pdb_rows as _count_pdb_rows,
-    merge_pdb_frames as _merge_pdb_frames,
+    merge_pdb_frames_bulk as _merge_pdb_frames_bulk,
     read_frame as _read_frame,
     read_pdb_table as _read_pdb_table,
     stack_pdb_frames as _stack_pdb_frames,
@@ -236,6 +236,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     status_frames = [_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)]
     bad_frames = [_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS)]
 
+    plugin_pdb_frames: list[pd.DataFrame] = []
     for plugin_name in cfg.plugins:
         plugin_pdb = _plugin_pdb_path(out_dir, plugin_name)
         plugin_status = _plugin_status_path(out_dir, plugin_name)
@@ -245,9 +246,10 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
                 f"Plugin outputs not found for configured plugin '{plugin_name}' "
                 f"in {_plugin_pdb_path(out_dir, plugin_name).parent}"
             )
-        merged_pdb = _merge_pdb_frames(merged_pdb, _read_pdb_table(plugin_pdb))
+        plugin_pdb_frames.append(_read_pdb_table(plugin_pdb))
         status_frames.append(_read_frame(plugin_status, STATUS_COLS))
         bad_frames.append(_read_frame(plugin_bad, BAD_COLS))
+    merged_pdb = _merge_pdb_frames_bulk(merged_pdb, plugin_pdb_frames)
 
     merged_status = _merge_tracking_frames(status_frames)
     merged_bad = _merge_tracking_frames(bad_frames)

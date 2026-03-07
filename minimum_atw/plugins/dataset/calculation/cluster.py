@@ -235,27 +235,52 @@ class _ClusterJob:
 class _StructureLoader:
     def __init__(self):
         self._cache: dict[str, Any] = {}
+        self._ca_lookup_cache: dict[str, dict[tuple[str, int], np.ndarray]] = {}
+        self._point_cloud_cache: dict[tuple[str, tuple[tuple[str, int], ...]], np.ndarray] = {}
 
     def load(self, load_path: str):
         if load_path not in self._cache:
             self._cache[load_path] = load_structure(load_path)
         return self._cache[load_path]
 
+    def ca_lookup(self, load_path: str) -> dict[tuple[str, int], np.ndarray]:
+        if load_path in self._ca_lookup_cache:
+            return self._ca_lookup_cache[load_path]
+        arr = self.load(load_path)
+        atom_names = arr.atom_name.astype(str)
+        ca_atoms = arr[atom_names == "CA"]
+        lookup: dict[tuple[str, int], np.ndarray] = {}
+        for atom in ca_atoms:
+            key = (str(atom.chain_id), int(atom.res_id))
+            if key not in lookup:
+                lookup[key] = np.asarray(atom.coord, dtype=float)
+        self._ca_lookup_cache[load_path] = lookup
+        return lookup
+
+    def point_cloud(self, load_path: str, residues: list[tuple[str, int]]) -> np.ndarray:
+        residue_key = tuple((str(chain_id), int(res_id)) for chain_id, res_id in residues)
+        cache_key = (load_path, residue_key)
+        if cache_key in self._point_cloud_cache:
+            return self._point_cloud_cache[cache_key]
+
+        coords: list[np.ndarray] = []
+        ca_lookup = self.ca_lookup(load_path)
+        for residue in residue_key:
+            coord = ca_lookup.get(residue)
+            if coord is not None:
+                coords.append(coord)
+        if not coords:
+            point_cloud = np.empty((0, 3), dtype=float)
+        else:
+            point_cloud = np.vstack(coords)
+        self._point_cloud_cache[cache_key] = point_cloud
+        return point_cloud
+
 
 def _ca_point_cloud_for_residues(loader: _StructureLoader, load_path: str, residues: list[tuple[str, int]]) -> np.ndarray:
     if not residues:
         return np.empty((0, 3), dtype=float)
-    arr = loader.load(load_path)
-    coords: list[np.ndarray] = []
-    for chain_id, res_id in residues:
-        mask = (arr.chain_id.astype(str) == str(chain_id)) & (arr.res_id.astype(int) == int(res_id)) & (arr.atom_name.astype(str) == "CA")
-        selected = arr[mask]
-        if len(selected) == 0:
-            continue
-        coords.append(np.asarray(selected.coord[0], dtype=float))
-    if not coords:
-        return np.empty((0, 3), dtype=float)
-    return np.vstack(coords)
+    return loader.point_cloud(load_path, residues)
 
 
 def _normalize_jobs(params: dict[str, object] | None) -> list[_ClusterJob]:
@@ -400,6 +425,7 @@ class ClusterPlugin(BaseDatasetPlugin):
             return DatasetAnalysisResult(dataset_frame=pd.DataFrame(columns=["analysis"]), pdb_frame=empty_pdb_frame())
 
         rows: list[dict[str, object]] = []
+        residue_cache: dict[str, list[tuple[str, int]]] = {}
         for job in jobs:
             residue_column = f"iface__{job.interface_side}_interface_residues"
             job_df = df
@@ -411,7 +437,8 @@ class ClusterPlugin(BaseDatasetPlugin):
                 path = str(getattr(row, "path", "") or "")
                 assembly_id = str(getattr(row, "assembly_id", "") or "")
                 pair = str(getattr(row, "pair", "") or "")
-                residues = _parse_residue_tokens(getattr(row, residue_column, ""))
+                residue_tokens = str(getattr(row, residue_column, "") or "")
+                residues = residue_cache.setdefault(residue_tokens, _parse_residue_tokens(residue_tokens))
                 if job.mode == "superimposed_interface_ca":
                     load_path = superimposed_map.get(path)
                     if load_path is None:

@@ -1,6 +1,7 @@
 """Execute phase: run pdb_calculation plugins against prepared structures."""
 
 from __future__ import annotations
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 import threading
@@ -9,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from ..plugins import PLUGIN_REGISTRY
+from ..plugins.base import Context
 from ..runtime.workspace import (
     load_prepared_manifest as _load_prepared_manifest,
     plugin_bad_path as _plugin_bad_path,
@@ -23,11 +25,13 @@ from .config import Config
 from .registry import instantiate_unit
 from .tables import (
     BAD_COLS,
+    BufferedTableWriter,
     PDB_TABLE_NAME,
     STATUS_COLS,
     TABLE_SUFFIX,
-    append_rows as _append_rows,
+    clear_table_artifacts as _clear_table_artifacts,
     count_pdb_rows as _count_pdb_rows,
+    normalize_pdb_frame as _normalize_pdb_frame,
     read_frame as _read_frame,
     read_pdb_table as _read_pdb_table,
 )
@@ -70,13 +74,25 @@ def _plugin_progress_line(
     )
 
 
+def _should_log_progress(
+    *,
+    done: int,
+    total: int,
+    cadence: int,
+    last_logged_done: int,
+    status_key: str | None = None,
+) -> bool:
+    if done <= 0 or done >= total:
+        return True
+    if status_key is not None and status_key != "ok":
+        return True
+    return (done - last_logged_done) >= max(int(cadence), 1)
+
+
 @dataclass(frozen=True)
 class PluginExecutionSpec:
     name: str
     plugin: Any
-    input_model: str
-    execution_mode: str
-    failure_policy: str
 
 
 @dataclass
@@ -85,9 +101,19 @@ class PluginRunState:
     root: Path
     processed: set[str]
     counts: dict[str, int]
+    pdb_writer: BufferedTableWriter
+    status_writer: BufferedTableWriter
+    bad_writer: BufferedTableWriter
 
     @classmethod
-    def from_out_dir(cls, out_dir: Path, spec: PluginExecutionSpec, checkpoint_enabled: bool) -> "PluginRunState":
+    def from_out_dir(
+        cls,
+        out_dir: Path,
+        spec: PluginExecutionSpec,
+        checkpoint_enabled: bool,
+        *,
+        flush_interval: int,
+    ) -> "PluginRunState":
         plugins_dir = _plugins_dir(out_dir)
         processed: set[str] = set()
         status_path = _plugin_status_path(out_dir, spec.name)
@@ -95,20 +121,39 @@ class PluginRunState:
         pdb_path = _plugin_pdb_path(out_dir, spec.name)
 
         if checkpoint_enabled and plugins_dir.exists():
-            if status_path.exists():
-                status_frame = pd.read_parquet(status_path)
+            status_frame = _read_frame(status_path, STATUS_COLS)
+            if not status_frame.empty:
                 processed = set(status_frame["path"].tolist())
-            counts = {PDB_TABLE_NAME: len(pd.read_parquet(pdb_path)) if pdb_path.exists() else 0}
-            counts["status"] = len(pd.read_parquet(status_path)) if status_path.exists() else 0
-            counts["bad"] = len(pd.read_parquet(bad_path)) if bad_path.exists() else 0
+            counts = {PDB_TABLE_NAME: len(_read_pdb_table(pdb_path))}
+            counts["status"] = len(status_frame)
+            counts["bad"] = len(_read_frame(bad_path, BAD_COLS))
         else:
             plugins_dir.mkdir(parents=True, exist_ok=True)
             for path in (status_path, bad_path, pdb_path):
-                if path.exists():
-                    path.unlink()
+                _clear_table_artifacts(path)
             counts = {PDB_TABLE_NAME: 0, "status": 0, "bad": 0}
 
-        return cls(spec=spec, root=plugins_dir, processed=processed, counts=counts)
+        return cls(
+            spec=spec,
+            root=plugins_dir,
+            processed=processed,
+            counts=counts,
+            pdb_writer=BufferedTableWriter(
+                pdb_path,
+                flush_interval=flush_interval,
+                normalize_frame=_normalize_pdb_frame,
+            ),
+            status_writer=BufferedTableWriter(
+                status_path,
+                flush_interval=flush_interval,
+                columns=STATUS_COLS,
+            ),
+            bad_writer=BufferedTableWriter(
+                bad_path,
+                flush_interval=flush_interval,
+                columns=BAD_COLS,
+            ),
+        )
 
     def record_result(
         self,
@@ -117,12 +162,17 @@ class PluginRunState:
         bad_rows: list[dict[str, Any]],
     ) -> None:
         if pdb_rows:
-            _append_rows(self.pdb_path, pdb_rows)
+            self.pdb_writer.append_rows(pdb_rows)
             self.counts[PDB_TABLE_NAME] += len(pdb_rows)
-        _append_rows(self.status_path, status_rows, STATUS_COLS)
+        self.status_writer.append_rows(status_rows)
         self.counts["status"] += len(status_rows)
-        _append_rows(self.bad_path, bad_rows, BAD_COLS)
+        self.bad_writer.append_rows(bad_rows)
         self.counts["bad"] += len(bad_rows)
+
+    def finalize_outputs(self) -> None:
+        self.pdb_writer.materialize(skip_empty=True)
+        self.status_writer.materialize(skip_empty=True)
+        self.bad_writer.materialize(skip_empty=True)
 
     def mark_bad(self, source_path: Path, exc: Exception) -> None:
         self.record_result(
@@ -145,116 +195,83 @@ class PluginRunState:
         return self.root / f"{self.spec.name}.bad_files{TABLE_SUFFIX}"
 
 
-def _resolve_input_model(plugin: Any) -> str:
-    explicit = getattr(plugin, "input_model", None)
-    if explicit:
-        return str(explicit)
+class _LoadedContextCache:
+    def __init__(self) -> None:
+        self._templates: dict[tuple[str, str], Context] = {}
+        self._failures: dict[tuple[str, str], Exception] = {}
 
-    # Compatibility fallback for older third-party plugins.
-    resource_class = str(getattr(plugin, "resource_class", "lightweight") or "lightweight")
-    if resource_class == "lightweight":
-        return "atom_array"
-    return "hybrid"
+    def get(self, source_path: Path, prepared_path: Path, cfg: Config) -> Context:
+        key = (str(source_path.resolve()), str(prepared_path.resolve()))
+        if key in self._failures:
+            raise self._failures[key]
+        template = self._templates.get(key)
+        if template is None:
+            try:
+                template = _prepare_context(source_path, prepared_path, cfg)
+            except Exception as exc:
+                self._failures[key] = exc
+                raise
+            self._templates[key] = template
+        return self._clone(template)
+
+    def _clone(self, template: Context) -> Context:
+        clone = Context(
+            path=template.path,
+            assembly_id=template.assembly_id,
+            aa=template.aa.copy(),
+            role_map={name: tuple(chain_ids) for name, chain_ids in template.role_map.items()},
+            config=template.config,
+            metadata=deepcopy(template.metadata),
+        )
+        clone.rebuild_views()
+        return clone
 
 
 def _plugin_execution_spec(plugin_name: str) -> PluginExecutionSpec:
     if plugin_name not in PLUGIN_REGISTRY:
         raise KeyError(f"Unknown plugin: {plugin_name}")
-    plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
-    return PluginExecutionSpec(
-        name=plugin_name,
-        plugin=plugin,
-        input_model=_resolve_input_model(plugin),
-        execution_mode=str(getattr(plugin, "execution_mode", "batched") or "batched"),
-        failure_policy=str(getattr(plugin, "failure_policy", "continue") or "continue"),
-    )
+    return PluginExecutionSpec(name=plugin_name, plugin=instantiate_unit(PLUGIN_REGISTRY[plugin_name]))
 
 
 def _resolve_plugin_specs(plugin_names: list[str]) -> list[PluginExecutionSpec]:
     return [_plugin_execution_spec(plugin_name) for plugin_name in plugin_names]
 
 
-def _validate_plugin_requires(specs: list[PluginExecutionSpec]) -> None:
-    configured = {spec.name for spec in specs}
+def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
+    """Return specs in topological order (one per group), respecting 'requires' dependencies."""
+    spec_by_name = {spec.name: spec for spec in specs}
+    configured = set(spec_by_name)
+
     for spec in specs:
         missing = [r for r in getattr(spec.plugin, "requires", []) if r not in configured]
         if missing:
-            raise ValueError(
-                f"Plugin '{spec.name}' requires plugins that are not configured: {missing}"
-            )
+            raise ValueError(f"Plugin '{spec.name}' requires plugins not configured: {missing}")
 
+    order: list[PluginExecutionSpec] = []
+    visited: set[str] = set()
 
-def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
-    """Build an ordered execution plan respecting 'requires' dependencies.
-
-    Returns groups in topological order: each group can only start after all
-    prior groups have completed. Within a group, execution semantics are:
-    - atom_array specs at level 0 are batched together (single-pass file load)
-    - all other specs run as isolated single-plugin groups
-    """
-    _validate_plugin_requires(specs)
-
-    spec_by_name = {spec.name: spec for spec in specs}
-
-    # Compute each spec's dependency depth via memoised DFS
-    depths: dict[str, int] = {}
-
-    def _depth(name: str, visiting: frozenset[str]) -> int:
-        if name in depths:
-            return depths[name]
+    def _visit(name: str, visiting: frozenset[str]) -> None:
+        if name in visited:
+            return
         if name in visiting:
-            chain = " -> ".join(sorted(visiting)) + f" -> {name}"
-            raise ValueError(f"Circular dependency detected: {chain}")
+            raise ValueError(f"Circular dependency: {' -> '.join(sorted(visiting))} -> {name}")
         visiting = visiting | {name}
-        spec = spec_by_name.get(name)
-        reqs = [r for r in getattr(spec.plugin if spec else None, "requires", []) if r in spec_by_name]
-        d = (max(_depth(r, visiting) for r in reqs) + 1) if reqs else 0
-        depths[name] = d
-        return d
+        spec = spec_by_name[name]
+        for req in getattr(spec.plugin, "requires", []):
+            if req in spec_by_name:
+                _visit(req, visiting)
+        visited.add(name)
+        order.append(spec)
 
     for spec in specs:
-        _depth(spec.name, frozenset())
+        _visit(spec.name, frozenset())
 
-    max_depth = max(depths.values(), default=0)
-
-    plan: list[list[PluginExecutionSpec]] = []
-    for depth in range(max_depth + 1):
-        level_specs = [s for s in specs if depths[s.name] == depth]
-        if depth == 0:
-            # Batch eligible atom_array specs; isolate everything else
-            batchable = [s for s in level_specs if s.execution_mode == "batched" and s.input_model == "atom_array" and not getattr(s.plugin, "requires", [])]
-            isolated = [s for s in level_specs if s not in batchable]
-            if batchable:
-                plan.append(batchable)
-            for s in isolated:
-                plan.append([s])
-        else:
-            for s in level_specs:
-                plan.append([s])
-    return plan
+    return [[spec] for spec in order]
 
 
 def plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
-    specs = _resolve_plugin_specs(plugin_names)
-    groups = _plan_plugin_execution(specs)
-    return {
-        "plugins": {
-            spec.name: {
-                "input_model": spec.input_model,
-                "execution_mode": spec.execution_mode,
-                "failure_policy": spec.failure_policy,
-            }
-            for spec in specs
-        },
-        "groups": [
-            {
-                "plugins": [spec.name for spec in group],
-                "input_model": "mixed" if len({spec.input_model for spec in group}) > 1 else group[0].input_model,
-                "execution_mode": "mixed" if len({spec.execution_mode for spec in group}) > 1 else group[0].execution_mode,
-            }
-            for group in groups
-        ],
-    }
+    groups = _plan_plugin_execution(_resolve_plugin_specs(plugin_names))
+    return {"plugins": [spec.name for group in groups for spec in group]}
 
 
 def _execute_plugin_group(
@@ -262,6 +279,7 @@ def _execute_plugin_group(
     manifest: pd.DataFrame,
     group: list[PluginExecutionSpec],
     states: dict[str, PluginRunState],
+    context_cache: _LoadedContextCache,
 ) -> None:
     if not group:
         return
@@ -272,18 +290,8 @@ def _execute_plugin_group(
         for row in manifest.itertuples(index=False)
         if any(str(getattr(row, "path")) not in states[spec.name].processed for spec in group)
     )
-    if len(group) == 1:
-        spec = group[0]
-        label = (
-            f"[execute] plugin={spec.name} mode=isolated input_model={spec.input_model} "
-            f"pending={total_pending}/{total_structures}"
-        )
-    else:
-        label = (
-            f"[execute] batched plugins={','.join(spec.name for spec in group)} "
-            f"input_model=atom_array pending={total_pending}/{total_structures}"
-        )
-    _log(label)
+    plugins_label = ",".join(spec.name for spec in group)
+    _log(f"[execute] plugin={plugins_label} pending={total_pending}/{total_structures}")
 
     group_targets = {
         spec.name: sum(
@@ -294,7 +302,9 @@ def _execute_plugin_group(
         for spec in group
     }
     group_progress = {spec.name: 0 for spec in group}
+    group_last_logged = {spec.name: 0 for spec in group}
     group_status_counts = {spec.name: {} for spec in group}
+    progress_cadence = max(1, int(cfg.checkpoint_interval))
 
     for spec in group:
         total = int(group_targets[spec.name])
@@ -317,22 +327,30 @@ def _execute_plugin_group(
 
         prepared_path = Path(row.prepared_path)
         try:
-            ctx = _prepare_context(source_path, prepared_path, cfg)
+            ctx = context_cache.get(source_path, prepared_path, cfg)
         except Exception as exc:
             for spec in pending_specs:
                 states[spec.name].mark_bad(source_path, exc)
                 group_progress[spec.name] += 1
                 counts = group_status_counts[spec.name]
                 counts["failed_prepare"] = int(counts.get("failed_prepare", 0)) + 1
-                _log(
-                    _plugin_progress_line(
-                        spec,
-                        done=group_progress[spec.name],
-                        total=int(group_targets[spec.name]),
-                        rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
-                        status_counts=counts,
+                if _should_log_progress(
+                    done=group_progress[spec.name],
+                    total=int(group_targets[spec.name]),
+                    cadence=progress_cadence,
+                    last_logged_done=group_last_logged[spec.name],
+                    status_key="failed_prepare",
+                ):
+                    _log(
+                        _plugin_progress_line(
+                            spec,
+                            done=group_progress[spec.name],
+                            total=int(group_targets[spec.name]),
+                            rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                            status_counts=counts,
+                        )
                     )
-                )
+                    group_last_logged[spec.name] = group_progress[spec.name]
             continue
 
         for spec in pending_specs:
@@ -348,16 +366,24 @@ def _execute_plugin_group(
             if local_status:
                 status = str(local_status[-1].get("status", "unknown"))
             counts[status] = int(counts.get(status, 0)) + 1
-            _log(
-                _plugin_progress_line(
-                    spec,
-                    done=group_progress[spec.name],
-                    total=int(group_targets[spec.name]),
-                    rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
-                    status_counts=counts,
+            if _should_log_progress(
+                done=group_progress[spec.name],
+                total=int(group_targets[spec.name]),
+                cadence=progress_cadence,
+                last_logged_done=group_last_logged[spec.name],
+                status_key=status,
+            ):
+                _log(
+                    _plugin_progress_line(
+                        spec,
+                        done=group_progress[spec.name],
+                        total=int(group_targets[spec.name]),
+                        rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                        status_counts=counts,
+                    )
                 )
-            )
-            if not ok and spec.failure_policy == "raise":
+                group_last_logged[spec.name] = group_progress[spec.name]
+            if not ok and getattr(spec.plugin, "failure_policy", "continue") == "raise":
                 raise RuntimeError(f"Plugin {spec.name} failed for {source_path}")
 
     for spec in group:
@@ -379,16 +405,23 @@ def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
 
     out_dir = Path(cfg.out_dir).resolve()
     manifest = _load_prepared_manifest(out_dir)
+    context_cache = _LoadedContextCache()
     states = {
-        spec.name: PluginRunState.from_out_dir(out_dir, spec, cfg.checkpoint_enabled)
+        spec.name: PluginRunState.from_out_dir(
+            out_dir,
+            spec,
+            cfg.checkpoint_enabled,
+            flush_interval=cfg.checkpoint_interval,
+        )
         for spec in specs
     }
     groups = _plan_plugin_execution(specs)
 
-    if len(groups) > 1:
-        _log(f"[execute] groups={len(groups)}")
     for group in groups:
-        _execute_plugin_group(cfg, manifest, group, states)
+        _execute_plugin_group(cfg, manifest, group, states, context_cache)
+
+    for state in states.values():
+        state.finalize_outputs()
 
     total_counts = {PDB_TABLE_NAME: 0, "status": 0, "bad": 0}
     for state in states.values():

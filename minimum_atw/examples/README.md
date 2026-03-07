@@ -26,6 +26,32 @@ CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antib
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config "$CONFIG"
 ```
 
+## What Happens Inside a Run
+
+Every `minimum-atw run` call (and every chunk inside `run-chunked`) executes four stages in order:
+
+```
+PREPARE  →  EXECUTE  →  MERGE  →  DATASET ANALYSIS
+```
+
+**PREPARE** (`prepare_outputs`)
+: Iterates over input structures. For each one, loads the file into a biotite `AtomArray`, builds `Context(aa, chains, roles, config)`, then runs the `pdb_prepare` registry in two ordered passes:
+: 1. **Quality control** (`prepare_section='quality_control'`): `chain_continuity`, `structure_clashes`. These annotate rows but do not change coordinates.
+: 2. **Structure manipulation** (`prepare_section='structure'`): `center_on_origin`, `superimpose_to_reference`. These may mutate `ctx.aa` in place and call `ctx.rebuild_views()`. The final `ctx.aa` is saved to `_prepared/structures/<name>.bcif`.
+: Writes `_prepared/pdb.parquet` (QC + manipulation output rows, unified by a `grain` column), `_prepared/prepared_manifest.parquet`, and `_prepared/bad_files.parquet`. This directory is the **cache boundary** — downstream stages read from it.
+
+**EXECUTE** (`run_plugins`)
+: Reads `prepared_manifest.parquet`, reloads each prepared structure, and runs each configured `pdb_calculation` plugin sequentially. Each plugin calls `available(ctx)` first — returning `(False, reason)` skips the structure silently. Rows are accumulated in a `TableBuffer` that spills to disk when the memory threshold is crossed. After all structures, each plugin flushes to `_plugins/<name>/pdb.parquet`. All columns are namespaced by `prefix` (e.g. `iface__`, `rolstat__`). The registry rejects prefix and name collisions at startup.
+
+**MERGE** (`merge_outputs`)
+: LEFT JOINs each plugin's `pdb.parquet` onto `_prepared/pdb.parquet` using the identity key columns (`path`, `assembly_id`, `grain`, and `chain_id` / `role` / `pair` as applicable). All base rows are always preserved — plugins that skipped a structure contribute `NaN`. Writes `out_dir/pdb.parquet` (the single wide table), `plugin_status.parquet`, and `bad_files.parquet`.
+
+**DATASET ANALYSIS** (`analyze_dataset_outputs`)
+: Reads the merged `out_dir/pdb.parquet`, filters rows by `grain` column, and runs each configured `dataset_calculation` plugin. Plugins receive a `DatasetAnalysisContext` with grain-filtered DataFrames. Most write aggregate rows to `out_dir/dataset.parquet`. The `cluster` plugin is the exception — it writes cluster labels back directly onto `out_dir/pdb.parquet` interface rows.
+
+**Merge vs stack**
+: There are two distinct merge operations. Within a single run, `merge_outputs` is a **LEFT JOIN** — it adds plugin columns alongside base rows. Across multiple runs (chunked or multi-dataset), `merge_dataset_outputs` is a **STACK** — it concatenates rows from independent runs. LEFT JOIN ≠ STACK.
+
 ## Example folders
 
 - [simple_run/](simple_run/README.md): one-shot local runs and plugin development
@@ -137,7 +163,7 @@ In practice, a common progression is:
 | `keep_intermediate_outputs` | Keep `_prepared` and `_plugins` outputs instead of staging into temp dirs | You are debugging, iterating on one plugin, or want reusable intermediates | Normal production one-shot runs |
 | `keep_prepared_structures` | Save prepared structures to disk | You want to inspect or reuse prepared coordinates, or you use `superimpose_to_reference` and want later dataset analyses to reload aligned structures | You only need merged tabular outputs and are not using prepare-stage superposition |
 | `checkpoint_enabled` | Resume prepare / plugin execution from previous outputs | Long runs, unstable environments, scheduler preemption | Short local runs |
-| `checkpoint_interval` | Intended checkpoint cadence metadata | You are documenting your chosen resume cadence | You are not using checkpointing |
+| `checkpoint_interval` | Flush cadence for checkpointed prepare/plugin outputs | Long runs where you want a balance between resume granularity and write amplification; lower means more frequent checkpoints, higher means fewer larger flushes | You are not using checkpointing or the default cadence is fine |
 
 ### Rosetta-only controls
 
@@ -237,7 +263,7 @@ These columns exist to identify the row. Most are blank on grains where they do 
 | `clash__n_clashing_atoms` | Number of unique atoms participating in clashes |
 | `sup__reference_path` | Reference structure path used by the active superposition path. This can come from the prepare-stage `superimpose_to_reference` manipulation or from the `superimpose_homology` plugin |
 | `sup__on_chains` | Semicolon-separated chain IDs used as the alignment anchor. These chains decide which atoms drive the fit; they do not by themselves decide which atoms contribute to RMSD |
-| `sup__anchor_atoms_fixed`, `sup__anchor_atoms_mobile` | Number of matched atoms from the reference (`fixed`) and the moving structure (`mobile`) that were actually used to compute the alignment transform. If this count is unexpectedly small, the fit is probably fragile |
+| `sup__anchor_atoms` | Number of matched atoms used to compute the alignment transform. If this count is unexpectedly small, the fit is probably fragile |
 | `sup__alignment_method` | Alignment routine used. `superimpose_homology` reports `homologs` or `structural_homologs`; prepare-stage superposition uses the same underlying matching logic |
 | `sup__shared_atoms_rmsd` | RMSD after the transform is applied, computed on all atoms that are shared between the reference structure and the transformed mobile structure. This is broader than the anchor set: for example, you can fit on chain `A` and still measure RMSD on shared atoms from `A`, `B`, and `C` if the reference contains all three |
 | `sup__shared_atoms_count` | Number of shared atoms contributing to `sup__shared_atoms_rmsd` |
@@ -293,12 +319,12 @@ These columns exist to identify the row. Most are blank on grains where they do 
 | `iface__left_interface_residues`, `iface__right_interface_residues` | Semicolon-separated residue tokens `chain:res_id:res_name` |
 | `iface__n_<side>_<role>_cdr<1/2/3>_interface_residues` | Dynamic antibody-interface count columns from `interface_contacts`; names depend on side (`left` or `right`) and role name such as `vh`, `vl`, or `vhh` |
 | `iface__<side>_<role>_cdr<1/2/3>_interface_residues` | Dynamic residue-token lists for the matching CDR interface residues |
-| `ifm__contact_distance` | Contact cutoff recorded by `interface_metrics`; may be pruned if identical to `iface__contact_distance` |
-| `ifm__cell_size` | Cell-list bin size used by `interface_metrics`; may be pruned if redundant |
+| `ifm__contact_distance` | Contact cutoff recorded by `interface_metrics` |
+| `ifm__cell_size` | Cell-list bin size used by `interface_metrics`; equals `contact_distance` when `interface_cell_size` is not set explicitly |
 | `ifm__n_residue_contact_pairs` | Number of unique contacting residue pairs |
 | `ifm__residue_contact_pairs` | Semicolon-separated residue-residue contact tokens `left_chain:left_res:left_name|right_chain:right_res:right_name`. This collapses many atom-atom contacts into unique residue pairs, which is usually easier to compare across structures than `iface__n_contact_atom_pairs` |
 | `ifm__left_interface_residue_labels`, `ifm__right_interface_residue_labels` | Semicolon-separated residue labels `chain:res_id` for interface residues on each side |
-| `ifm__left_n_interface_residues`, `ifm__right_n_interface_residues` | Interface-residue counts on each side; may duplicate `iface__...` columns |
+| `ifm__left_n_interface_residues`, `ifm__right_n_interface_residues` | Interface-residue counts on each side |
 | `ifm__left_interface_charge_sum`, `ifm__right_interface_charge_sum` | Net charge sum over interface residues on each side |
 | `ifm__left_interface_hydrophobic_fraction`, `ifm__right_interface_hydrophobic_fraction` | Fraction of interface residues that are hydrophobic |
 | `ifm__left_interface_polar_fraction`, `ifm__right_interface_polar_fraction` | Fraction of interface residues that are polar |

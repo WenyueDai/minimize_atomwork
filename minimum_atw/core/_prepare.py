@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -23,16 +24,15 @@ from .config import Config, GRAIN_ORDER
 from .registry import instantiate_unit
 from .tables import (
     BAD_COLS,
+    BufferedTableWriter,
     MANIFEST_COLS,
     PDB_KEY_COLS,
     PDB_TABLE_NAME,
     STATUS_COLS,
     TABLE_SUFFIX,
-    append_rows as _append_rows,
+    normalize_pdb_frame as _normalize_pdb_frame,
     count_pdb_rows as _count_pdb_rows,
     merge_pdb_frames as _merge_pdb_frames,
-    read_frame as _read_frame,
-    read_pdb_table as _read_pdb_table,
     rows_to_pdb_frame as _rows_to_pdb_frame,
     write_frame as _write_frame,
 )
@@ -66,41 +66,63 @@ def _empty_pdb_frame() -> pd.DataFrame:
     return pd.DataFrame(columns=PDB_KEY_COLS)
 
 
-def _append_stage_outputs(
-    out_dir: Path,
-    pdb_frame: pd.DataFrame,
-    status_rows: list[dict[str, Any]],
-    bad_rows: list[dict[str, Any]],
-) -> dict[str, int]:
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    if not pdb_frame.empty:
-        path = out_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"
-        if path.exists():
-            existing = _read_pdb_table(path)
-            combined = pd.concat([existing, pdb_frame], ignore_index=True, sort=False)
-            combined = combined.drop_duplicates(subset=PDB_KEY_COLS)
-        else:
-            combined = pdb_frame
-        combined.to_parquet(path, index=False)
-
-    _append_rows(out_dir / f"plugin_status{TABLE_SUFFIX}", status_rows, STATUS_COLS)
-    bad_path = out_dir / f"bad_files{TABLE_SUFFIX}"
-    _append_rows(bad_path, bad_rows, BAD_COLS)
-
-    final_pdb = _read_pdb_table(out_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}")
-    final_status = _read_frame(out_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)
-    final_bad = _read_frame(bad_path, BAD_COLS)
-    return {**_count_pdb_rows(final_pdb), "status": len(final_status), "bad": len(final_bad)}
+def _should_log_progress(
+    *,
+    done: int,
+    total: int,
+    cadence: int,
+    last_logged_done: int,
+    status_key: str | None = None,
+) -> bool:
+    if done <= 0 or done >= total:
+        return True
+    if status_key is not None and status_key != "ok":
+        return True
+    return (done - last_logged_done) >= max(int(cadence), 1)
 
 
-def _prepare_counts_from_dir(prepared_dir: Path) -> dict[str, int]:
-    counts = _count_pdb_rows(_read_pdb_table(prepared_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"))
-    counts["status"] = len(_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
-    counts["bad"] = len(_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
-    return counts
+@dataclass
+class _PrepareOutputWriters:
+    pdb: BufferedTableWriter
+    status: BufferedTableWriter
+    bad: BufferedTableWriter
 
+    @classmethod
+    def create(cls, prepared_dir: Path, *, flush_interval: int) -> "_PrepareOutputWriters":
+        return cls(
+            pdb=BufferedTableWriter(
+                prepared_dir / f"{PDB_TABLE_NAME}{TABLE_SUFFIX}",
+                flush_interval=flush_interval,
+                normalize_frame=_normalize_pdb_frame,
+            ),
+            status=BufferedTableWriter(
+                prepared_dir / f"plugin_status{TABLE_SUFFIX}",
+                flush_interval=flush_interval,
+                columns=STATUS_COLS,
+            ),
+            bad=BufferedTableWriter(
+                prepared_dir / f"bad_files{TABLE_SUFFIX}",
+                flush_interval=flush_interval,
+                columns=BAD_COLS,
+            ),
+        )
 
+    def append(
+        self,
+        pdb_frame: pd.DataFrame,
+        status_rows: list[dict[str, Any]],
+        bad_rows: list[dict[str, Any]],
+    ) -> None:
+        if not pdb_frame.empty:
+            self.pdb.append_frame(pdb_frame)
+        self.status.append_rows(status_rows)
+        self.bad.append_rows(bad_rows)
+
+    def materialize(self) -> dict[str, int]:
+        final_pdb = self.pdb.materialize()
+        final_status = self.status.materialize(skip_empty=True)
+        final_bad = self.bad.materialize(skip_empty=True)
+        return {**_count_pdb_rows(final_pdb), "status": len(final_status), "bad": len(final_bad)}
 def _load_manifest_checkpoint_paths(manifest_ckpt: Path) -> set[str]:
     done_paths: set[str] = set()
     if not manifest_ckpt.exists():
@@ -221,6 +243,10 @@ def _prepare_outputs_checkpointed(
     discovered = _discover(input_dir)
     initial_done = int(len(done_paths))
     prepared_dir.mkdir(parents=True, exist_ok=True)
+    output_writers = _PrepareOutputWriters.create(
+        prepared_dir,
+        flush_interval=cfg.checkpoint_interval,
+    )
     if cfg.keep_prepared_structures:
         prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -229,10 +255,12 @@ def _prepare_outputs_checkpointed(
         f"units={','.join(unit.name for unit in manipulation_units) or 'none'}"
     )
     unit_progress = {unit.name: initial_done for unit in manipulation_units}
+    unit_last_logged = {unit.name: initial_done for unit in manipulation_units}
     unit_status_counts = {
         unit.name: ({"skipped_checkpoint": initial_done} if initial_done > 0 else {})
         for unit in manipulation_units
     }
+    progress_cadence = max(1, int(cfg.checkpoint_interval))
     for unit in manipulation_units:
         _log(
             _prepare_progress_line(
@@ -251,19 +279,31 @@ def _prepare_outputs_checkpointed(
         try:
             ctx = _prepare_context(source_path, source_path, cfg)
         except Exception as exc:
-            _append_stage_outputs(prepared_dir, _empty_pdb_frame(), [], [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}])
+            output_writers.append(
+                _empty_pdb_frame(),
+                [],
+                [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}],
+            )
             for unit in manipulation_units:
                 unit_progress[unit.name] += 1
                 counts = unit_status_counts[unit.name]
                 counts["failed_load"] = int(counts.get("failed_load", 0)) + 1
-                _log(
-                    _prepare_progress_line(
-                        unit.name,
-                        done=unit_progress[unit.name],
-                        total=len(discovered),
-                        status_counts=counts,
+                if _should_log_progress(
+                    done=unit_progress[unit.name],
+                    total=len(discovered),
+                    cadence=progress_cadence,
+                    last_logged_done=unit_last_logged[unit.name],
+                    status_key="failed_load",
+                ):
+                    _log(
+                        _prepare_progress_line(
+                            unit.name,
+                            done=unit_progress[unit.name],
+                            total=len(discovered),
+                            status_counts=counts,
+                        )
                     )
-                )
+                    unit_last_logged[unit.name] = unit_progress[unit.name]
             done_paths.add(src_str)
             continue
 
@@ -283,17 +323,25 @@ def _prepare_outputs_checkpointed(
             counts = unit_status_counts[unit.name]
             key = str(status.get("status", "unknown"))
             counts[key] = int(counts.get(key, 0)) + 1
-            _log(
-                _prepare_progress_line(
-                    unit.name,
-                    done=unit_progress[unit.name],
-                    total=len(discovered),
-                    status_counts=counts,
+            if _should_log_progress(
+                done=unit_progress[unit.name],
+                total=len(discovered),
+                cadence=progress_cadence,
+                last_logged_done=unit_last_logged[unit.name],
+                status_key=key,
+            ):
+                _log(
+                    _prepare_progress_line(
+                        unit.name,
+                        done=unit_progress[unit.name],
+                        total=len(discovered),
+                        status_counts=counts,
+                    )
                 )
-            )
+                unit_last_logged[unit.name] = unit_progress[unit.name]
         if not manipulation_ok:
             bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
-            _append_stage_outputs(prepared_dir, _empty_pdb_frame(), status_rows, bad_rows)
+            output_writers.append(_empty_pdb_frame(), status_rows, bad_rows)
             done_paths.add(src_str)
             continue
 
@@ -310,16 +358,11 @@ def _prepare_outputs_checkpointed(
             fh.write(json.dumps(manifest_entry) + "\n")
 
         _write_prepared_structure(prepared_path, ctx)
-        _append_stage_outputs(
-            prepared_dir,
-            stage_frame,
-            status_rows,
-            bad_rows,
-        )
+        output_writers.append(stage_frame, status_rows, bad_rows)
         done_paths.add(src_str)
 
     _finalize_manifest_checkpoint(out_dir, manifest_ckpt)
-    return _prepare_counts_from_dir(prepared_dir)
+    return output_writers.materialize()
 
 
 def prepare_outputs(cfg: Config) -> dict[str, int]:

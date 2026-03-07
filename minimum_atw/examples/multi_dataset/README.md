@@ -58,25 +58,54 @@ Analyze the merged output:
 
 ## Step By Step: What This Multi-Dataset Workflow Does
 
-Using [dataset_a_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml), [dataset_b_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml), and [compare_merged_datasets.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml):
+Using [dataset_a_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml), [dataset_b_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml), and [compare_merged_datasets.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml).
 
-1. Run dataset A. It performs a normal pipeline run on dataset A only.
-2. During `prepare`, it aligns each structure with `superimpose_to_reference`, so downstream calculations use aligned coordinates.
-3. The aligned prepared structures are saved under dataset A's `_prepared/`.
-4. The plugins run on those aligned structures and write dataset A's `pdb.parquet`.
-5. Post-merge dataset analyses for dataset A write within-dataset cluster labels such as `cluster__within_dataset_paratope_*`.
-6. Run dataset B the same way.
-7. `merge-datasets` then stacks the finished dataset A and dataset B outputs into one pooled `out_dir`.
-8. The merged output preserves `dataset__id` and `dataset__name` on every `pdb.parquet` row so you can tell which dataset each interface came from.
-9. `analyze-dataset` on the merged output runs the cross-dataset cluster jobs from `compare_merged_datasets.yaml`.
-10. Those merged cluster jobs write new labels such as `cluster__cross_dataset_paratope_*` back onto the merged `pdb.parquet`.
-11. Because the source runs used prepare-stage superposition, `cluster.mode: interface_ca` on the merged run can reload the aligned prepared structures through `prepared__path`.
+### Step 1 — Run dataset A end-to-end
+
+`run_pipeline(cfg_a)` executes the full PREPARE → EXECUTE → MERGE → DATASET ANALYSIS sequence on dataset A's structures in isolation.
+
+During **PREPARE**, each structure is loaded into a biotite `AtomArray`, QC units run (`chain_continuity`, `structure_clashes`), then structure manipulation units run (`center_on_origin`, `superimpose_to_reference`). `superimpose_to_reference` mutates `ctx.aa` in place — all downstream plugins for this run will see the aligned coordinates. The transformed structure is saved to `_prepared/structures/<name>.bcif` and `prepared__path` is recorded in `_prepared/pdb.parquet`.
+
+During **EXECUTE**, each `pdb_calculation` plugin reads the prepared aligned structure, calls `available(ctx)` to decide whether to run, and yields prefixed column rows accumulated in a `TableBuffer`. Each plugin writes its output to `_plugins/<name>/pdb.parquet`.
+
+During **MERGE**, `merge_outputs(cfg_a)` LEFT JOINs each plugin's output onto the prepare-stage base rows. The result is `out_dataset_a/pdb.parquet` — a single wide table with every QC, manipulation, and plugin column side-by-side. All base rows are preserved; plugins that skipped a structure contribute `NaN`.
+
+During **DATASET ANALYSIS**, `analyze_dataset_outputs(out_dataset_a)` reads the merged `pdb.parquet`, filters by `grain`, and runs:
+- `interface_summary` and `cdr_entropy` — write aggregate rows to `out_dataset_a/dataset.parquet`.
+- `cluster` with job names like `within_dataset_paratope` and `within_dataset_epitope` — reloads Cα coordinates from `prepared__path` (aligned coordinates), computes RMSD clusters on the within-dataset interface population, writes `cluster__within_dataset_paratope_cluster_id` etc. back onto `out_dataset_a/pdb.parquet`.
+
+### Step 2 — Run dataset B end-to-end
+
+Identical to Step 1 but using `cfg_b`. Dataset B gets its own `out_dataset_b/pdb.parquet` with its own within-dataset cluster labels. The two runs are fully independent and can execute in parallel.
+
+### Step 3 — `merge-datasets` stacks the two outputs (STACK, not JOIN)
+
+`merge_dataset_outputs([out_dataset_a, out_dataset_b], out_compare_ab)` is a **row-union** operation:
+
+1. Reads `run_metadata.json` from each source to validate merge compatibility. The compatibility check compares roles, interface pairs, assembly_id mode, and plugin set. Mismatched sources are rejected before any stacking.
+2. Concatenates `pdb.parquet` row-wise. Global identity key uniqueness (`path` + `assembly_id` + `grain` + grain-specific keys) is enforced across the combined dataset.
+3. Preserves `dataset__id` and `dataset__name` on every row — columns originally set via `dataset_annotations.dataset_id` and `dataset_annotations.dataset_name` in each source config. This is the only provenance information that survives into `pdb.parquet`; all other `dataset_annotations` keys go into `dataset.parquet` via the `dataset_annotations` analysis.
+4. Writes `out_compare_ab/pdb.parquet`, `plugin_status.parquet`, `bad_files.parquet`, and `dataset_metadata.json`.
+
+The merged `pdb.parquet` contains both datasets' `within_dataset_*` cluster columns from Steps 1 and 2, but those per-dataset cluster IDs are **not** comparable across datasets — cluster `0` from dataset A has no relationship to cluster `0` from dataset B.
+
+### Step 4 — `analyze-dataset` on the merged output for cross-dataset clusters
+
+`analyze_dataset_outputs(out_compare_ab, cfg=compare_merged_datasets_cfg)` reads the full merged `pdb.parquet` and runs the analyses configured in `compare_merged_datasets.yaml`:
+
+- `cluster` with job names like `cross_dataset_paratope` and `cross_dataset_epitope` — reloads Cα coordinates from each row's `prepared__path` (which points into the source dataset's `_prepared/` directory), computes RMSD clusters on the **pooled** interface population from both datasets, and writes `cluster__cross_dataset_paratope_cluster_id` etc. back onto `out_compare_ab/pdb.parquet`.
+- `interface_summary` aggregates counts across the pooled dataset.
+- `cdr_entropy` computes entropy over the pooled sequence distribution.
+
+Because each row's `prepared__path` still points into `out_dataset_a/_prepared/` or `out_dataset_b/_prepared/`, the cross-dataset cluster plugin can reload the original aligned prepared structures as long as those `_prepared/` directories still exist.
+
+After this step, the merged `pdb.parquet` contains both within-dataset cluster columns (from Steps 1–2) and cross-dataset cluster columns (from Step 4). You can filter by `dataset__id` to separate the two populations, or use the cross-dataset cluster IDs to find structurally similar interfaces that appear in both campaigns.
 
 ### What Persists
 
-- Dataset A and dataset B each keep their own `_prepared/` directory by default.
-- Those prepared caches are what let later merged dataset analysis reuse aligned coordinates.
-- If you enable `cleanup_prepared_after_dataset_analysis: true` on the source dataset runs, those source `_prepared/` directories are deleted after successful dataset analysis, which means later merged re-analysis from aligned prepared structures will no longer be possible.
+- Dataset A and B each keep their own `_prepared/` directories. These must remain accessible for the cross-dataset cluster analysis in Step 4 to reload aligned structures through `prepared__path`.
+- If you enable `cleanup_prepared_after_dataset_analysis: true` on the source runs, those `_prepared/` directories are deleted after their own dataset analysis succeeds. This makes later cross-dataset re-analysis from aligned prepared structures impossible.
+- The merged output directory (`out_compare_ab`) does not have a `_prepared/` cache of its own. If you need to run `analyze-dataset` again on the merged output and the source `_prepared/` directories are gone, clustering will fall back to unaligned coordinates or fail, depending on mode.
 
 ## How to read the outputs
 

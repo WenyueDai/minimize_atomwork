@@ -31,26 +31,107 @@ This folder is for manual chunk configs: one config per chunk, one run per confi
 
 Using [chunk_antibody_antigen_01.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml) and [chunk_antibody_antigen_02.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml):
 
-1. You choose the chunk boundaries yourself and write one YAML per chunk.
-2. Each `run` command executes a normal single-dataset pipeline for that one chunk.
-3. Inside each chunk run, `prepare` loads structures and runs:
-   - `chain_continuity`
-   - `structure_clashes`
-   - `center_on_origin`
-   - `superimpose_to_reference`
-4. The aligned prepared structures are saved under that chunk's `_prepared/` directory.
-5. The configured plugins run on the already-aligned prepared structures.
-6. Because these chunk YAMLs use `dataset_analysis_mode: per_chunk`, dataset analyses run inside each chunk output.
-7. That means each chunk gets its own `dataset.parquet`, and `cluster` writes chunk-local cluster labels onto each chunk's `pdb.parquet`.
-8. After all chunks finish, `merge-datasets` stacks the chunk outputs into one merged dataset.
-9. That merge keeps the final `pdb.parquet`, `dataset__id`, and `dataset__name`, but it does not recompute biologically meaningful whole-dataset clusters by itself.
-10. If you want whole-dataset clustering, run `analyze-dataset` on the merged output with a config that enables `cluster`.
+### Step 1 — You define the chunk boundaries
+
+You decide which structures go into each chunk and write one YAML config per chunk.
+Each YAML is a complete, independent pipeline config pointing at its own `input_dir` and `out_dir`.
+There is no shared state between chunks at runtime — they are fully isolated processes.
+
+### Step 2 — `run` invokes a full single-dataset pipeline per chunk
+
+Each `minimum-atw run --config chunk_N.yaml` call invokes `run_pipeline(cfg)` internally.
+That function executes four stages in order: **PREPARE → EXECUTE → MERGE → DATASET ANALYSIS**.
+The chunk does not know it is part of a larger dataset — it simply processes its own inputs end to end.
+
+### Step 3 — PREPARE stage: QC, manipulation, and cache write
+
+`prepare_outputs(cfg)` iterates over every structure in `input_dir` and for each one:
+
+1. Loads the structure into a biotite `AtomArray` and builds `Context(aa, chains, roles, config)`.
+2. Runs **quality control** units in order (`prepare_section='quality_control'`):
+   - `chain_continuity` — checks residue-ID gaps and backbone breaks per chain;
+     writes `continuity__n_breaks`, `continuity__has_break` rows to the prepare table.
+   - `structure_clashes` — counts steric clashes between heavy atoms;
+     writes `clash__has_clash`, `clash__n_clashing_atom_pairs`, `clash__n_clashing_atoms`.
+3. Runs **structure manipulation** units in order (`prepare_section='structure'`):
+   - `center_on_origin` — translates `ctx.aa` so its centroid is at the origin;
+     records `center__centroid_x/y/z` (the pre-translation centroid) and calls `ctx.rebuild_views()`.
+   - `superimpose_to_reference` — fits `ctx.aa` onto the first structure seen (or a fixed reference path);
+     mutates `ctx.aa` in place, calls `ctx.rebuild_views()`, and records `sup__shared_atoms_rmsd`,
+     `sup__anchor_atoms`, `sup__alignment_method`, `sup__coordinates_applied` per structure plus
+     `sup__rmsd`, `sup__matched_atoms` per chain.
+4. Saves the transformed `ctx.aa` to `_prepared/structures/<name>.bcif`.
+5. After all structures, writes:
+   - `_prepared/pdb.parquet` — unified table with a `grain` column (structure / chain) holding all QC and manipulation output rows.
+   - `_prepared/prepared_manifest.parquet` — maps each `source_path` to its `prepared_path`.
+   - `_prepared/bad_files.parquet` — any structures that failed to load or were rejected by QC.
+
+`_prepared/` is a **cache boundary**: if it already exists and is complete, subsequent plugin runs read from it without re-running prepare.
+
+### Step 4 — EXECUTE stage: plugins read from cache, write per-plugin tables
+
+`run_plugins(cfg, plugin_names)` loads `prepared_manifest.parquet`, then for each structure in the manifest:
+
+1. Reads the prepared structure from `_prepared/structures/`.
+2. Rebuilds `Context(aa, chains, roles, config)` from the cached file.
+3. Runs each configured `pdb_calculation` plugin sequentially. Each plugin:
+   - Calls `available(ctx)` first; skips the structure if `False`.
+   - Yields one dict per grain row (`grain`, identity key columns, then `prefix__column` output columns).
+   - Rows accumulate in a `TableBuffer` (spills to disk if memory threshold is crossed).
+4. After all structures, each plugin flushes its buffer to `_plugins/<name>/pdb.parquet`.
+
+All plugin output columns are namespaced by `prefix` (e.g. `iface__n_contacts`, `ifm__left_n_interface_residues`).
+No two registered plugins may share a prefix — the registry rejects collisions at load time.
+
+### Step 5 — MERGE stage: LEFT JOIN plugins onto base rows
+
+`merge_outputs(cfg)` produces the final per-chunk `pdb.parquet`:
+
+1. Reads `_prepared/pdb.parquet` as the **base** (one row per structure/chain/role/interface per QC/manipulation plugin).
+2. For each plugin in `_plugins/`, reads that plugin's `pdb.parquet` and LEFT JOINs it onto the base using the identity key columns (`path`, `assembly_id`, `grain`, and `chain_id` / `role` / `pair` as applicable).
+3. Any structure the plugin skipped (via `available()`) gets `NaN` for that plugin's columns — the base row is always preserved.
+4. Writes the merged result to `out_dir/pdb.parquet` plus `plugin_status.parquet` (which plugins ran and on how many rows) and `bad_files.parquet`.
+
+After this step, `out_dir/pdb.parquet` is a single wide table: every row has identity columns, every QC/manipulation column, and every plugin column side-by-side.
+
+### Step 6 — DATASET ANALYSIS stage (per-chunk, because `dataset_analysis_mode: per_chunk`)
+
+`analyze_dataset_outputs(out_dir)` reads `out_dir/pdb.parquet`, filters rows by `grain`, and runs each configured `dataset_calculation` plugin:
+
+- `interface_summary` — counts interfaces and unique sequences per pair; writes aggregate rows to `dataset.parquet`.
+- `cdr_entropy` — computes Shannon entropy of CDR sequences per role and region; writes per-region entropy rows to `dataset.parquet`.
+- `cluster` — reads `iface__left_interface_residues` and `iface__right_interface_residues`, extracts Cα coordinates of interface residues, and computes pairwise RMSD clusters per interface side. **Writes cluster labels back onto `out_dir/pdb.parquet`** (not into `dataset.parquet`) as `cluster__left_cluster_id`, `cluster__left_mode`, `cluster__right_cluster_id`, `cluster__right_mode`.
+
+Because this runs per-chunk, entropy and cluster labels reflect only the structures in that chunk — not the full dataset.
+
+### Step 7 — `merge-datasets` stacks chunk outputs (STACK, not JOIN)
+
+`merge_dataset_outputs([chunk_out_dirs], merged_out_dir)` is a **row-union** operation, not a column-join:
+
+1. Reads `run_metadata.json` from each chunk to verify merge compatibility (same roles, interface pairs, assembly_id mode, and plugin set). Rejects mismatched chunks.
+2. Concatenates each chunk's `pdb.parquet` row-wise. Identity key uniqueness across the combined dataset is enforced.
+3. Assigns global `dataset__id` and `dataset__name` columns derived from the chunk source directories.
+4. Writes `merged_out_dir/pdb.parquet`, `plugin_status.parquet`, `bad_files.parquet`, and `dataset_metadata.json`.
+
+The merged `pdb.parquet` will carry the per-chunk cluster labels from Step 6, but those labels are **not** globally consistent — cluster `0` in chunk 01 and cluster `0` in chunk 02 are independent.
+
+### Step 8 — Optional: recompute whole-dataset clusters
+
+Run `analyze-dataset` on the merged output:
+
+```bash
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
+  --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+```
+
+This re-runs `analyze_dataset_outputs()` on the full merged `pdb.parquet`. The `cluster` plugin will now see all structures together and produce globally consistent cluster labels, overwriting the per-chunk ones.
 
 ### What Persists
 
-- Each chunk keeps its own `_prepared/` directory by default.
-- The merged output does not automatically get a merged `_prepared/` cache.
-- If you enable `cleanup_prepared_after_dataset_analysis: true` in a chunk YAML, that chunk's `_prepared/` directory is removed only after its dataset analysis succeeds.
+- Each chunk keeps its own `_prepared/` directory by default. This is the prepare cache — reusable across plugin re-runs without re-doing QC or superimposition.
+- The merged output does not automatically get a merged `_prepared/` cache. If you want to run new plugins on the merged dataset, you must re-prepare from scratch or re-run per-chunk.
+- If you enable `cleanup_prepared_after_dataset_analysis: true` in a chunk YAML, that chunk's `_prepared/` directory is removed only after its dataset analysis succeeds. Useful on storage-constrained clusters.
 
 ## What these YAMLs show
 
@@ -62,12 +143,6 @@ Using [chunk_antibody_antigen_01.yaml](/home/eva/minimum_atomworks/minimum_atw/e
 - enabled interface clustering
 
 See [../README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md) for the field-by-field glossary and when to turn each option on or off.
-
-Execution note:
-
-- native `atom_array` plugins stay batched
-- external or file-bound plugins stay isolated
-- those groups can run concurrently within each chunk config
 
 Clustering note:
 

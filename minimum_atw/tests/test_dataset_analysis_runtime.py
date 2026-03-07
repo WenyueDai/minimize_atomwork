@@ -4,59 +4,87 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 
+import minimum_atw.plugins.dataset.calculation.runtime as runtime_module
 from minimum_atw.plugins.dataset.calculation.runtime import analyze_dataset_outputs
+from minimum_atw.plugins.dataset.calculation.base import BaseDatasetPlugin
 from minimum_atw.tests.helpers import read_dataset_analysis
+
+
+def _write_test_pdb(
+    out_dir: Path,
+    *,
+    interface_rows: list[dict] | None = None,
+    role_rows: list[dict] | None = None,
+) -> None:
+    frames = []
+    for row in (interface_rows or []):
+        frames.append({**row, "grain": "interface"})
+    for row in (role_rows or []):
+        frames.append({**row, "grain": "role"})
+    pd.DataFrame(frames).to_parquet(out_dir / "pdb.parquet", index=False)
+
+
+class TestOverlapInterfaceSummaryPlugin(BaseDatasetPlugin):
+    name = "test_overlap_interface_summary"
+
+    def required_columns(self, _params: dict[str, object]) -> dict[str, list[str]]:
+        return {
+            "interface": ["path", "pair"],
+            "role": ["path", "role"],
+        }
+
+    def run(self, ctx):
+        return pd.DataFrame(
+            [
+                {
+                    "analysis": self.name,
+                    "n_interfaces_seen": int(len(ctx.df_interfaces)),
+                    "n_roles_seen": int(len(ctx.df_roles)),
+                }
+            ]
+        )
+
+
+class TestOverlapInterfaceRolePlugin(BaseDatasetPlugin):
+    name = "test_overlap_interface_role"
+
+    def required_columns(self, _params: dict[str, object]) -> dict[str, list[str]]:
+        return {
+            "interface": ["path", "pair", "role_left"],
+            "role": ["path", "role"],
+        }
+
+    def run(self, ctx):
+        return pd.DataFrame(
+            [
+                {
+                    "analysis": self.name,
+                    "n_interfaces_seen": int(len(ctx.df_interfaces)),
+                    "n_roles_seen": int(len(ctx.df_roles)),
+                }
+            ]
+        )
 
 
 class DatasetAnalysisRuntimeTests(unittest.TestCase):
     def test_runtime_passes_params_to_each_analysis_directly(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
             out_dir = Path(tmp_dir)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "pair": "vh__antigen",
-                        "role_left": "vh",
-                        "role_right": "antigen",
-                    }
-                ]
-            ).to_parquet(out_dir / "interfaces.parquet", index=False)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "role": "vh",
-                        "abseq__cdr1_sequence": "AAA",
-                        "abseq__cdr2_sequence": "BBB",
-                        "abseq__cdr3_sequence": "CCC",
-                        "rolseq__sequence": "AAABBBCCC",
-                    },
-                    {
-                        "path": "/tmp/example_2.pdb",
-                        "assembly_id": "1",
-                        "role": "vh",
-                        "abseq__cdr1_sequence": "AAA",
-                        "abseq__cdr2_sequence": "BBD",
-                        "abseq__cdr3_sequence": "CCD",
-                        "rolseq__sequence": "AAABBDCCD",
-                    },
-                    {
-                        "path": "/tmp/example_3.pdb",
-                        "assembly_id": "1",
-                        "role": "vl",
-                        "abseq__cdr1_sequence": "EEE",
-                        "abseq__cdr2_sequence": "FFF",
-                        "abseq__cdr3_sequence": "GGG",
-                        "rolseq__sequence": "EEEFFFGGG",
-                    },
-                ]
-            ).to_parquet(out_dir / "roles.parquet", index=False)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+                role_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBB", "abseq__cdr3_sequence": "CCC", "rolseq__sequence": "AAABBBCCC"},
+                    {"path": "/tmp/example_2.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBD", "abseq__cdr3_sequence": "CCD", "rolseq__sequence": "AAABBDCCD"},
+                    {"path": "/tmp/example_3.pdb", "assembly_id": "1", "role": "vl", "abseq__cdr1_sequence": "EEE", "abseq__cdr2_sequence": "FFF", "abseq__cdr3_sequence": "GGG", "rolseq__sequence": "EEEFFFGGG"},
+                ],
+            )
 
             summary = analyze_dataset_outputs(
                 out_dir,
@@ -79,17 +107,12 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
     def test_runtime_can_project_missing_interface_metric_columns(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
             out_dir = Path(tmp_dir)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "pair": "vh__antigen",
-                        "role_left": "vh",
-                        "role_right": "antigen",
-                    }
-                ]
-            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+            )
 
             summary = analyze_dataset_outputs(
                 out_dir,
@@ -109,30 +132,15 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             analysis_dir.mkdir()
             (analysis_dir / "stale.parquet").write_text("old")
 
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "pair": "vh__antigen",
-                        "role_left": "vh",
-                        "role_right": "antigen",
-                    }
-                ]
-            ).to_parquet(out_dir / "interfaces.parquet", index=False)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "role": "vh",
-                        "abseq__cdr1_sequence": "AAA",
-                        "abseq__cdr2_sequence": "BBB",
-                        "abseq__cdr3_sequence": "CCC",
-                        "rolseq__sequence": "AAABBBCCC",
-                    }
-                ]
-            ).to_parquet(out_dir / "roles.parquet", index=False)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+                role_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBB", "abseq__cdr3_sequence": "CCC", "rolseq__sequence": "AAABBBCCC"},
+                ],
+            )
             (out_dir / "run_metadata.json").write_text(
                 json.dumps(
                     {
@@ -154,26 +162,15 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
     def test_empty_analysis_does_not_leak_columns_into_dataset_schema(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
             out_dir = Path(tmp_dir)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "pair": "vh__antigen",
-                        "role_left": "vh",
-                        "role_right": "antigen",
-                    }
-                ]
-            ).to_parquet(out_dir / "interfaces.parquet", index=False)
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "role": "vh",
-                    }
-                ]
-            ).to_parquet(out_dir / "roles.parquet", index=False)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+                role_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh"},
+                ],
+            )
 
             summary = analyze_dataset_outputs(
                 out_dir,
@@ -195,17 +192,12 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             prepared_dir.mkdir()
             (prepared_dir / "marker.txt").write_text("keep until analysis succeeds")
 
-            pd.DataFrame(
-                [
-                    {
-                        "path": "/tmp/example_1.pdb",
-                        "assembly_id": "1",
-                        "pair": "vh__antigen",
-                        "role_left": "vh",
-                        "role_right": "antigen",
-                    }
-                ]
-            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+            )
 
             summary = analyze_dataset_outputs(
                 out_dir,
@@ -217,6 +209,52 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             self.assertEqual(len(result), 1)
             self.assertEqual(summary["cleaned_prepared_outputs"], 1)
             self.assertFalse(prepared_dir.exists())
+
+    def test_runtime_reuses_grain_reads_for_overlapping_analysis_requirements(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
+            out_dir = Path(tmp_dir)
+            _write_test_pdb(
+                out_dir,
+                interface_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
+                ],
+                role_rows=[
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh"},
+                ],
+            )
+
+            read_calls: list[tuple[str, tuple[str, ...] | None]] = []
+            real_read_output_table = runtime_module._read_output_table
+
+            def counting_read_output_table(*args, **kwargs):
+                grain = str(args[1])
+                columns = kwargs.get("columns")
+                read_calls.append((grain, tuple(columns) if columns is not None else None))
+                return real_read_output_table(*args, **kwargs)
+
+            with (
+                mock.patch.dict(
+                    runtime_module.DATASET_CALCULATION_REGISTRY,
+                    {
+                        "test_overlap_interface_summary": TestOverlapInterfaceSummaryPlugin(),
+                        "test_overlap_interface_role": TestOverlapInterfaceRolePlugin(),
+                    },
+                    clear=False,
+                ),
+                mock.patch.object(runtime_module, "_read_output_table", side_effect=counting_read_output_table),
+            ):
+                summary = analyze_dataset_outputs(
+                    out_dir,
+                    dataset_analyses=("test_overlap_interface_summary", "test_overlap_interface_role"),
+                )
+
+            result = pd.read_parquet(out_dir / "dataset.parquet")
+
+            self.assertEqual(summary["n_dataset_rows"], 2)
+            self.assertEqual(sorted(result["analysis"].tolist()), ["test_overlap_interface_role", "test_overlap_interface_summary"])
+            self.assertEqual(read_calls.count(("interface", ("path", "pair", "role_left"))), 1)
+            self.assertEqual(read_calls.count(("role", ("path", "role"))), 1)
+            self.assertEqual(len(read_calls), 2)
 
 
 if __name__ == "__main__":

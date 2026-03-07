@@ -86,7 +86,7 @@
   <text x="56" y="404" font-size="10.5" fill="#1d3565">• Loads each structure from prepared cache</text>
   <text x="56" y="420" font-size="10.5" fill="#1d3565">• Runs configured pdb_calculation plugins in grain order</text>
   <text x="56" y="436" font-size="10.5" fill="#1d3565">• Plugin outputs → _plugins/&lt;name&gt;/pdb.parquet</text>
-  <text x="56" y="455" font-size="9.5" fill="#888">lightweight plugins batched; heavy/isolated plugins run separately</text>
+  <text x="56" y="455" font-size="9.5" fill="#888">each plugin writes to _plugins/&lt;name&gt;/pdb.parquet independently</text>
 
   <!-- Arrow -->
   <line x1="218" y1="464" x2="218" y2="482" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
@@ -154,25 +154,25 @@
   <text x="468" y="233" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_manipulation</text>
   <text x="624" y="227" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: structure_manipulations</text>
   <text x="468" y="252" font-size="10" fill="#1a4a35">Per-structure coordinate transforms. May mutate ctx.aa.</text>
-  <text x="468" y="272" font-size="9.5" fill="#888">builtins:  center_on_origin</text>
+  <text x="468" y="272" font-size="9.5" fill="#888">builtins:  center_on_origin  ·  superimpose_to_reference</text>
 
-  <!-- dataset_quality_control -->
+  <!-- pdb_prepare ordering note -->
   <rect x="460" y="287" width="416" height="63" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
-  <rect x="460" y="287" width="188" height="22" rx="4" fill="#2d6a4f"/>
-  <rect x="460" y="299" width="188" height="10" fill="#2d6a4f"/>
-  <text x="468" y="303" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">dataset_quality_control</text>
-  <text x="662" y="297" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: dataset_quality_controls</text>
-  <text x="468" y="322" font-size="10" fill="#1a4a35">Dataset-scope validation after all structures are prepared.</text>
-  <text x="468" y="342" font-size="9.5" fill="#888">builtins:  (none — extend via entry_points)</text>
+  <rect x="460" y="287" width="220" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="299" width="220" height="10" fill="#2d6a4f"/>
+  <text x="468" y="303" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_prepare  (execution order)</text>
+  <text x="694" y="297" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">prepare_section attribute</text>
+  <text x="468" y="322" font-size="10" fill="#1a4a35">QC units (prepare_section='quality_control') run before structure</text>
+  <text x="468" y="342" font-size="9.5" fill="#888">manipulations (prepare_section='structure'). One unified PDB_PREPARE_REGISTRY.</text>
 
-  <!-- dataset_manipulation -->
+  <!-- note: dataset_manipulation removed -->
   <rect x="460" y="357" width="416" height="63" rx="4" fill="#f2faf6" stroke="#2d6a4f" stroke-width="1.2"/>
-  <rect x="460" y="357" width="170" height="22" rx="4" fill="#2d6a4f"/>
-  <rect x="460" y="369" width="170" height="10" fill="#2d6a4f"/>
-  <text x="468" y="373" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">dataset_manipulation</text>
-  <text x="644" y="367" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: dataset_manipulations</text>
-  <text x="468" y="392" font-size="10" fill="#1a4a35">Cross-structure transforms that depend on shared state.</text>
-  <text x="468" y="412" font-size="9.5" fill="#888">builtins:  superimpose_homology</text>
+  <rect x="460" y="357" width="258" height="22" rx="4" fill="#2d6a4f"/>
+  <rect x="460" y="369" width="258" height="10" fill="#2d6a4f"/>
+  <text x="468" y="373" font-size="10.5" font-weight="600" fill="white" dominant-baseline="middle">pdb_calculation  (cross-structure plugin note)</text>
+  <text x="732" y="367" font-size="9.5" fill="#2d6a4f" dominant-baseline="middle">config key: plugins</text>
+  <text x="468" y="392" font-size="10" fill="#1a4a35">Cross-structure calculations (e.g. superimpose_homology) are pdb_calculation</text>
+  <text x="468" y="412" font-size="9.5" fill="#888">plugins. dataset_manipulation class removed — use pdb_calculation instead.</text>
 
   <!-- EXECUTE section -->
   <text x="460" y="436" font-size="10.5" font-weight="700" fill="#1d3557" letter-spacing="1">▶  EXECUTE STAGE</text>
@@ -186,7 +186,7 @@
   <text x="616" y="456" font-size="9.5" fill="#1d3557" dominant-baseline="middle">config key: plugins</text>
   <text x="468" y="481" font-size="10" fill="#1d3565">Per-structure/chain/role/interface metrics. Emits prefixed columns</text>
   <text x="468" y="495" font-size="10" fill="#1d3565">into the shared pdb table. grain attr selects the output scope.</text>
-  <text x="468" y="509" font-size="10" fill="#1d3565">resource_class: lightweight (batch) | heavy (isolated)</text>
+  <text x="468" y="509" font-size="10" fill="#1d3565">available(ctx) → (bool, reason)  controls conditional execution per structure</text>
   <text x="468" y="527" font-size="9.5" fill="#888">builtins: identity · chain_stats · role_stats · role_sequences</text>
   <text x="468" y="541" font-size="9.5" fill="#888">  interface_contacts · interface_metrics · abepitope_score</text>
   <text x="468" y="555" font-size="9.5" fill="#888">  antibody_cdr_lengths · antibody_cdr_sequences · rosetta_interface</text>
@@ -204,7 +204,7 @@
   <text x="468" y="618" font-size="10" fill="#4a1a30">Post-merge analyses over the full dataset (aggregate statistics).</text>
   <text x="468" y="632" font-size="10" fill="#4a1a30">Receives grain-filtered DataFrames via DatasetAnalysisContext.</text>
   <text x="468" y="646" font-size="10" fill="#4a1a30">Returns a DataFrame; rows stacked into dataset.parquet.</text>
-  <text x="468" y="666" font-size="9.5" fill="#888">builtins:  interface_summary  ·  cdr_entropy  ·  dataset_annotations</text>
+  <text x="468" y="666" font-size="9.5" fill="#888">builtins:  interface_summary  ·  cdr_entropy  ·  cluster  ·  dataset_annotations</text>
 
   <!-- Extension protocol box -->
   <rect x="460" y="686" width="416" height="112" rx="4" fill="#f5f5f8" stroke="#aaa" stroke-width="1"/>

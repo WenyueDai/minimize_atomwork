@@ -368,10 +368,6 @@ def _iter_rosetta_targets(ctx: Context):
 class RosettaInterfaceExamplePlugin(InterfacePlugin):
     name = "rosetta_interface_example"
     prefix = "rosetta"
-    execution = "external"
-    input_model = "prepared_file"
-    execution_mode = "isolated"
-    failure_policy = "continue"
 
     def available(self, ctx: Context) -> tuple[bool, str]:
         executable = _resolve_executable(ctx.config)

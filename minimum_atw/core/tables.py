@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 
 
 TABLE_SUFFIX = ".parquet"
+TABLE_PARTS_SUFFIX = ".parts"
 PDB_TABLE_NAME = "pdb"
 PDB_GRAINS = ("structure", "chain", "role", "interface")
 PDB_KEY_COLS = [
@@ -35,19 +38,6 @@ MANIFEST_COLS = [
     "n_atoms_loaded",
     "n_chains_loaded",
 ]
-REDUNDANT_PDB_COLUMN_PAIRS = (
-    ("sup__anchor_atoms_mobile", "sup__anchor_atoms_fixed"),
-    ("ifm__contact_distance", "iface__contact_distance"),
-    ("ifm__cell_size", "ifm__contact_distance"),
-    ("ifm__cell_size", "iface__contact_distance"),
-    ("ifm__left_n_interface_residues", "iface__n_left_interface_residues"),
-    ("ifm__right_n_interface_residues", "iface__n_right_interface_residues"),
-    ("abcdr__chain_ids", "abseq__chain_ids"),
-    ("abcdr__numbering_scheme", "abseq__numbering_scheme"),
-    ("abcdr__cdr_definition", "abseq__cdr_definition"),
-    ("abcdr__sequence_length", "abseq__sequence_length"),
-)
-
 
 def normalize_grain(value: Any) -> str:
     normalized = str(value or "structure").strip().lower()
@@ -77,6 +67,21 @@ def empty_pdb_frame() -> pd.DataFrame:
     return pd.DataFrame(columns=PDB_KEY_COLS)
 
 
+def normalize_pdb_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return empty_pdb_frame()
+    df = frame.copy()
+    for key in PDB_KEY_COLS:
+        if key not in df.columns:
+            df[key] = ""
+        else:
+            df[key] = df[key].fillna("")
+    df["grain"] = df["grain"].map(normalize_grain)
+    ordered = [col for col in PDB_KEY_COLS if col in df.columns]
+    ordered.extend(col for col in df.columns if col not in ordered)
+    return sort_pdb_frame(df.loc[:, ordered])
+
+
 def sort_pdb_frame(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -86,54 +91,120 @@ def sort_pdb_frame(df: pd.DataFrame) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def prune_redundant_pdb_columns(df: pd.DataFrame) -> pd.DataFrame:
-    if df.empty:
-        return df
-    drop_cols: list[str] = []
-    for redundant, canonical in REDUNDANT_PDB_COLUMN_PAIRS:
-        if redundant not in df.columns or canonical not in df.columns:
-            continue
-        if df[redundant].equals(df[canonical]):
-            drop_cols.append(redundant)
-    if not drop_cols:
-        return df
-    kept = [column for column in df.columns if column not in set(drop_cols)]
-    return df.loc[:, kept].copy()
-
-
 def rows_to_pdb_frame(rows: list[dict[str, Any]]) -> pd.DataFrame:
     if not rows:
         return empty_pdb_frame()
-    df = pd.DataFrame(rows)
-    for key in PDB_KEY_COLS:
-        if key not in df.columns:
-            df[key] = ""
-        else:
-            df[key] = df[key].fillna("")
-    df["grain"] = df["grain"].map(normalize_grain)
-    ordered = [col for col in PDB_KEY_COLS if col in df.columns]
-    ordered.extend(col for col in df.columns if col not in ordered)
-    return prune_redundant_pdb_columns(sort_pdb_frame(df.loc[:, ordered]))
+    return normalize_pdb_frame(pd.DataFrame(rows))
+
+
+def table_parts_dir(path: Path) -> Path:
+    return path.parent / f"{path.name}{TABLE_PARTS_SUFFIX}"
+
+
+def clear_table_artifacts(path: Path) -> None:
+    if path.exists():
+        path.unlink()
+    parts_dir = table_parts_dir(path)
+    if parts_dir.exists():
+        shutil.rmtree(parts_dir)
+
+
+def _table_part_paths(path: Path) -> list[Path]:
+    parts_dir = table_parts_dir(path)
+    if not parts_dir.exists():
+        return []
+    return sorted(part for part in parts_dir.glob(f"*{TABLE_SUFFIX}") if part.is_file())
+
+
+def _read_fragmented_parquet(
+    path: Path,
+    *,
+    empty_frame: pd.DataFrame,
+    dedupe_subset: list[str] | None = None,
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    if path.exists():
+        frames.append(pd.read_parquet(path))
+    for part in _table_part_paths(path):
+        frames.append(pd.read_parquet(part))
+    if not frames:
+        return empty_frame.copy()
+    combined = pd.concat(frames, ignore_index=True, sort=False)
+    if dedupe_subset is None:
+        combined = combined.drop_duplicates()
+    else:
+        combined = combined.drop_duplicates(subset=dedupe_subset)
+    return combined.reset_index(drop=True)
 
 
 def read_frame(path: Path, columns: list[str]) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame(columns=columns)
-    return pd.read_parquet(path)
+    frame = _read_fragmented_parquet(path, empty_frame=pd.DataFrame(columns=columns))
+    for column in columns:
+        if column not in frame.columns:
+            frame[column] = pd.Series(dtype="object")
+    ordered = [column for column in columns if column in frame.columns]
+    ordered.extend(column for column in frame.columns if column not in ordered)
+    return frame.loc[:, ordered]
 
 
 def read_pdb_table(path: Path) -> pd.DataFrame:
-    if not path.exists():
+    frame = _read_fragmented_parquet(path, empty_frame=empty_pdb_frame())
+    return normalize_pdb_frame(frame)
+
+
+def _prepare_pdb_merge_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    keys = PDB_KEY_COLS
+    if frame.empty:
         return empty_pdb_frame()
-    frame = pd.read_parquet(path)
-    for key in PDB_KEY_COLS:
-        if key not in frame.columns:
-            frame[key] = ""
+    prepared = frame.copy()
+    for key in keys:
+        if key not in prepared.columns:
+            prepared[key] = ""
         else:
-            frame[key] = frame[key].fillna("")
-    if "grain" in frame.columns:
-        frame["grain"] = frame["grain"].map(normalize_grain)
-    return sort_pdb_frame(frame)
+            prepared[key] = prepared[key].fillna("")
+    if "grain" in prepared.columns:
+        prepared["grain"] = prepared["grain"].map(normalize_grain)
+    return prepared.loc[:, list(dict.fromkeys([*keys, *[col for col in prepared.columns if col not in keys]]))]
+
+
+def merge_pdb_frames_bulk(base: pd.DataFrame, extras: list[pd.DataFrame]) -> pd.DataFrame:
+    keys = PDB_KEY_COLS
+    prepared_base = _prepare_pdb_merge_frame(base)
+    prepared_extras: list[pd.DataFrame] = []
+
+    if not prepared_base.empty and prepared_base.duplicated(keys).any():
+        raise ValueError("Duplicate base identity rows detected in pdb")
+
+    seen_non_key_cols = {col for col in prepared_base.columns if col not in keys}
+    for extra in extras:
+        prepared_extra = _prepare_pdb_merge_frame(extra)
+        if prepared_extra.empty:
+            continue
+        if prepared_extra.duplicated(keys).any():
+            raise ValueError("Duplicate identity rows detected in pdb")
+        non_key_cols = [col for col in prepared_extra.columns if col not in keys]
+        if not non_key_cols:
+            continue
+        overlapping = [col for col in non_key_cols if col in seen_non_key_cols]
+        if overlapping:
+            raise ValueError(f"Overlapping output columns detected in pdb: {', '.join(sorted(overlapping))}")
+        seen_non_key_cols.update(non_key_cols)
+        prepared_extras.append(prepared_extra.loc[:, [*keys, *non_key_cols]].copy())
+
+    if not prepared_extras:
+        return sort_pdb_frame(prepared_base)
+
+    if prepared_base.empty:
+        merged = prepared_extras[0].set_index(keys)
+        remaining = prepared_extras[1:]
+    else:
+        merged = prepared_base.set_index(keys)
+        remaining = prepared_extras
+
+    for prepared_extra in remaining:
+        merged = merged.join(prepared_extra.set_index(keys), how="left")
+
+    return sort_pdb_frame(merged.reset_index())
 
 
 def merge_pdb_frames(base: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
@@ -142,34 +213,7 @@ def merge_pdb_frames(base: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
         base = empty_pdb_frame()
     if extra.empty:
         return sort_pdb_frame(base)
-
-    # Fill any missing key columns (e.g. sub_id on legacy frames) with empty string.
-    for key in keys:
-        if key not in base.columns:
-            base = base.assign(**{key: ""})
-        if key not in extra.columns:
-            extra = extra.assign(**{key: ""})
-
-    extra = extra.loc[:, list(dict.fromkeys([*keys, *[col for col in extra.columns if col not in keys]]))]
-
-    if extra.duplicated(keys).any():
-        raise ValueError("Duplicate identity rows detected in pdb")
-    if not base.empty and base.duplicated(keys).any():
-        raise ValueError("Duplicate base identity rows detected in pdb")
-
-    non_key_cols = [col for col in extra.columns if col not in keys]
-    if not non_key_cols:
-        return sort_pdb_frame(base)
-
-    overlapping = [col for col in non_key_cols if col in base.columns]
-    if overlapping:
-        raise ValueError(f"Overlapping output columns detected in pdb: {', '.join(sorted(overlapping))}")
-
-    if base.empty:
-        return prune_redundant_pdb_columns(sort_pdb_frame(extra.loc[:, [*keys, *non_key_cols]].copy()))
-
-    merged = base.merge(extra.loc[:, [*keys, *non_key_cols]], on=keys, how="left", validate="one_to_one")
-    return prune_redundant_pdb_columns(sort_pdb_frame(merged))
+    return merge_pdb_frames_bulk(base, [extra])
 
 
 def stack_pdb_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
@@ -183,7 +227,7 @@ def stack_pdb_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
         raise ValueError(f"Missing identity columns for pdb: {', '.join(missing)}")
     if combined.duplicated(PDB_KEY_COLS).any():
         raise ValueError("Duplicate identity rows detected across datasets in pdb")
-    return prune_redundant_pdb_columns(sort_pdb_frame(combined))
+    return sort_pdb_frame(combined)
 
 
 def write_pdb_table(
@@ -196,21 +240,114 @@ def write_pdb_table(
     dir_path.mkdir(parents=True, exist_ok=True)
     if skip_empty and frame.empty:
         return
-    frame.to_parquet(dir_path / (filename or f"{PDB_TABLE_NAME}{TABLE_SUFFIX}"), index=False)
+    path = dir_path / (filename or f"{PDB_TABLE_NAME}{TABLE_SUFFIX}")
+    frame.to_parquet(path, index=False)
+    parts_dir = table_parts_dir(path)
+    if parts_dir.exists():
+        shutil.rmtree(parts_dir)
 
 
 def write_frame(path: Path, rows: list[dict[str, Any]], columns: list[str]) -> None:
     pd.DataFrame(rows, columns=columns).to_parquet(path, index=False)
+    parts_dir = table_parts_dir(path)
+    if parts_dir.exists():
+        shutil.rmtree(parts_dir)
+
+
+def _write_table_part(path: Path, frame: pd.DataFrame) -> None:
+    if frame.empty:
+        return
+    parts_dir = table_parts_dir(path)
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    part_path = parts_dir / f"part-{uuid4().hex}{TABLE_SUFFIX}"
+    frame.to_parquet(part_path, index=False)
+
+
+class BufferedTableWriter:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        flush_interval: int,
+        columns: list[str] | None = None,
+        dedupe_subset: list[str] | None = None,
+        normalize_frame: Any | None = None,
+    ) -> None:
+        self.path = path
+        self.flush_interval = max(int(flush_interval), 1)
+        self.columns = list(columns) if columns else None
+        self.dedupe_subset = list(dedupe_subset) if dedupe_subset else None
+        self.normalize_frame = normalize_frame
+        self._pending_frames: list[pd.DataFrame] = []
+        self._pending_rows = 0
+
+    def append_rows(self, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        frame = pd.DataFrame(rows, columns=self.columns) if self.columns else pd.DataFrame(rows)
+        self.append_frame(frame)
+
+    def append_frame(self, frame: pd.DataFrame) -> None:
+        if frame.empty:
+            return
+        self._pending_frames.append(frame.copy())
+        self._pending_rows += len(frame)
+        if self._pending_rows >= self.flush_interval:
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._pending_frames:
+            return
+        frame = pd.concat(self._pending_frames, ignore_index=True, sort=False)
+        self._pending_frames = []
+        self._pending_rows = 0
+        frame = self._normalize(frame)
+        _write_table_part(self.path, frame)
+
+    def read(self) -> pd.DataFrame:
+        self.flush()
+        empty_frame = pd.DataFrame(columns=self.columns) if self.columns else pd.DataFrame()
+        frame = _read_fragmented_parquet(
+            self.path,
+            empty_frame=empty_frame,
+            dedupe_subset=self.dedupe_subset,
+        )
+        return self._normalize(frame)
+
+    def materialize(self, *, skip_empty: bool = False) -> pd.DataFrame:
+        frame = self.read()
+        if frame.empty and skip_empty:
+            clear_table_artifacts(self.path)
+            return frame
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        frame.to_parquet(self.path, index=False)
+        parts_dir = table_parts_dir(self.path)
+        if parts_dir.exists():
+            shutil.rmtree(parts_dir)
+        return frame
+
+    def _normalize(self, frame: pd.DataFrame) -> pd.DataFrame:
+        out = frame.copy()
+        if self.columns:
+            for column in self.columns:
+                if column not in out.columns:
+                    out[column] = pd.NA
+            ordered = [column for column in self.columns if column in out.columns]
+            ordered.extend(column for column in out.columns if column not in ordered)
+            out = out.loc[:, ordered]
+        if self.normalize_frame is not None:
+            out = self.normalize_frame(out)
+        elif self.dedupe_subset is None:
+            out = out.drop_duplicates().reset_index(drop=True)
+        elif not out.empty:
+            out = out.drop_duplicates(subset=self.dedupe_subset).reset_index(drop=True)
+        return out
 
 
 def append_rows(path: Path, rows: list[dict[str, Any]], columns: list[str] | None = None) -> None:
-    if not rows:
-        return
-    df = pd.DataFrame(rows, columns=columns) if columns else pd.DataFrame(rows)
-    if path.exists():
-        existing = pd.read_parquet(path)
-        df = pd.concat([existing, df], ignore_index=True, sort=False).drop_duplicates()
-    df.to_parquet(path, index=False)
+    writer = BufferedTableWriter(path, flush_interval=max(len(rows), 1), columns=columns)
+    writer.append_rows(rows)
+    writer.materialize()
 
 
 def count_pdb_rows(frame: pd.DataFrame) -> dict[str, int]:

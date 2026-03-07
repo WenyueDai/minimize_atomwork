@@ -1,0 +1,287 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 940" font-family="'Courier New', Courier, monospace">
+  <defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#555"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1600" height="940" fill="#f1f5f9"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- HEADER -->
+  <!-- ═══════════════════════════════════════════════ -->
+  <rect x="0" y="0" width="1600" height="52" fill="#1e293b"/>
+  <text x="800" y="30" font-size="18" font-weight="bold" fill="white" text-anchor="middle" letter-spacing="1">minimum_atomworks — Built-in Plugin Reference  ·  Output Columns by Stage and Grain</text>
+  <text x="800" y="46" font-size="10" fill="#94a3b8" text-anchor="middle">Columns written to _prepared/pdb.parquet (PREPARE) and out_dir/pdb.parquet (EXECUTE).  dataset_calculation writes to out_dir/dataset.parquet unless noted.</text>
+
+  <!-- Column headers (global) -->
+  <rect x="10" y="56" width="1580" height="22" fill="#334155" rx="2"/>
+  <text x="16"   y="71" font-size="9.5" font-weight="bold" fill="#e2e8f0">plugin name</text>
+  <text x="220"  y="71" font-size="9.5" font-weight="bold" fill="#e2e8f0">prefix</text>
+  <text x="318"  y="71" font-size="9.5" font-weight="bold" fill="#e2e8f0">grain</text>
+  <text x="415"  y="71" font-size="9.5" font-weight="bold" fill="#e2e8f0">key output columns  (prefix__column)</text>
+  <!-- Column dividers -->
+  <line x1="210" y1="56" x2="210" y2="940" stroke="#cbd5e1" stroke-width="0.5"/>
+  <line x1="308" y1="56" x2="308" y2="940" stroke="#cbd5e1" stroke-width="0.5"/>
+  <line x1="406" y1="56" x2="406" y2="940" stroke="#cbd5e1" stroke-width="0.5"/>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SECTION 1: PREPARE  (_prepared/pdb.parquet)   -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Section header -->
+  <rect x="10" y="82" width="1580" height="20" fill="#166534" rx="2"/>
+  <text x="16" y="96" font-size="10" font-weight="bold" fill="white">PREPARE STAGE  →  _prepared/pdb.parquet  ·  runs before plugin execution  ·  config keys: quality_controls / structure_manipulations</text>
+
+  <!-- Subsection: Quality Control -->
+  <rect x="10" y="106" width="1580" height="16" fill="#bbf7d0" rx="0"/>
+  <text x="16" y="118" font-size="9" font-weight="bold" fill="#14532d">▸ pdb_quality_control  (prepare_section = 'quality_control'  ·  runs first)</text>
+
+  <!-- row: chain_continuity -->
+  <rect x="10" y="122" width="1580" height="22" fill="#f0fdf4"/>
+  <text x="16"  y="136" font-size="9.5" fill="#14532d" font-weight="bold">chain_continuity</text>
+  <text x="220" y="136" font-size="9.5" fill="#166534" font-style="italic">continuity</text>
+  <text x="308" y="136" font-size="9">  </text>
+  <!-- grain badge: chain -->
+  <rect x="314" y="125" width="38" height="13" rx="3" fill="#457b9d"/>
+  <text x="333" y="135" font-size="8.5" fill="white" text-anchor="middle">chain</text>
+  <text x="415" y="136" font-size="9.5" fill="#14532d">continuity__n_breaks  ·  continuity__has_break</text>
+
+  <!-- row: structure_clashes -->
+  <rect x="10" y="144" width="1580" height="22" fill="white"/>
+  <text x="16"  y="158" font-size="9.5" fill="#14532d" font-weight="bold">structure_clashes</text>
+  <text x="220" y="158" font-size="9.5" fill="#166534" font-style="italic">clash</text>
+  <!-- grain badge: structure -->
+  <rect x="314" y="147" width="50" height="13" rx="3" fill="#2d6a4f"/>
+  <text x="339" y="157" font-size="8.5" fill="white" text-anchor="middle">structure</text>
+  <text x="415" y="158" font-size="9.5" fill="#14532d">clash__has_clash  ·  clash__n_clashing_atom_pairs  ·  clash__n_clashing_atoms</text>
+
+  <!-- Subsection: Manipulation -->
+  <rect x="10" y="170" width="1580" height="16" fill="#bbf7d0" rx="0"/>
+  <text x="16" y="182" font-size="9" font-weight="bold" fill="#14532d">▸ pdb_manipulation  (prepare_section = 'structure'  ·  runs after QC  ·  may mutate ctx.aa)</text>
+
+  <!-- row: center_on_origin -->
+  <rect x="10" y="186" width="1580" height="22" fill="#f0fdf4"/>
+  <text x="16"  y="200" font-size="9.5" fill="#14532d" font-weight="bold">center_on_origin</text>
+  <text x="220" y="200" font-size="9.5" fill="#166534" font-style="italic">center</text>
+  <rect x="314" y="189" width="50" height="13" rx="3" fill="#2d6a4f"/>
+  <text x="339" y="199" font-size="8.5" fill="white" text-anchor="middle">structure</text>
+  <text x="415" y="200" font-size="9.5" fill="#14532d">center__centroid_x  ·  center__centroid_y  ·  center__centroid_z    [translates ctx.aa to origin; records pre-translation centroid]</text>
+
+  <!-- row: superimpose_to_reference (structure row) -->
+  <rect x="10" y="208" width="1580" height="22" fill="white"/>
+  <text x="16"  y="222" font-size="9.5" fill="#14532d" font-weight="bold">superimpose_to_reference</text>
+  <text x="220" y="222" font-size="9.5" fill="#166534" font-style="italic">sup</text>
+  <rect x="314" y="211" width="50" height="13" rx="3" fill="#2d6a4f"/>
+  <text x="339" y="221" font-size="8.5" fill="white" text-anchor="middle">structure</text>
+  <text x="415" y="222" font-size="9.5" fill="#14532d">sup__reference_path  ·  sup__on_chains  ·  sup__anchor_atoms  ·  sup__alignment_method  ·  sup__shared_atoms_rmsd  ·  sup__shared_atoms_count  ·  sup__coordinates_applied</text>
+
+  <!-- row: superimpose_to_reference (chain row) -->
+  <rect x="10" y="230" width="1580" height="22" fill="white"/>
+  <text x="16"  y="244" font-size="9.5" fill="#64748b">↳ (also emits)</text>
+  <text x="220" y="244" font-size="9.5" fill="#166534" font-style="italic">sup</text>
+  <rect x="314" y="233" width="38" height="13" rx="3" fill="#457b9d"/>
+  <text x="333" y="243" font-size="8.5" fill="white" text-anchor="middle">chain</text>
+  <text x="415" y="244" font-size="9.5" fill="#14532d">sup__rmsd  ·  sup__matched_atoms    [per-chain RMSD after fitting]</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SECTION 2: pdb_calculation  (out_dir/pdb.parquet) -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Section header -->
+  <rect x="10" y="258" width="1580" height="20" fill="#1d3557" rx="2"/>
+  <text x="16" y="272" font-size="10" font-weight="bold" fill="white">pdb_calculation STAGE  →  merged out_dir/pdb.parquet  ·  config key: plugins  ·  each plugin: name + prefix + grain + run(ctx) → yield dict rows</text>
+
+  <!-- Subsection: structure grain -->
+  <rect x="10" y="282" width="1580" height="16" fill="#bfdbfe" rx="0"/>
+  <text x="16" y="294" font-size="9" font-weight="bold" fill="#1e3a8a">▸ grain = 'structure'  (one row per input file · identity keys: path, assembly_id)</text>
+
+  <!-- row: identity (structure rows) -->
+  <rect x="10" y="298" width="1580" height="22" fill="#eff6ff"/>
+  <text x="16"  y="312" font-size="9.5" fill="#1d3557" font-weight="bold">identity</text>
+  <text x="220" y="312" font-size="9.5" fill="#1d3565" font-style="italic">id</text>
+  <rect x="314" y="301" width="50" height="13" rx="3" fill="#2d6a4f"/>
+  <text x="339" y="311" font-size="8.5" fill="white" text-anchor="middle">structure</text>
+  <text x="415" y="312" font-size="9.5" fill="#1d3557">id__n_atoms_total  ·  id__n_chains  ·  id__has_nan_coord</text>
+
+  <!-- row: identity (chain rows) -->
+  <rect x="10" y="320" width="1580" height="22" fill="#eff6ff"/>
+  <text x="16"  y="334" font-size="9.5" fill="#64748b">↳ (also emits)</text>
+  <text x="220" y="334" font-size="9.5" fill="#1d3565" font-style="italic">id</text>
+  <rect x="314" y="323" width="38" height="13" rx="3" fill="#457b9d"/>
+  <text x="333" y="333" font-size="8.5" fill="white" text-anchor="middle">chain</text>
+  <text x="415" y="334" font-size="9.5" fill="#1d3557">id__n_atoms    [one row per chain]</text>
+
+  <!-- row: identity (role rows) -->
+  <rect x="10" y="342" width="1580" height="22" fill="#eff6ff"/>
+  <text x="16"  y="356" font-size="9.5" fill="#64748b">↳ (also emits)</text>
+  <text x="220" y="356" font-size="9.5" fill="#1d3565" font-style="italic">id</text>
+  <rect x="314" y="345" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="355" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="356" font-size="9.5" fill="#1d3557">id__n_atoms    [one row per role]</text>
+
+  <!-- row: superimpose_homology -->
+  <rect x="10" y="364" width="1580" height="22" fill="white"/>
+  <text x="16"  y="378" font-size="9.5" fill="#1d3557" font-weight="bold">superimpose_homology</text>
+  <text x="220" y="378" font-size="9.5" fill="#1d3565" font-style="italic">sup</text>
+  <rect x="314" y="367" width="50" height="13" rx="3" fill="#2d6a4f"/>
+  <text x="339" y="377" font-size="8.5" fill="white" text-anchor="middle">structure</text>
+  <text x="415" y="378" font-size="9.5" fill="#1d3557">sup__reference_path  ·  sup__on_chains  ·  sup__anchor_atoms  ·  sup__alignment_method  ·  sup__shared_atoms_rmsd  ·  sup__shared_atoms_count    [does not mutate ctx.aa — records metrics only]</text>
+
+  <!-- Subsection: chain grain -->
+  <rect x="10" y="390" width="1580" height="16" fill="#bfdbfe" rx="0"/>
+  <text x="16" y="402" font-size="9" font-weight="bold" fill="#1e3a8a">▸ grain = 'chain'  (one row per chain · identity keys: path, assembly_id, chain_id)</text>
+
+  <!-- row: chain_stats -->
+  <rect x="10" y="406" width="1580" height="22" fill="#eff6ff"/>
+  <text x="16"  y="420" font-size="9.5" fill="#1d3557" font-weight="bold">chain_stats</text>
+  <text x="220" y="420" font-size="9.5" fill="#1d3565" font-style="italic">chstat</text>
+  <rect x="314" y="409" width="38" height="13" rx="3" fill="#457b9d"/>
+  <text x="333" y="419" font-size="8.5" fill="white" text-anchor="middle">chain</text>
+  <text x="415" y="420" font-size="9.5" fill="#1d3557">chstat__n_residues  ·  chstat__centroid_x  ·  chstat__centroid_y  ·  chstat__centroid_z  ·  chstat__radius_of_gyration</text>
+
+  <!-- Subsection: role grain -->
+  <rect x="10" y="432" width="1580" height="16" fill="#ddd6fe" rx="0"/>
+  <text x="16" y="444" font-size="9" font-weight="bold" fill="#4c1d95">▸ grain = 'role'  (one row per role · identity keys: path, assembly_id, role)</text>
+
+  <!-- row: role_stats -->
+  <rect x="10" y="448" width="1580" height="22" fill="#f5f3ff"/>
+  <text x="16"  y="462" font-size="9.5" fill="#4c1d95" font-weight="bold">role_stats</text>
+  <text x="220" y="462" font-size="9.5" fill="#5b21b6" font-style="italic">rolstat</text>
+  <rect x="314" y="451" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="461" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="462" font-size="9.5" fill="#4c1d95">rolstat__n_residues  ·  rolstat__centroid_x  ·  rolstat__centroid_y  ·  rolstat__centroid_z  ·  rolstat__radius_of_gyration</text>
+
+  <!-- row: role_sequences -->
+  <rect x="10" y="470" width="1580" height="22" fill="white"/>
+  <text x="16"  y="484" font-size="9.5" fill="#4c1d95" font-weight="bold">role_sequences</text>
+  <text x="220" y="484" font-size="9.5" fill="#5b21b6" font-style="italic">rolseq</text>
+  <rect x="314" y="473" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="483" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="484" font-size="9.5" fill="#4c1d95">rolseq__sequence    [full amino-acid sequence string for the role]</text>
+
+  <!-- row: antibody_cdr_lengths -->
+  <rect x="10" y="492" width="1580" height="22" fill="#f5f3ff"/>
+  <text x="16"  y="506" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_lengths</text>
+  <text x="220" y="506" font-size="9.5" fill="#5b21b6" font-style="italic">abcdr</text>
+  <rect x="314" y="495" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="505" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="506" font-size="9.5" fill="#4c1d95">abcdr__cdr1_length  ·  abcdr__cdr2_length  ·  abcdr__cdr3_length    [requires abnumber; skips non-antibody roles]</text>
+
+  <!-- row: antibody_cdr_sequences -->
+  <rect x="10" y="514" width="1580" height="22" fill="white"/>
+  <text x="16"  y="528" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_sequences</text>
+  <text x="220" y="528" font-size="9.5" fill="#5b21b6" font-style="italic">abseq</text>
+  <rect x="314" y="517" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="527" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="528" font-size="9.5" fill="#4c1d95">abseq__cdr1_sequence  ·  abseq__cdr2_sequence  ·  abseq__cdr3_sequence    [full CDR loop sequences; scheme configurable]</text>
+
+  <!-- Subsection: interface grain -->
+  <rect x="10" y="540" width="1580" height="16" fill="#a5f3fc" rx="0"/>
+  <text x="16" y="552" font-size="9" font-weight="bold" fill="#134e4a">▸ grain = 'interface'  (one row per role-pair · identity keys: path, assembly_id, pair, role_left, role_right)</text>
+
+  <!-- row: interface_contacts -->
+  <rect x="10" y="556" width="1580" height="22" fill="#ecfeff"/>
+  <text x="16"  y="570" font-size="9.5" fill="#134e4a" font-weight="bold">interface_contacts</text>
+  <text x="220" y="570" font-size="9.5" fill="#155e75" font-style="italic">iface</text>
+  <rect x="310" y="559" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="569" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="570" font-size="9.5" fill="#134e4a">iface__contact_distance  ·  iface__n_contact_atom_pairs  ·  iface__n_left_interface_residues  ·  iface__n_right_interface_residues  ·  iface__left_interface_residues  ·  iface__right_interface_residues  [+ per-CDR contact columns if antibody roles]</text>
+
+  <!-- row: interface_metrics -->
+  <rect x="10" y="578" width="1580" height="22" fill="white"/>
+  <text x="16"  y="592" font-size="9.5" fill="#134e4a" font-weight="bold">interface_metrics</text>
+  <text x="220" y="592" font-size="9.5" fill="#155e75" font-style="italic">ifm</text>
+  <rect x="310" y="581" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="591" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="592" font-size="9.5" fill="#134e4a">ifm__contact_distance  ·  ifm__left_n_interface_residues  ·  ifm__right_n_interface_residues  ·  ifm__left_interface_residues  ·  ifm__right_interface_residues    [uses configurable cell_size for spatial binning]</text>
+
+  <!-- row: abepitope_score -->
+  <rect x="10" y="600" width="1580" height="22" fill="#ecfeff"/>
+  <text x="16"  y="614" font-size="9.5" fill="#134e4a" font-weight="bold">abepitope_score</text>
+  <text x="220" y="614" font-size="9.5" fill="#155e75" font-style="italic">abepitope</text>
+  <rect x="310" y="603" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="613" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="614" font-size="9.5" fill="#134e4a">abepitope__score  ·  abepitope__n_epitope_residues  ·  (epitope residue detail columns)    [requires abEpiTope; skips if not installed; input_model configurable]</text>
+
+  <!-- row: rosetta_interface_example -->
+  <rect x="10" y="622" width="1580" height="22" fill="white"/>
+  <text x="16"  y="636" font-size="9.5" fill="#134e4a" font-weight="bold">rosetta_interface_example</text>
+  <text x="220" y="636" font-size="9.5" fill="#155e75" font-style="italic">rosetta</text>
+  <rect x="310" y="625" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="635" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="636" font-size="9.5" fill="#134e4a">rosetta__dG_separated  ·  rosetta__dSASA_int  ·  rosetta__hbonds_int  ·  (full Rosetta InterfaceAnalyzer metrics)    [requires Rosetta binary; available() returns False if missing]</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- SECTION 3: dataset_calculation  (dataset.parquet / pdb.parquet) -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <!-- Section header -->
+  <rect x="10" y="650" width="1580" height="20" fill="#6d2e46" rx="2"/>
+  <text x="16" y="664" font-size="10" font-weight="bold" fill="white">dataset_calculation STAGE  →  reads merged pdb.parquet  ·  config key: dataset_analyses  ·  always runs post-merge on full dataset</text>
+
+  <!-- Subsection header row: columns labeled -->
+  <rect x="10" y="674" width="1580" height="16" fill="#f5c6d8" rx="0"/>
+  <text x="16" y="686" font-size="9" font-weight="bold" fill="#6d2e46">▸ plugins run via analyze_dataset_outputs()  ·  receive DatasetAnalysisContext  ·  return DataFrame → stacked into dataset.parquet  (cluster writes back to pdb.parquet)</text>
+
+  <!-- row: interface_summary -->
+  <rect x="10" y="690" width="1580" height="22" fill="#fdf2f8"/>
+  <text x="16"  y="704" font-size="9.5" fill="#6d2e46" font-weight="bold">interface_summary</text>
+  <text x="220" y="704" font-size="9.5" fill="#9d174d" font-style="italic">—</text>
+  <text x="308" y="704" font-size="9.5" fill="#9d174d">→ dataset</text>
+  <text x="415" y="704" font-size="9.5" fill="#6d2e46">pair  ·  n_interfaces  ·  n_left_unique_sequences  ·  n_right_unique_sequences    [aggregate counts per interface pair across dataset]</text>
+
+  <!-- row: cdr_entropy -->
+  <rect x="10" y="712" width="1580" height="22" fill="white"/>
+  <text x="16"  y="726" font-size="9.5" fill="#6d2e46" font-weight="bold">cdr_entropy</text>
+  <text x="220" y="726" font-size="9.5" fill="#9d174d" font-style="italic">—</text>
+  <text x="308" y="726" font-size="9.5" fill="#9d174d">→ dataset</text>
+  <text x="415" y="726" font-size="9.5" fill="#6d2e46">role  ·  region  ·  n_sequences  ·  n_unique_sequences  ·  shannon_entropy    [params: roles=[], regions=['cdr1','cdr2','cdr3']]</text>
+
+  <!-- row: cluster -->
+  <rect x="10" y="734" width="1580" height="22" fill="#fdf2f8"/>
+  <text x="16"  y="748" font-size="9.5" fill="#6d2e46" font-weight="bold">cluster</text>
+  <text x="220" y="748" font-size="9.5" fill="#9d174d" font-style="italic">cluster</text>
+  <text x="308" y="748" font-size="9.5" fill="#9d174d">→ pdb.parquet</text>
+  <text x="415" y="748" font-size="9.5" fill="#6d2e46">cluster__&lt;name&gt;_cluster_id  ·  cluster__&lt;name&gt;_mode  ·  cluster__&lt;name&gt;_interface_side    [writes back onto interface rows in pdb.parquet; params: jobs=[{name, pair, interface_side, distance_threshold}]]</text>
+
+  <!-- row: dataset_annotations -->
+  <rect x="10" y="756" width="1580" height="22" fill="white"/>
+  <text x="16"  y="770" font-size="9.5" fill="#6d2e46" font-weight="bold">dataset_annotations</text>
+  <text x="220" y="770" font-size="9.5" fill="#9d174d" font-style="italic">—</text>
+  <text x="308" y="770" font-size="9.5" fill="#9d174d">→ dataset</text>
+  <text x="415" y="770" font-size="9.5" fill="#6d2e46">user-defined annotation columns    [config: dataset_annotations: {&quot;/path/to/file.pdb&quot;: {&quot;experiment&quot;: &quot;run1&quot;, ...}}]</text>
+
+  <!-- ═══════════════════════════════════════════════ -->
+  <!-- PLUGIN AUTHOR QUICK REFERENCE -->
+  <!-- ═══════════════════════════════════════════════ -->
+
+  <rect x="10" y="785" width="1580" height="20" fill="#374151" rx="2"/>
+  <text x="16" y="799" font-size="10" font-weight="bold" fill="white">Plugin Author Quick Reference  —  write name + prefix + grain + run(ctx)  ·  register via entry_point group or directly in registry dict</text>
+
+  <!-- pdb_calculation template -->
+  <rect x="10" y="809" width="775" height="100" fill="#1e2937" rx="4"/>
+  <text x="20"  y="826" font-size="9.5" fill="#7dd3fc" font-weight="bold">class MyPlugin(BasePlugin):                   # or InterfacePlugin / ChainPlugin / RolePlugin</text>
+  <text x="20"  y="841" font-size="9.5" fill="#86efac">    name   = "my_metric"                          # key used in config.plugins list</text>
+  <text x="20"  y="856" font-size="9.5" fill="#86efac">    prefix = "my"                                 # prefix__column namespace</text>
+  <text x="20"  y="871" font-size="9.5" fill="#86efac">    grain  = "interface"                          # inherited from base class (override if needed)</text>
+  <text x="20"  y="886" font-size="9.5" fill="#fcd34d">    def run(self, ctx: Context) -&gt; Iterable[dict]:  # yield one dict per grain row</text>
+  <text x="20"  y="901" font-size="9.5" fill="#fcd34d">        yield {"grain": self.grain, "path": ctx.path, "assembly_id": ctx.assembly_id, "my__score": 1.0}</text>
+
+  <!-- dataset_calculation template -->
+  <rect x="800" y="809" width="790" height="100" fill="#1e2937" rx="4"/>
+  <text x="810" y="826" font-size="9.5" fill="#7dd3fc" font-weight="bold">class MyDatasetPlugin(BaseDatasetPlugin):     # from minimum_atw.plugins.dataset.calculation.base</text>
+  <text x="810" y="841" font-size="9.5" fill="#86efac">    name = "my_analysis"                          # key used in config.dataset_analyses list</text>
+  <text x="810" y="856" font-size="9.5" fill="#c4b5fd">    def required_columns(self, params): return {"interface": ["path", "pair"]}</text>
+  <text x="810" y="871" font-size="9.5" fill="#fcd34d">    def run(self, ctx: DatasetAnalysisContext) -&gt; pd.DataFrame:</text>
+  <text x="810" y="886" font-size="9.5" fill="#fcd34d">        # ctx.df_interfaces, ctx.df_roles, ctx.out_dir, ctx.params, ctx.annotations</text>
+  <text x="810" y="901" font-size="9.5" fill="#fcd34d">        return pd.DataFrame([{"analysis": self.name, "result": 42}])</text>
+
+  <!-- Footer -->
+  <rect x="0" y="914" width="1600" height="26" fill="#1e293b"/>
+  <text x="800" y="930" font-size="9.5" fill="#64748b" text-anchor="middle">pdb_calculation  ·  register via entry_points group "minimum_atw.plugins"  ·  dataset_calculation  ·  register via "minimum_atw.dataset_analyses"  ·  prepare-stage plugins  ·  register via "minimum_atw.structure_manipulations" / "minimum_atw.quality_controls"</text>
+
+  <!-- outer border -->
+  <rect x="10" y="56" width="1580" height="854" fill="none" stroke="#94a3b8" stroke-width="1" rx="2"/>
+</svg>
