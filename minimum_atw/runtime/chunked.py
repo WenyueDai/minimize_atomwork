@@ -28,13 +28,10 @@ def _chunk_config_data(
     chunk_input_dir: Path,
     chunk_out_dir: Path,
 ) -> dict[str, Any]:
-    return Config(**config_data).model_copy(
-        update={
-            "input_dir": str(chunk_input_dir),
-            "out_dir": str(chunk_out_dir),
-            "keep_intermediate_outputs": False,
-            "dataset_analyses": [],
-        }
+    source_config = Config(**config_data)
+    return source_config.chunk_config(
+        input_dir=chunk_input_dir,
+        out_dir=chunk_out_dir,
     ).model_dump(mode="json")
 
 
@@ -154,7 +151,7 @@ def merge_planned_chunks(
     chunk_out_dirs = [str(Path(item["chunk_out_dir"]).resolve()) for item in plan["chunks"]]
 
     counts = merge_dataset_outputs(chunk_out_dirs, target_out_dir)
-    if source_config.dataset_analyses:
+    if source_config.should_run_post_merge_dataset_analyses():
         analyze_dataset_outputs(
             target_out_dir,
             dataset_analyses=tuple(source_config.dataset_analyses),
@@ -214,7 +211,7 @@ def run_chunked_pipeline(
 
         chunk_results = sorted(chunk_results, key=lambda item: int(item["chunk_index"]))
         merged_counts = merge_dataset_outputs([item["chunk_out_dir"] for item in chunk_results], out_dir)
-        if cfg.dataset_analyses:
+        if cfg.should_run_post_merge_dataset_analyses():
             analyze_dataset_outputs(
                 out_dir,
                 dataset_analyses=tuple(cfg.dataset_analyses),

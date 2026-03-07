@@ -35,7 +35,7 @@ from ..runtime.workspace import (
     prepared_structures_dir as _prepared_structures_dir,
     run_unit as _run_unit,
 )
-from .config import Config
+from .config import Config, PREPARE_SECTION_ORDER
 from .registry import instantiate_unit
 from .tables import (
     BAD_COLS,
@@ -52,7 +52,6 @@ from .tables import (
     write_frame as _write_frame,
     write_tables as _write_tables,
 )
-
 
 def _count_tables(tables: dict[str, pd.DataFrame]) -> dict[str, int]:
     return {table_name: len(tables[table_name]) for table_name in TABLE_NAMES}
@@ -146,6 +145,78 @@ def _table_columns(tables: dict[str, pd.DataFrame]) -> dict[str, list[str]]:
     return {table_name: list(tables[table_name].columns) for table_name in TABLE_NAMES}
 
 
+def _empty_stage_frames() -> dict[str, pd.DataFrame]:
+    return {table_name: pd.DataFrame() for table_name in TABLE_NAMES}
+
+
+def _prepare_counts_from_dir(prepared_dir: Path) -> dict[str, int]:
+    counts = {
+        table_name: len(_read_table_parquet(prepared_dir / f"{table_name}{TABLE_SUFFIX}", table_name))
+        for table_name in TABLE_NAMES
+    }
+    counts["status"] = len(_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
+    counts["bad"] = len(_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
+    return counts
+
+
+def _load_manifest_checkpoint_paths(manifest_ckpt: Path) -> set[str]:
+    done_paths: set[str] = set()
+    if not manifest_ckpt.exists():
+        return done_paths
+    with manifest_ckpt.open() as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            done_paths.add(row["path"])
+    return done_paths
+
+
+def _finalize_manifest_checkpoint(out_dir: Path, manifest_ckpt: Path) -> None:
+    if not manifest_ckpt.exists():
+        return
+    records: list[dict[str, str]] = []
+    with manifest_ckpt.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    _write_frame(_prepared_manifest_path(out_dir), records, MANIFEST_COLS)
+
+
+def _prepared_manifest_entry(
+    cfg: Config,
+    source_path: Path,
+    prepared_structures_dir: Path,
+    *,
+    prepared_source_path: str,
+) -> tuple[Path | None, dict[str, str]]:
+    prepared_path = prepared_structures_dir / _prepared_filename(source_path) if cfg.keep_prepared_structures else None
+    return prepared_path, {
+        "path": prepared_source_path,
+        "prepared_path": str(prepared_path.resolve()) if prepared_path else str(source_path.resolve()),
+    }
+
+
+def _write_prepared_structure(prepared_path: Path | None, ctx: Any) -> None:
+    if prepared_path is None:
+        return
+    prepared_path.parent.mkdir(parents=True, exist_ok=True)
+    save_structure(prepared_path, ctx.aa)
+
+
+def _rows_to_stage_frames(
+    base_rows: dict[str, list[dict[str, Any]]],
+    extra_rows: dict[str, list[dict[str, Any]]],
+) -> dict[str, pd.DataFrame]:
+    frames: dict[str, pd.DataFrame] = {}
+    for table_name in TABLE_NAMES:
+        rows = list(base_rows.get(table_name, []))
+        rows.extend(extra_rows.get(table_name, []))
+        frames[table_name] = pd.DataFrame(rows) if rows else pd.DataFrame()
+    return frames
+
+
 def _merge_compatibility(config: Config | dict[str, Any]) -> dict[str, Any]:
     """Extract configuration options that must match when merging outputs.
     
@@ -154,7 +225,7 @@ def _merge_compatibility(config: Config | dict[str, Any]) -> dict[str, Any]:
     (plugins, manipulations, roles, interface pairs, etc.).
     """
     if isinstance(config, Config):
-        data = config.model_dump()
+        return config.merge_compatibility()
     else:
         data = dict(config)
     # Exclude options that are run-specific or vary per chunk
@@ -163,7 +234,10 @@ def _merge_compatibility(config: Config | dict[str, Any]) -> dict[str, Any]:
         "out_dir",
         "keep_intermediate_outputs",
         "keep_prepared_structures",  # Caching strategy may vary
+        "checkpoint_enabled",
+        "checkpoint_interval",
         "dataset_analyses",
+        "dataset_analysis_mode",
         "dataset_analysis_params",
         "dataset_annotations",
     }
@@ -338,183 +412,113 @@ def _plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
     }
 
 
-def prepare_outputs(cfg: Config) -> dict[str, int]:
-    """
-    Prepare structures for analysis.
-    
-    Phase 1 of the pipeline. This phase is expensive but can be cached:
-    
-    1. Discovers raw structures in input_dir (*.pdb, *.cif)
-    2. For each structure:
-       - Loads atomic coordinates
-       - Creates Context with role mappings
-       - Applies manipulations (center, superimpose, etc.)
-       - Writes prepared structure file for caching
-       - Records in prepared_manifest.parquet
-    3. Builds canonical base tables:
-       - structures: one row per structure
-       - chains: one row per chain  
-       - roles: one row per semantic role
-       - interfaces: one row per configured interface pair
-    
-    Args:
-        cfg: Config with input_dir, out_dir, manipulations, roles, interface_pairs
-        
-    Returns:
-        dict with row counts:
-            {
-                "structures": int,     # canonical structures rows
-                "chains": int,         # canonical chains rows
-                "roles": int,          # canonical roles rows
-                "interfaces": int,     # canonical interfaces rows
-                "status": int,         # manipulation status entries
-                "bad": int,            # files that failed
-            }
-            
-    Outputs:
-        - _prepared/structures.parquet
-        - _prepared/chains.parquet
-        - _prepared/roles.parquet
-        - _prepared/interfaces.parquet
-        - _prepared/plugin_status.parquet (manipulation results)
-        - _prepared/bad_files.parquet (load/manipulation failures)
-        - _prepared/prepared_manifest.parquet (source → prepared path mapping)
-        - _prepared/structures/ (prepared structure files for caching)
-    """
-    input_dir = Path(cfg.input_dir).resolve()
-    out_dir = Path(cfg.out_dir).resolve()
-    prepared_dir = _prepared_dir(out_dir)
-    prepared_structures_dir = _prepared_structures_dir(out_dir)
-    manipulation_units = [instantiate_unit(MANIPULATION_REGISTRY[name]) for name in cfg.manipulations]
-    plugins_dir = _plugins_dir(out_dir)
+def _prepare_units_by_section(cfg: Config) -> dict[str, list[Any]]:
+    section_by_name = {
+        name: str(getattr(unit, "prepare_section", "structure") or "structure")
+        for name, unit in MANIPULATION_REGISTRY.items()
+    }
+    grouped_names = cfg.prepare_names_by_section(section_by_name=section_by_name)
+    grouped_units: dict[str, list[Any]] = {section: [] for section in PREPARE_SECTION_ORDER}
+    for section in PREPARE_SECTION_ORDER:
+        for unit_name in grouped_names[section]:
+            grouped_units[section].append(instantiate_unit(MANIPULATION_REGISTRY[unit_name]))
+    return grouped_units
 
-    # determine previously processed paths when checkpointing
-    done_paths: set[str] = set()
-    manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
-    if cfg.checkpoint_enabled and manifest_ckpt.exists():
-        with manifest_ckpt.open() as fh:
-            for line in fh:
-                if not line.strip():
-                    continue
-                row = json.loads(line)
-                done_paths.add(row["path"])
-    
-    # if not checkpointing we start from a clean slate
-    if not cfg.checkpoint_enabled:
-        if prepared_dir.exists():
-            shutil.rmtree(prepared_dir)
-        if plugins_dir.exists():
-            shutil.rmtree(plugins_dir)
-    else:
-        # ensure output dirs exist but keep their previous contents
-        prepared_dir.mkdir(parents=True, exist_ok=True)
-        plugins_dir.mkdir(parents=True, exist_ok=True)
-        if cfg.keep_prepared_structures:
-            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
-    # helper to append results on the fly when checkpointing
-    def _flush_single(
-        base_rows: dict[str, list[dict[str, Any]]],
-        manip_rows: dict[str, list[dict[str, Any]]],
-        status_list: list[dict[str, Any]],
-        bad_list: list[dict[str, Any]],
-    ) -> None:
-        # combine base + manipulation data
-        all_tables: dict[str, pd.DataFrame] = {}
-        for table in TABLE_NAMES:
-            rows = list(base_rows.get(table, []))
-            rows.extend(manip_rows.get(table, []))
-            all_tables[table] = pd.DataFrame(rows) if rows else pd.DataFrame()
-        _append_stage_outputs(prepared_dir, all_tables, status_list, bad_list)
+def _ordered_prepare_units(cfg: Config) -> list[Any]:
+    grouped_units = _prepare_units_by_section(cfg)
+    ordered: list[Any] = []
+    for section in PREPARE_SECTION_ORDER:
+        ordered.extend(grouped_units[section])
+    return ordered
 
-    # if we are resuming, we may already have some existing outputs; counts will
-    # be calculated from disk at the end, so we don't track during the loop.
 
-    # when checkpointing we don't use buffers -- we flush every structure
-    if cfg.checkpoint_enabled:
-        # ensure structures dir exists if caching
-        if cfg.keep_prepared_structures:
-            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+def _prepare_execution_metadata(cfg: Config) -> dict[str, Any]:
+    grouped_units = _prepare_units_by_section(cfg)
+    return {
+        "sections": {
+            section: [unit.name for unit in grouped_units[section]]
+            for section in PREPARE_SECTION_ORDER
+        }
+    }
 
-        for source_path in _discover(input_dir):
-            src_str = str(source_path.resolve())
-            if src_str in done_paths:
-                continue
 
-            try:
-                ctx = _prepare_context(source_path, source_path, cfg)
-            except Exception as exc:
-                _append_stage_outputs(
-                    prepared_dir,
-                    {t: pd.DataFrame() for t in TABLE_NAMES},
-                    [],
-                    [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}],
-                )
-                done_paths.add(src_str)
-                continue
+def _prepare_outputs_checkpointed(
+    cfg: Config,
+    *,
+    input_dir: Path,
+    out_dir: Path,
+    prepared_dir: Path,
+    prepared_structures_dir: Path,
+    manipulation_units: list[Any],
+    manifest_ckpt: Path,
+) -> dict[str, int]:
+    done_paths = _load_manifest_checkpoint_paths(manifest_ckpt)
+    prepared_dir.mkdir(parents=True, exist_ok=True)
+    if cfg.keep_prepared_structures:
+        prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
-            manipulation_ok = True
-            manip_tables: dict[str, list[dict[str, Any]]] = {t: [] for t in TABLE_NAMES}
-            status_list: list[dict[str, Any]] = []
-            bad_list: list[dict[str, Any]] = []
-            for unit in manipulation_units:
-                manipulation_ok = _run_unit(ctx, unit, manip_tables, status_list) and manipulation_ok
-            if not manipulation_ok:
-                bad_list.append({"path": ctx.path, "error": "prepare_failed"})
-                _append_stage_outputs(prepared_dir, {t: pd.DataFrame() for t in TABLE_NAMES}, status_list, bad_list)
-                done_paths.add(src_str)
-                continue
+    for source_path in _discover(input_dir):
+        src_str = str(source_path.resolve())
+        if src_str in done_paths:
+            continue
 
-            base_rows = _base_rows_for_context(ctx)
-
-            # record manifest row
-            prepared_path = (
-                prepared_structures_dir / _prepared_filename(source_path)
-                if cfg.keep_prepared_structures
-                else None
+        try:
+            ctx = _prepare_context(source_path, source_path, cfg)
+        except Exception as exc:
+            _append_stage_outputs(
+                prepared_dir,
+                _empty_stage_frames(),
+                [],
+                [{"path": src_str, "error": f"{type(exc).__name__}: {exc}"}],
             )
-            manifest_entry = {
-                "path": ctx.path,
-                "prepared_path": str(prepared_path.resolve()) if prepared_path else src_str,
-            }
-            # append to checkpoint log
-            prepared_dir.mkdir(parents=True, exist_ok=True)
-            with manifest_ckpt.open("a") as fh:
-                fh.write(json.dumps(manifest_entry) + "\n")
-
-            # write structure file
-            if cfg.keep_prepared_structures:
-                save_structure(prepared_path, ctx.aa)
-
-            # flush results for this source
-            _flush_single(base_rows, manip_tables, status_list, bad_list)
             done_paths.add(src_str)
+            continue
 
-        # after loop convert manifest log to final parquet manifest
-        if manifest_ckpt.exists():
-            records: list[dict[str, str]] = []
-            with manifest_ckpt.open() as fh:
-                for line in fh:
-                    line = line.strip()
-                    if line:
-                        records.append(json.loads(line))
-            _write_frame(_prepared_manifest_path(out_dir), records, MANIFEST_COLS)
+        manipulation_ok = True
+        manipulation_rows: dict[str, list[dict[str, Any]]] = {table_name: [] for table_name in TABLE_NAMES}
+        status_rows: list[dict[str, Any]] = []
+        bad_rows: list[dict[str, Any]] = []
+        for unit in manipulation_units:
+            manipulation_ok = _run_unit(ctx, unit, manipulation_rows, status_rows) and manipulation_ok
+        if not manipulation_ok:
+            bad_rows.append({"path": ctx.path, "error": "prepare_failed"})
+            _append_stage_outputs(prepared_dir, _empty_stage_frames(), status_rows, bad_rows)
+            done_paths.add(src_str)
+            continue
 
-        # compute final counts by reading files
-        counts = {}
-        for table in TABLE_NAMES:
-            counts[table] = len(_read_table_parquet(prepared_dir / f"{table}{TABLE_SUFFIX}", table))
-        counts["status"] = len(_read_frame(prepared_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS))
-        counts["bad"] = len(_read_frame(prepared_dir / f"bad_files{TABLE_SUFFIX}", BAD_COLS))
-        return counts
+        base_rows = _base_rows_for_context(ctx)
+        prepared_path, manifest_entry = _prepared_manifest_entry(
+            cfg,
+            source_path,
+            prepared_structures_dir,
+            prepared_source_path=ctx.path,
+        )
+        with manifest_ckpt.open("a") as fh:
+            fh.write(json.dumps(manifest_entry) + "\n")
 
-    # non-checkpointing original behavior
-    if prepared_dir.exists():
-        shutil.rmtree(prepared_dir)
-    if plugins_dir.exists():
-        shutil.rmtree(plugins_dir)
-    
-    # Only create structures directory if we're caching them
+        _write_prepared_structure(prepared_path, ctx)
+        _append_stage_outputs(
+            prepared_dir,
+            _rows_to_stage_frames(base_rows, manipulation_rows),
+            status_rows,
+            bad_rows,
+        )
+        done_paths.add(src_str)
+
+    _finalize_manifest_checkpoint(out_dir, manifest_ckpt)
+    return _prepare_counts_from_dir(prepared_dir)
+
+
+def _prepare_outputs_buffered(
+    cfg: Config,
+    *,
+    input_dir: Path,
+    out_dir: Path,
+    prepared_dir: Path,
+    prepared_structures_dir: Path,
+    manipulation_units: list[Any],
+) -> dict[str, int]:
     if cfg.keep_prepared_structures:
         prepared_structures_dir.mkdir(parents=True, exist_ok=True)
 
@@ -543,17 +547,14 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
             for table_name, rows in base_rows.items():
                 base_tables.add_rows(table_name, rows)
 
-            # Always record prepared path mapping (needed for run_plugin to work)
-            prepared_path = prepared_structures_dir / _prepared_filename(source_path) if cfg.keep_prepared_structures else None
-            manifest_rows.add({
-                "path": ctx.path,
-                "prepared_path": str(prepared_path.resolve()) if prepared_path else str(source_path.resolve()),
-            })
-
-            # Only write prepared structures if configured (costs 20-30% I/O)
-            if cfg.keep_prepared_structures:
-                prepared_structures_dir.mkdir(parents=True, exist_ok=True)
-                save_structure(prepared_path, ctx.aa)
+            prepared_path, manifest_entry = _prepared_manifest_entry(
+                cfg,
+                source_path,
+                prepared_structures_dir,
+                prepared_source_path=ctx.path,
+            )
+            manifest_rows.add(manifest_entry)
+            _write_prepared_structure(prepared_path, ctx)
 
         merged_tables = base_tables.finalize()
         for unit in manipulation_units:
@@ -573,14 +574,11 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
             status_frame.to_dict(orient="records"),
             bad_frame.to_dict(orient="records"),
         )
-        
-        # Always write manifest (required for run_plugin)
         _write_frame(
             _prepared_manifest_path(out_dir),
             manifest_rows.finalize().to_dict(orient="records"),
             MANIFEST_COLS,
         )
-        
         return counts
     finally:
         base_tables.close()
@@ -589,6 +587,90 @@ def prepare_outputs(cfg: Config) -> dict[str, int]:
         status_rows.close()
         bad_rows.close()
         manifest_rows.close()
+
+
+def prepare_outputs(cfg: Config) -> dict[str, int]:
+    """
+    Prepare structures for analysis.
+    
+    Phase 1 of the pipeline. This phase is expensive but can be cached:
+    
+    1. Discovers raw structures in input_dir (*.pdb, *.cif)
+    2. For each structure:
+       - Loads atomic coordinates
+       - Creates Context with role mappings
+       - Runs prepare units in three ordered sections:
+         quality control -> structure manipulation -> dataset manipulation
+       - Writes prepared structure file for caching
+       - Records in prepared_manifest.parquet
+    3. Builds canonical base tables:
+       - structures: one row per structure
+       - chains: one row per chain  
+       - roles: one row per semantic role
+       - interfaces: one row per configured interface pair
+    
+    Args:
+        cfg: Config with input_dir, out_dir, prepare sections, roles, interface_pairs
+        
+    Returns:
+        dict with row counts:
+            {
+                "structures": int,     # canonical structures rows
+                "chains": int,         # canonical chains rows
+                "roles": int,          # canonical roles rows
+                "interfaces": int,     # canonical interfaces rows
+                "status": int,         # manipulation status entries
+                "bad": int,            # files that failed
+            }
+            
+    Outputs:
+        - _prepared/structures.parquet
+        - _prepared/chains.parquet
+        - _prepared/roles.parquet
+        - _prepared/interfaces.parquet
+        - _prepared/plugin_status.parquet (manipulation results)
+        - _prepared/bad_files.parquet (load/manipulation failures)
+        - _prepared/prepared_manifest.parquet (source → prepared path mapping)
+        - _prepared/structures/ (prepared structure files for caching)
+    """
+    input_dir = Path(cfg.input_dir).resolve()
+    out_dir = Path(cfg.out_dir).resolve()
+    prepared_dir = _prepared_dir(out_dir)
+    prepared_structures_dir = _prepared_structures_dir(out_dir)
+    manipulation_units = _ordered_prepare_units(cfg)
+    plugins_dir = _plugins_dir(out_dir)
+    manifest_ckpt = prepared_dir / "manifest_checkpoint.jsonl"
+
+    if not cfg.checkpoint_enabled:
+        if prepared_dir.exists():
+            shutil.rmtree(prepared_dir)
+        if plugins_dir.exists():
+            shutil.rmtree(plugins_dir)
+    else:
+        # ensure output dirs exist but keep their previous contents
+        prepared_dir.mkdir(parents=True, exist_ok=True)
+        plugins_dir.mkdir(parents=True, exist_ok=True)
+        if cfg.keep_prepared_structures:
+            prepared_structures_dir.mkdir(parents=True, exist_ok=True)
+    if cfg.checkpoint_enabled:
+        return _prepare_outputs_checkpointed(
+            cfg,
+            input_dir=input_dir,
+            out_dir=out_dir,
+            prepared_dir=prepared_dir,
+            prepared_structures_dir=prepared_structures_dir,
+            manipulation_units=manipulation_units,
+            manifest_ckpt=manifest_ckpt,
+        )
+
+    return _prepare_outputs_buffered(
+        cfg,
+        input_dir=input_dir,
+        out_dir=out_dir,
+        prepared_dir=prepared_dir,
+        prepared_structures_dir=prepared_structures_dir,
+        manipulation_units=manipulation_units,
+    )
 
 
 def _append_rows(path: Path, rows: list[dict[str, Any]], columns: list[str] | None = None) -> None:
@@ -959,6 +1041,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
         {
             "output_kind": "run",
             "config": cfg.model_dump(),
+            "prepare_execution": _prepare_execution_metadata(cfg),
             "plugin_execution": _plugin_execution_metadata(cfg.plugins),
             "counts": counts,
             "merge_compatibility": _merge_compatibility(cfg),
@@ -1007,7 +1090,8 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
         prepare_outputs(cfg)
         run_plugins(cfg, cfg.plugins)
         counts = merge_outputs(cfg)
-        _run_dataset_analyses(cfg, out_dir)
+        if cfg.dataset_analyses:
+            _run_dataset_analyses(cfg, out_dir)
         return counts
 
     with tempfile.TemporaryDirectory(prefix="minimum_atw_run_") as tmp_dir:
@@ -1016,5 +1100,6 @@ def run_pipeline(cfg: Config) -> dict[str, int]:
         run_plugins(temp_cfg, temp_cfg.plugins)
         counts = merge_outputs(temp_cfg)
         _copy_final_outputs(Path(temp_cfg.out_dir).resolve(), out_dir)
-        _run_dataset_analyses(cfg, out_dir)
+        if cfg.dataset_analyses:
+            _run_dataset_analyses(cfg, out_dir)
     return counts

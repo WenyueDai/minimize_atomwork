@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from .core.config import Config
-from .core.extensions import EXTENSION_CLASSES, extension_catalog, extension_catalog_by_category
+from .core.extensions import EXTENSION_CLASSES, extension_catalog
 from .core.pipeline import (
     merge_planned_chunks,
     merge_dataset_outputs,
@@ -84,7 +84,6 @@ def _build_parser() -> argparse.ArgumentParser:
 
     dataset_parser = subparsers.add_parser("analyze-dataset", help="Run dataset-level analysis on final outputs")
     dataset_parser.add_argument("--config", required=True, help="Path to YAML config")
-
     subparsers.add_parser("list-extensions", help="List extension classes and registered extensions")
 
     return parser
@@ -96,26 +95,6 @@ def _print_counts(label: str, counts: dict[str, int]) -> None:
         print(f"  {key}: {value}")
 
 
-def _print_extension_catalog() -> None:
-    catalog = extension_catalog()
-    for class_name, spec in EXTENSION_CLASSES.items():
-        print(spec.display_name)
-        print(f"  config key: {spec.config_key}")
-        print(f"  stage: {spec.stage}")
-        print(f"  description: {spec.description}")
-        for item in catalog.get(class_name, []):
-            line = f"  - {item.name} category={item.analysis_category}"
-            if item.execution != "n/a":
-                line += f" execution={item.execution}"
-            print(line)
-    print("Analysis Categories")
-    by_category = extension_catalog_by_category()
-    for category, items in by_category.items():
-        print(f"  {category}")
-        for item in items:
-            print(f"    - {item.name} ({item.extension_class})")
-
-
 def main() -> None:
     parser = _build_parser()
     argv = sys.argv[1:]
@@ -123,10 +102,6 @@ def main() -> None:
         argv = ["run", *argv]
 
     args = parser.parse_args(argv)
-
-    if args.command == "list-extensions":
-        _print_extension_catalog()
-        return
 
     if args.command == "prepare":
         cfg = _load_config(args.config)
@@ -186,6 +161,17 @@ def main() -> None:
         _print_counts("Dataset merge complete", counts)
         print(f"  merged_from: {', '.join(args.source_out_dirs)}")
         print(f"  merged_to: {args.out_dir}")
+        return
+
+    if args.command == "list-extensions":
+        catalog = extension_catalog()
+        for extension_class, items in catalog.items():
+            spec = EXTENSION_CLASSES[extension_class]
+            print(f"{spec.display_name} ({extension_class})")
+            for item in items:
+                print(
+                    f"  {item.name}: stage={item.stage}, config={item.config_key or 'n/a'}, category={item.analysis_category}"
+                )
         return
 
     if args.command == "analyze-dataset":

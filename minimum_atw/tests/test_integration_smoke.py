@@ -10,7 +10,7 @@ try:
     import pandas as pd
     import yaml
     from minimum_atw.cli import _load_config
-    from minimum_atw.core.pipeline import run_pipeline, run_plugins
+    from minimum_atw.core.pipeline import prepare_outputs, run_pipeline, run_plugin, run_plugins
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
         raise
@@ -71,20 +71,6 @@ class IntegrationSmokeTests(unittest.TestCase):
             interfaces = pd.read_parquet(out_dir / "interfaces.parquet")
             metadata = json.loads((out_dir / "run_metadata.json").read_text())
 
-            # additional checkpoint resume tests
-            # first run used checkpoint disabled by default; now simulate a resume
-            # by adding a second structure and enabling checkpoint
-            input2 = input_dir / "toy_complex2.pdb"
-            input2.write_text(input_dir.joinpath("toy_complex.pdb").read_text())
-            cfg2 = _load_config(str(config_path))
-            cfg2 = cfg2.model_copy(update={"checkpoint_enabled": True})
-            counts2 = run_pipeline(cfg2)
-
-            # should now total two structures
-            self.assertEqual(counts2["structures"], 2)
-            structures = pd.read_parquet(out_dir / "structures.parquet")
-            self.assertEqual(len(structures), 2)
-
             self.assertEqual(len(structures), 1)
             self.assertEqual(len(chains), 2)
             self.assertEqual(len(roles), 2)
@@ -104,6 +90,17 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertTrue((identity_plugin_dir / "chains.parquet").exists())
             self.assertTrue((identity_plugin_dir / "roles.parquet").exists())
             self.assertFalse((identity_plugin_dir / "interfaces.parquet").exists())
+
+            # simulate a later resume with checkpointing enabled
+            input2 = input_dir / "toy_complex2.pdb"
+            input2.write_text(input_dir.joinpath("toy_complex.pdb").read_text())
+            cfg2 = _load_config(str(config_path))
+            cfg2 = cfg2.model_copy(update={"checkpoint_enabled": True})
+            counts2 = run_pipeline(cfg2)
+
+            self.assertEqual(counts2["structures"], 2)
+            resumed_structures = pd.read_parquet(out_dir / "structures.parquet")
+            self.assertEqual(len(resumed_structures), 2)
 
     def test_checkpoint_allows_plugin_resume(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_test_") as tmp_dir:
