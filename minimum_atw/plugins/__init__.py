@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .antibody_analysis import AntibodyCDRLengthsPlugin, AntibodyCDRSequencesPlugin
 from .interface_analysis.interface_contacts import InterfaceContactsPlugin
+from .interface_analysis.interface_residue_metrics import InterfaceMetricsPlugin
 from .interface_analysis.rosetta_interface import RosettaInterfaceExamplePlugin
 from .structure_analysis import ChainStatsPlugin, IdentityPlugin, RoleSequencesPlugin, RoleStatsPlugin
 from ..core.registry import load_registry
@@ -14,6 +15,7 @@ def _builtin_plugins() -> dict[str, object]:
         "chain_stats": ChainStatsPlugin(),
         "identity": IdentityPlugin(),
         "interface_contacts": InterfaceContactsPlugin(),
+        "interface_metrics": InterfaceMetricsPlugin(),
         "role_sequences": RoleSequencesPlugin(),
         "role_stats": RoleStatsPlugin(),
         "rosetta_interface_example": RosettaInterfaceExamplePlugin(),
@@ -33,6 +35,7 @@ __all__ = [
     "ChainStatsPlugin",
     "IdentityPlugin",
     "InterfaceContactsPlugin",
+    "InterfaceMetricsPlugin",
     "PLUGIN_REGISTRY",
     "RoleSequencesPlugin",
     "RoleStatsPlugin",

@@ -94,6 +94,7 @@ Built-in plugins used in the examples:
 - `role_sequences`: one row per role with sequence strings
 - `role_stats`: one row per role with counts and sizes
 - `interface_contacts`: interface atom-contact and interface-residue metrics
+- `interface_metrics`: interface residue-property and residue-contact-pair metrics
 - `antibody_cdr_lengths`: antibody/VHH CDR length fields on `roles.parquet`
 - `antibody_cdr_sequences`: antibody/VHH CDR sequence fields on `roles.parquet`
 - `rosetta_interface_example`: Rosetta InterfaceAnalyzer metrics on `interfaces.parquet`
@@ -102,13 +103,14 @@ Use plugin names explicitly. Commenting a plugin out cleanly removes its output 
 
 Related internal helper modules:
 
-- `minimum_atw.plugins.interface_analysis.interface_metrics`: shared interface-analysis helper code used by `interface_contacts`; this is not a standalone plugin and therefore does not belong in YAML
+- `minimum_atw.plugins.interface_analysis.interface_metrics`: shared interface-analysis helper code used by both `interface_contacts` and `interface_metrics`; this is not a standalone YAML extension by itself
 
 ### Interface analysis settings
 
-- `contact_distance`: atom-atom distance cutoff in Angstroms for `interface_contacts`
+- `contact_distance`: atom-atom distance cutoff in Angstroms for `interface_contacts` and `interface_metrics`
+- `interface_cell_size`: optional cell-list bin size for `interface_metrics`; when unset, the plugin uses `contact_distance`
 
-This only affects the lightweight geometric interface contact plugin, not Rosetta.
+These affect the lightweight geometric interface-analysis plugins, not Rosetta.
 
 ### Rosetta settings
 

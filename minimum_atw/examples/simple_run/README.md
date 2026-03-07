@@ -31,6 +31,11 @@ Antibody and VHH examples enable:
 - interface summary
 - CDR entropy
 
+That includes both interface plugins:
+
+- `interface_contacts` for atom/residue contact outputs
+- `interface_metrics` for residue-property and residue-contact-pair outputs
+
 The generic protein-protein example leaves antibody-only features commented because they do not apply to that role model.
 
 ## Enabling Rosetta later

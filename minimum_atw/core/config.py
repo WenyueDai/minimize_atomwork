@@ -86,6 +86,8 @@ class Config(BaseModel):
         manipulations: List of manipulation plugin names to apply in order
         plugins: List of analysis plugin names to run (run in parallel)
         contact_distance: Distance threshold for interface contacts (default: 5.0 Å)
+        interface_cell_size: Optional cell-list bin size for interface plugins.
+            Defaults to contact_distance when unset.
         rosetta_executable: Optional path to Rosetta binary
         rosetta_database: Optional path to Rosetta database
         rosetta_score_jd2_executable: Optional path to Rosetta score_jd2 binary
@@ -138,6 +140,7 @@ class Config(BaseModel):
     manipulations: list[str] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)
     contact_distance: float = 5.0
+    interface_cell_size: Optional[float] = None
     rosetta_executable: Optional[str] = None
     rosetta_database: Optional[str] = None
     rosetta_score_jd2_executable: Optional[str] = None

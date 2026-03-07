@@ -25,6 +25,7 @@ manipulations:
 # - "role_sequences"
 # - "role_stats"
 # - "interface_contacts"
+# - "interface_metrics"
 # - "antibody_cdr_lengths"
 # - "antibody_cdr_sequences"
 # - "rosetta_interface_example"
@@ -34,11 +35,13 @@ plugins:
   - "role_sequences"
   - "role_stats"
   - "interface_contacts"
+  - "interface_metrics"
   # - "antibody_cdr_lengths"
   # - "antibody_cdr_sequences"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
+# interface_cell_size: 5.0
 
 # Rosetta InterfaceAnalyzer scaffold.
 # Uncomment the plugin above and fill these in when you want Rosetta metrics.
