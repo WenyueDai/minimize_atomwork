@@ -1,5 +1,7 @@
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_pdb_light_test"
+# pdb_output_name: "20250212_pdb.parquet"
+# dataset_output_name: "20250212_dataset.parquet"
 assembly_id: "1"
 
 roles:
@@ -11,34 +13,16 @@ roles:
 interface_pairs:
   - ["antibody", "antigen"]
 
-# Prepare-stage quality controls:
-# - "chain_continuity"
-# - "structure_clashes"
 quality_controls:
   - "chain_continuity"
   - "structure_clashes"
 
-# Per-structure manipulations:
-# - "center_on_origin"
 structure_manipulations:
   - "center_on_origin"
 
-# Dataset-scale manipulations:
-# - "superimpose_homology"
 dataset_manipulations:
   - "superimpose_homology"
 
-# Built-in PDB calculation plugins:
-# - "identity"
-# - "chain_stats"
-# - "role_sequences"
-# - "role_stats"
-# - "abepitope_score"
-# - "interface_contacts"
-# - "interface_metrics"
-# - "antibody_cdr_lengths"
-# - "antibody_cdr_sequences"
-# - "rosetta_interface_example"
 plugins:
   - "identity"
   - "chain_stats"
@@ -81,22 +65,18 @@ keep_prepared_structures: false
 # checkpoint_enabled: true
 # checkpoint_interval: 25
 
-# Built-in dataset analyses:
-# - "dataset_annotations"
-# - "interface_summary"
-# - "cdr_entropy"
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
-  - "cdr_entropy"
+  # - "cdr_entropy"
 # dataset_analysis_mode: "per_chunk"
 # dataset_analysis_mode: "both"
 dataset_analysis_mode: "post_merge"
 
 dataset_analysis_params:
-  cdr_entropy:
-    roles: ["vh", "vl"]
-    regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
 
 numbering_roles:
   - "vh"

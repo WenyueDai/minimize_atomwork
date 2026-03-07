@@ -40,6 +40,7 @@ Use this when:
 - you changed package architecture
 - you changed pipeline logic
 - you changed plugin behavior
+- you changed output-file naming or merge behavior
 - you want a final confidence check before committing
 
 ## 3. Run a single test file
@@ -97,15 +98,15 @@ The files are organized roughly by subsystem:
 - `test_config.py`
   config normalization and validation
 - `test_tables.py`
-  normalized table merge and identity-key behavior
+  unified PDB parquet merge and identity-key behavior
 - `test_registry.py`
   registry instantiation behavior
 - `test_stage_buffer.py`
   buffered staging and spill-to-parquet behavior
 - `test_dataset_merge.py`
-  merge-datasets compatibility and metadata checks
+  merge-datasets compatibility, metadata, and output-file resolution checks
 - `test_dataset_analysis_runtime.py`
-  dataset-analysis loading, projection, cleanup, and summary behavior
+  dataset-analysis loading, projection, cleanup, summary behavior, and configured filename handling
 - `test_interface_contacts.py`
   interface residue outputs and antibody/VHH CDR interface fields
 - `test_antibody_numbering.py`

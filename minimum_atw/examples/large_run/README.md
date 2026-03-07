@@ -41,13 +41,15 @@ The shipped config follows the same local-development rule as the small examples
 ## What the chunked example shows
 
 - both built-in quality controls
-- the built-in per-structure manipulation
-- the built-in dataset-scale manipulation
+- the built-in PDB manipulation
+- the built-in dataset manipulation
 - the plugin set appropriate for each role model
-- dataset analyses, including `cdr_entropy` where antibody/VHH numbering applies
+- dataset analyses, with `cdr_entropy` scaffolded but commented out by default
 - `dataset_analysis_mode: post_merge` so chunked runs analyze only the merged final dataset by default
 - cache/checkpoint toggles as commented options
 - the full Rosetta config block ready for later activation
+
+Merged outputs use the configured parquet names from the YAML. If you do not set them, the defaults remain `pdb.parquet` and `dataset.parquet`.
 
 ## Enabling Rosetta later
 

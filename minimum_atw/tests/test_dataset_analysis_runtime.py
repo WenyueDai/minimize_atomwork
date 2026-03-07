@@ -151,6 +151,43 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             self.assertFalse((analysis_dir / "stale.parquet").exists())
             self.assertTrue((out_dir / "dataset.parquet").exists())
 
+    def test_empty_analysis_does_not_leak_columns_into_dataset_schema(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
+            out_dir = Path(tmp_dir)
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "pair": "vh__antigen",
+                        "role_left": "vh",
+                        "role_right": "antigen",
+                    }
+                ]
+            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "role": "vh",
+                    }
+                ]
+            ).to_parquet(out_dir / "roles.parquet", index=False)
+
+            summary = analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=("interface_summary", "cdr_entropy"),
+                dataset_analysis_params={"cdr_entropy": {"roles": ["missing_role"]}},
+            )
+
+            result = pd.read_parquet(out_dir / "dataset.parquet")
+
+            self.assertEqual(summary["n_cdr_entropy_rows"], 0)
+            self.assertEqual(result["analysis"].unique().tolist(), ["interface_summary"])
+            self.assertNotIn("region", result.columns)
+            self.assertNotIn("shannon_entropy", result.columns)
+
 
 if __name__ == "__main__":
     unittest.main()

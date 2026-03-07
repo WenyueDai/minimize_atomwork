@@ -5,10 +5,10 @@ This directory contains runnable example configs for `minimum_atomworks` on this
 Current example policy:
 
 - all built-in local features are enabled where they fit the example
-- prepare is shown explicitly as quality control -> structure manipulation -> dataset manipulation
-- heavy external tools stay scaffolded but commented by default
+- prepare is shown explicitly as `quality_control -> manipulation` at both `pdb` and `dataset` scope where relevant
+- Rosetta stays scaffolded but commented by default
 - Rosetta InterfaceAnalyzer is fully scaffolded in every relevant YAML
-- Rosetta stays commented out by default for local development
+- AbEpiTope is enabled by default in antibody-oriented examples
 
 Use this Python environment:
 
@@ -65,7 +65,7 @@ To enable Rosetta, uncomment the `rosetta_interface_example` plugin and the Rose
 
 ## AbEpiTope usage
 
-AbEpiTope is available as an optional external plugin:
+AbEpiTope is available as an external plugin:
 
 - plugin name: `abepitope_score`
 - output prefix: `abepitope__`
@@ -89,6 +89,13 @@ The example YAML files all use the same core config model. The sections below ex
 - `assembly_id`: biological assembly identifier to load from each structure; usually `"1"`
 - `pdb_output_name`: optional final PDB parquet filename; defaults to `pdb.parquet`
 - `dataset_output_name`: optional final dataset parquet filename; defaults to `dataset.parquet`
+
+Example:
+
+```yaml
+pdb_output_name: "20250212_pdb.parquet"
+dataset_output_name: "20250212_dataset.parquet"
+```
 
 ### Role and interface definition
 
@@ -181,7 +188,7 @@ These keys only matter when `rosetta_interface_example` is enabled.
 
 ### Output retention and checkpointing
 
-- `keep_intermediate_outputs`: keep `_prepared/` and flat plugin-record files in `_plugins/` after the run
+- `keep_intermediate_outputs`: keep `_prepared/` and flat plugin artifacts in `_plugins/` after the run
 - `keep_prepared_structures`: keep cached prepared structure files instead of discarding them after use
 - `checkpoint_enabled`: persist incremental progress so a rerun can resume after failure
 - `checkpoint_interval`: flush progress every N structures when checkpointing is on
@@ -205,7 +212,7 @@ Notes:
 
 Built-in dataset analyses used in the examples:
 
-- `dataset_annotations`: writes dataset-level metadata rows into `dataset.parquet`
+- `dataset_annotations`: writes dataset-level metadata rows into the configured dataset parquet
 - `interface_summary`: aggregates interface-level metrics across the full dataset
 - `cdr_entropy`: computes sequence entropy over chosen antibody/VHH regions
 

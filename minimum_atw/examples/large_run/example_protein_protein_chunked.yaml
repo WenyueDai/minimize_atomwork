@@ -1,5 +1,7 @@
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_protein_protein_chunked"
+# pdb_output_name: "20250212_pdb.parquet"
+# dataset_output_name: "20250212_dataset.parquet"
 assembly_id: "1"
 
 roles:
@@ -12,34 +14,16 @@ interface_pairs:
   - ["ligand", "receptor"]
   - ["complex_left", "complex_right"]
 
-# Prepare-stage quality controls:
-# - "chain_continuity"
-# - "structure_clashes"
 quality_controls:
   - "chain_continuity"
   - "structure_clashes"
 
-# Per-structure manipulations:
-# - "center_on_origin"
 structure_manipulations:
   - "center_on_origin"
 
-# Dataset-scale manipulations:
-# - "superimpose_homology"
 dataset_manipulations:
   - "superimpose_homology"
 
-# Built-in PDB calculation plugins:
-# - "identity"
-# - "chain_stats"
-# - "role_sequences"
-# - "role_stats"
-# - "abepitope_score"            # optional antibody-antigen-only external plugin
-# - "interface_contacts"
-# - "interface_metrics"
-# - "antibody_cdr_lengths"
-# - "antibody_cdr_sequences"
-# - "rosetta_interface_example"
 plugins:
   - "identity"
   - "chain_stats"
@@ -47,6 +31,9 @@ plugins:
   - "role_stats"
   - "interface_contacts"
   - "interface_metrics"
+  # - "abepitope_score"
+  # - "antibody_cdr_lengths"
+  # - "antibody_cdr_sequences"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
@@ -83,10 +70,6 @@ keep_prepared_structures: false
 # checkpoint_enabled: true
 # checkpoint_interval: 25
 
-# Built-in dataset analyses:
-# - "dataset_annotations"
-# - "interface_summary"
-# - "cdr_entropy"
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"

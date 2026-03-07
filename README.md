@@ -2,9 +2,10 @@
 
 `minimum_atomworks` is a structural data-processing package for protein complexes.
 
-It produces one unified PDB table:
+It produces one unified PDB-side table plus optional dataset-level analysis output:
 
 - `pdb.parquet`
+- `dataset.parquet`
 
 It is designed for:
 
@@ -15,37 +16,22 @@ It is designed for:
 The package is built around a simple idea:
 
 1. prepare structures once
-2. run plugins that add prefixed columns
-3. merge into the final PDB table
+2. run PDB calculation plugins that add prefixed columns
+3. merge into the final PDB parquet
 4. optionally run dataset-level analyses
-
-## 🚀 Large-Scale Processing Optimizations (March 2026)
-
-**New:** Architectural improvements for processing 10k–1M structures efficiently.
-
-- **40% faster merging** of plugin outputs (batch merge strategy)
-- **20-30% reduced I/O** with optional structure caching (`keep_prepared_structures`)  
-- **Better scalability** for multi-plugin workflows
-
-See [**IMPROVEMENTS_SUMMARY.md**](./IMPROVEMENTS_SUMMARY.md) for quick overview.
-
-For large datasets, see:
-- [**LARGE_SCALE_GUIDE.md**](./LARGE_SCALE_GUIDE.md) — Best practices, configs, workflow templates
-- [**ARCHITECTURAL_ANALYSIS.md**](./ARCHITECTURAL_ANALYSIS.md) — Technical architecture evaluation
-- [**REFACTORING_PROGRESS.md**](./REFACTORING_PROGRESS.md) — Implementation details
 
 ## Runtime Overview
 
 Main pipeline:
 
 - `prepare`
-  load structures, run quality control, run structure manipulations, run dataset manipulations, cache prepared structures
-- `plugins`
-  emit prefixed columns into normalized tables
+  load structures, run PDB and dataset prepare units, cache prepared structures when requested
+- `pdb calculations`
+  emit prefixed columns into unified PDB rows
 - `merge`
-  build the final dataset outputs
+  build final `pdb` output plus runtime metadata
 - `dataset analyses`
-  run aggregate analyses on the merged tables
+  read merged `pdb` output and write `dataset` output
 
 Large-dataset paths:
 
@@ -56,7 +42,7 @@ Large-dataset paths:
 - `merge-datasets`
   stack already completed datasets, as long as they are compatible
 
-![High-Level Runtime](analysis/highlevel_runtime.svg)
+![High-Level Runtime](minimum_atw/analysis/runtime.svg)
 
 ## Architecture Overview
 
@@ -67,18 +53,27 @@ The package has three internal layers:
 - [minimum_atw/runtime](/home/eva/minimum_atomworks/minimum_atw/runtime)
   execution mechanics, chunk planning, workspace layout, spill buffers
 - [minimum_atw/plugins](/home/eva/minimum_atomworks/minimum_atw/plugins)
-  prepare units, record plugins, dataset analyses
+  PDB and dataset extension implementations
 
 Public entrypoints:
 
 - [minimum_atw/__init__.py](/home/eva/minimum_atomworks/minimum_atw/__init__.py)
 - [minimum_atw/cli.py](/home/eva/minimum_atomworks/minimum_atw/cli.py)
 
-![High-Level Architecture](analysis/highlevel_architecture.svg)
+![High-Level Architecture](minimum_atw/analysis/architecture.svg)
+
+Current plugin taxonomy:
+
+- `pdb/quality_control`
+- `pdb/manipulation`
+- `pdb/calculation`
+- `dataset/quality_control`
+- `dataset/manipulation`
+- `dataset/calculation`
 
 ## PDB Table
 
-`pdb.parquet` stores all PDB-side outputs together. Row grain is encoded in `grain`:
+The final PDB parquet stores all PDB-side outputs together. Row grain is encoded in `grain`:
 
 - `structure`
 - `chain`
@@ -107,8 +102,11 @@ Examples:
 - `id__n_atoms_total`
 - `iface__n_contact_atom_pairs`
 - `abseq__cdr3_sequence`
+- `abepitope__score`
 
 Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/pdb/calculation/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
+
+Dataset analyses write a second parquet, usually `dataset.parquet`, with an `analysis` column instead of `grain`.
 
 ## Installation
 
@@ -143,7 +141,7 @@ python -m minimum_atw.cli list-extensions
 Notes:
 
 - `abnumber` is optional
-- `abepitope` and `hmmsearch` are optional and only needed for the `abepitope_score` plugin
+- `abepitope` and `hmmsearch` are only needed when `abepitope_score` is enabled
 - Rosetta is not installed by this package
 - example YAMLs usually need path edits before reuse on another machine
 
@@ -201,16 +199,13 @@ python -m minimum_atw.cli merge-datasets \
 
 Final outputs in `out_dir/`:
 
-- `pdb.parquet` by default, or your configured `pdb_output_name`
+- configured PDB parquet, `pdb.parquet` by default
 - `run_metadata.json`
 
-Merged dataset outputs also include:
+Dataset-level outputs:
 
+- configured dataset parquet, `dataset.parquet` by default
 - `dataset_metadata.json`
-
-Dataset analyses write:
-
-- `out_dir/dataset.parquet` by default, or your configured `dataset_output_name`
 
 Optional naming keys in YAML:
 
@@ -221,8 +216,9 @@ Failure/debug output:
 
 - `plugin_status.parquet` is only written for intermediate/checkpointed runs or when any plugin status is non-`ok`
 - `bad_files.parquet` is only written when failures occur
+- `_prepared/` and flat `_plugins/` artifacts are only kept when `keep_intermediate_outputs: true`
 
-Intermediate outputs are only kept when `keep_intermediate_outputs: true`.
+`run_metadata.json` and `dataset_metadata.json` also record `output_files` so downstream tools can resolve custom parquet names reliably.
 
 ## Merge Compatibility
 
@@ -236,12 +232,12 @@ Datasets should only be merged if they represent the same analysis setup.
 So merges are expected to fail if datasets differ in important settings such as:
 
 - active plugins
-- manipulations
+- prepare-stage semantics
 - interface settings
 - antibody numbering settings like `numbering_scheme` or `cdr_definition`
-- final normalized-table columns
+- final parquet schema
 
-In short: incompatible CDR or schema setups should fail before merge, not silently combine.
+Output filenames do not affect merge compatibility. Different runs can still merge as long as the actual schema and runtime settings match.
 
 ## Examples
 

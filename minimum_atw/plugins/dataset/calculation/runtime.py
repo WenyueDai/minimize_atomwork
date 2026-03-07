@@ -134,8 +134,9 @@ def analyze_dataset_outputs(
             frame["analysis"] = frame["analysis"].fillna(str(analysis_name)).astype(str)
         else:
             frame.insert(0, "analysis", str(analysis_name))
-        analysis_frames.append(frame)
         summary[f"n_{analysis_name}_rows"] = int(len(frame))
+        if not frame.empty:
+            analysis_frames.append(frame)
 
     if analysis_frames:
         combined = pd.concat(analysis_frames, ignore_index=True, sort=False)

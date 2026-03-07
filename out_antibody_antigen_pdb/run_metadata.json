@@ -10,24 +10,10 @@
     "contact_distance": 5.0,
     "dataset_analyses": [
       "dataset_annotations",
-      "interface_summary",
-      "cdr_entropy"
+      "interface_summary"
     ],
     "dataset_analysis_mode": "post_merge",
-    "dataset_analysis_params": {
-      "cdr_entropy": {
-        "regions": [
-          "cdr1",
-          "cdr2",
-          "cdr3",
-          "sequence"
-        ],
-        "roles": [
-          "vh",
-          "vl"
-        ]
-      }
-    },
+    "dataset_analysis_params": {},
     "dataset_annotations": {
       "dataset_name": "antibody_antigen_full_local",
       "modality": "antibody_antigen",
@@ -57,7 +43,7 @@
       "vl"
     ],
     "numbering_scheme": "imgt",
-    "out_dir": "/tmp/minimum_atw_run_fp4505m5",
+    "out_dir": "/tmp/minimum_atw_run_x8f6s8rt",
     "pdb_output_name": "pdb.parquet",
     "plugins": [
       "identity",

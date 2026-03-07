@@ -27,13 +27,12 @@ The examples now follow one rule:
 Antibody and VHH examples enable:
 
 - both built-in quality controls
-- the built-in per-structure manipulation
-- the built-in dataset-scale manipulation
+- the built-in PDB manipulation
+- the built-in dataset manipulation
 - the built-in PDB calculation plugins
 - `abepitope_score`
 - dataset annotations
 - interface summary
-- CDR entropy
 - `dataset_analysis_mode: post_merge`
 
 That includes both interface plugins:
@@ -41,7 +40,11 @@ That includes both interface plugins:
 - `interface_contacts` for atom/residue contact outputs
 - `interface_metrics` for residue-property and residue-contact-pair outputs
 
+`cdr_entropy` is scaffolded but commented out by default. Enable it only when you want CDR rows in the dataset parquet.
+
 The generic protein-protein example leaves antibody-only features commented because they do not apply to that role model.
+
+These runs write one final PDB parquet plus one dataset parquet, unless you override the filenames with `pdb_output_name` and `dataset_output_name`.
 
 ## Enabling Rosetta later
 
