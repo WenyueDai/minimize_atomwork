@@ -1,23 +1,37 @@
 # VHH-antigen profile: single-domain antibody against a multi-chain antigen.
 #
 # Run:
-#   python -m minimum_atw.cli run --config example_vhh_antigen.yaml
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml
+#
+# Staged workflow:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config ... --plugin abepitope_score
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config ...
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_vhh_antigen"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
   antigen: ["A", "B"]
-  vhh:     ["C"]
-  binder:  ["C"]
+  vhh: ["C"]
+  binder: ["C"]
 
 interface_pairs:
   - ["vhh", "antigen"]
   - ["binder", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -25,8 +39,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -37,22 +56,42 @@ plugins:
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
   - "abepitope_score"
-  - "superimpose_homology"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
 abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
+# ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
-  superimpose_homology:
+  superimpose_to_reference:
     reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
     on_chains: ["A", "B", "C"]
+# superimpose_reference_path: "/path/to/reference.pdb"
+# superimpose_on_chains: ["A", "B", "C"]
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vhh"]
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["vhh", "antigen"]
+#     left_role: "vhh"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
 
 # ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
@@ -66,12 +105,19 @@ dataset_analysis_params: {}
   # cdr_entropy:
   #   roles: ["vhh"]
   #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 
 dataset_annotations:
+  dataset_id: "vhh_antigen"
   project: "atomworks_example"
   dataset_name: "vhh_antigen"
   modality: "vhh_antigen"
   notes: "single-chain binder; binder role mirrors vhh for interface-level workflows"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
 
+# ── Runtime controls ───────────────────────────────────────────────────────────
 keep_intermediate_outputs: false
-keep_prepared_structures: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25

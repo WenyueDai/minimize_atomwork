@@ -93,6 +93,7 @@ class DatasetMergeTests(unittest.TestCase):
                 "numbering_roles": [],
                 "numbering_scheme": "imgt",
                 "cdr_definition": None,
+                "dataset_annotations": {"dataset_id": "toy_dataset", "dataset_name": "toy_dataset"},
             }
             _write_source_dataset(
                 source_one,
@@ -120,9 +121,25 @@ class DatasetMergeTests(unittest.TestCase):
             self.assertEqual(metadata["merge_compatibility"], compatibility)
             self.assertEqual(
                 metadata["table_columns"]["pdb"],
-                ["path", "assembly_id", "grain", "chain_id", "role", "pair", "role_left", "role_right", "id__n_atoms_total", "sub_id"],
+                [
+                    "path",
+                    "assembly_id",
+                    "grain",
+                    "chain_id",
+                    "role",
+                    "pair",
+                    "role_left",
+                    "role_right",
+                    "id__n_atoms_total",
+                    "sub_id",
+                    "dataset__id",
+                    "dataset__name",
+                ],
             )
             self.assertEqual(metadata["source_outputs"][0]["output_kind"], "run")
+            self.assertEqual(metadata["source_outputs"][0]["dataset_id"], "toy_dataset")
+            self.assertEqual(structures["dataset__id"].astype(str).unique().tolist(), ["toy_dataset"])
+            self.assertEqual(structures["dataset__name"].astype(str).unique().tolist(), ["toy_dataset"])
             self.assertFalse((merged_out / "plugin_status.parquet").exists())
 
     def test_merge_dataset_outputs_rejects_incompatible_runtime_config(self) -> None:
@@ -145,6 +162,7 @@ class DatasetMergeTests(unittest.TestCase):
                 "numbering_roles": [],
                 "numbering_scheme": "imgt",
                 "cdr_definition": None,
+                "dataset_annotations": {"dataset_id": "toy_dataset", "dataset_name": "toy_dataset"},
             }
             incompatible = dict(compatibility)
             incompatible["contact_distance"] = 6.0
@@ -157,6 +175,58 @@ class DatasetMergeTests(unittest.TestCase):
                 warnings.simplefilter("always")
                 merge_dataset_outputs([source_one, source_two], merged_out)
             self.assertTrue(any("Incompatible source runtime configuration" in str(warning.message) for warning in w))
+
+    def test_merge_dataset_outputs_only_keeps_dataset_id_and_name_columns(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_merge_") as tmp_dir:
+            import warnings
+
+            root = Path(tmp_dir)
+            source_one = root / "source_one"
+            source_two = root / "source_two"
+            merged_out = root / "merged"
+            compatibility_one = {
+                "assembly_id": "1",
+                "roles": {"binder": ["A"], "target": ["B"]},
+                "interface_pairs": [["binder", "target"]],
+                "plugins": ["identity"],
+                "manipulations": [],
+                "contact_distance": 5.0,
+                "rosetta_executable": None,
+                "rosetta_database": None,
+                "superimpose_reference_path": None,
+                "superimpose_on_chains": [],
+                "numbering_roles": [],
+                "numbering_scheme": "imgt",
+                "cdr_definition": None,
+                "dataset_annotations": {
+                    "dataset_id": "dataset_a",
+                    "dataset_name": "Dataset A",
+                    "project": "alpha",
+                    "batch": "one",
+                },
+            }
+            compatibility_two = {
+                **compatibility_one,
+                "dataset_annotations": {
+                    "dataset_id": "dataset_b",
+                    "dataset_name": "Dataset B",
+                    "project": "alpha",
+                },
+            }
+
+            _write_source_dataset(source_one, path_value="/tmp/source_one.pdb", merge_compatibility=compatibility_one)
+            _write_source_dataset(source_two, path_value="/tmp/source_two.pdb", merge_compatibility=compatibility_two)
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                merge_dataset_outputs([source_one, source_two], merged_out)
+
+            structures = read_pdb_grain(merged_out, "structure").sort_values("path").reset_index(drop=True)
+
+            self.assertNotIn("dataset__project", structures.columns)
+            self.assertNotIn("dataset__batch", structures.columns)
+            self.assertEqual(structures["dataset__id"].astype(str).tolist(), ["dataset_a", "dataset_b"])
+            self.assertEqual(structures["dataset__name"].astype(str).tolist(), ["Dataset A", "Dataset B"])
 
 
 if __name__ == "__main__":

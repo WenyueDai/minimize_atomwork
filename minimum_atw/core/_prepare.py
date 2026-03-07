@@ -158,6 +158,17 @@ def _write_prepared_structure(prepared_path: Path | None, ctx: Any) -> None:
     save_structure(prepared_path, ctx.aa)
 
 
+def _prepared_path_row(ctx: Any, prepared_path: Path | None) -> dict[str, Any] | None:
+    if prepared_path is None:
+        return None
+    return {
+        "grain": "structure",
+        "path": ctx.path,
+        "assembly_id": ctx.assembly_id,
+        "prepared__path": str(prepared_path.resolve()),
+    }
+
+
 def _merge_unit_rows_into_frame(frame: pd.DataFrame, unit_rows: list[dict[str, Any]]) -> pd.DataFrame:
     if not unit_rows:
         return frame
@@ -292,6 +303,9 @@ def _prepare_outputs_checkpointed(
             prepared_structures_dir,
             ctx=ctx,
         )
+        prepared_row = _prepared_path_row(ctx, prepared_path)
+        if prepared_row is not None:
+            stage_frame = _merge_unit_rows_into_frame(stage_frame, [prepared_row])
         with manifest_ckpt.open("a") as fh:
             fh.write(json.dumps(manifest_entry) + "\n")
 

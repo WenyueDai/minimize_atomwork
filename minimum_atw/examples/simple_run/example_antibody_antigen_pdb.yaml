@@ -1,23 +1,38 @@
 # Full antibody-antigen profile: all native plugins + AbEpiTope + superimpose.
 #
-# Run:
-#   python -m minimum_atw.cli run --config example_antibody_antigen_pdb.yaml
+# One-shot run:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+#
+# Useful staged commands:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config ... --plugin abepitope_score
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugins --config ... --plugins interface_contacts interface_metrics abepitope_score
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config ...
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_pdb"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
-  antigen:  ["A"]
-  vh:       ["C"]
-  vl:       ["B"]
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
   antibody: ["B", "C"]
 
 interface_pairs:
   - ["antibody", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -25,8 +40,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -37,33 +57,45 @@ plugins:
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
   - "abepitope_score"
-  - "superimpose_homology"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
 abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
+# ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
-  superimpose_homology:
+  superimpose_to_reference:
     reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
     on_chains: ["A", "B", "C"]
-
-# ── Rosetta scaffold (commented out) ──────────────────────────────────────────
-# Uncomment rosetta_interface_example in plugins: above, then fill these in.
-# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-# rosetta_database: "/path/to/rosetta/database"
-# rosetta_preprocess_with_score_jd2: true
-# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
-# rosetta_interface_targets:
-#   - pair: ["antibody", "antigen"]
-#     left_role: "antibody"
-#     right_role: "antigen"
+  # superimpose_to_reference:
+  #   reference_path: "/path/to/antigen_chain_A_only_reference.pdb"
+  #   on_chains: ["A"]  # align on antigen only, but transform the full complex
+# superimpose_reference_path: "/path/to/reference.pdb"
+# superimpose_on_chains: ["A", "B", "C"]
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vh", "vl"]
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
 
 # ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
@@ -77,16 +109,20 @@ dataset_analysis_params: {}
   # cdr_entropy:
   #   roles: ["vh", "vl"]
   #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 
 dataset_annotations:
+  dataset_id: "antibody_antigen_full"
   project: "atomworks_example"
   dataset_name: "antibody_antigen_full"
   modality: "antibody_antigen"
   source: "atw_pp default input"
   profile: "full_non_rosetta"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
 
-# ── Optional / advanced ────────────────────────────────────────────────────────
+# ── Runtime controls ───────────────────────────────────────────────────────────
 keep_intermediate_outputs: false
-keep_prepared_structures: false
-# checkpoint_enabled: true
+keep_prepared_structures: true
+checkpoint_enabled: false
 # checkpoint_interval: 25

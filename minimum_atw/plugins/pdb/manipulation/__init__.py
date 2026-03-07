@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from .base import BaseStructureManipulation
 from .center import CenterOnOriginManipulation
+from .superimpose import SuperimposeToReferenceManipulation
 from ....core.registry import load_registry
 
 
 def _builtin_structure_manipulations() -> dict[str, object]:
     return {
         "center_on_origin": CenterOnOriginManipulation(),
+        "superimpose_to_reference": SuperimposeToReferenceManipulation(),
     }
 
 
@@ -22,4 +24,5 @@ __all__ = [
     "BaseStructureManipulation",
     "CenterOnOriginManipulation",
     "PDB_MANIPULATION_REGISTRY",
+    "SuperimposeToReferenceManipulation",
 ]

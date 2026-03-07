@@ -1,23 +1,39 @@
 # Generic protein-protein complex profile.
-# No antibody-specific plugins — works for any receptor-ligand pair.
+# No antibody-specific plugins by default.
 #
 # Run:
-#   python -m minimum_atw.cli run --config example_protein_protein_complex.yaml
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
+#
+# Stage-by-stage:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugins --config ... --plugins interface_contacts interface_metrics
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config ...
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config ...
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_protein_protein"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
-# Adapt chain IDs and role names to your complex.
 roles:
   receptor: ["B", "C"]
-  ligand:   ["A"]
+  ligand: ["A"]
+  # binder: ["B", "C"]
+  # target: ["A"]
 
 interface_pairs:
   - ["ligand", "receptor"]
+  # - ["binder", "target"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -25,8 +41,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  # - name: "superimpose_to_reference"
+  #   grain: "pdb"               # enable only when you have a real reference_path below
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -34,31 +55,65 @@ plugins:
   - "role_stats"
   - "interface_contacts"
   - "interface_metrics"
-  - "superimpose_homology"
-  # - "abepitope_score"
-  # - "antibody_cdr_lengths"
-  # - "antibody_cdr_sequences"
+  # - "abepitope_score"          # only for antibody-antigen style inputs
+  # - "antibody_cdr_lengths"     # requires antibody numbering roles
+  # - "antibody_cdr_sequences"   # requires antibody numbering roles
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
+# interface_cell_size: 5.0
+# abepitope_atom_radius: 4.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
-plugin_params:
-  superimpose_homology:
-    reference_path: "/path/to/reference.pdb"
-    on_chains: ["A", "B", "C"]
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+# plugin_params:
+#   superimpose_to_reference:
+#     reference_path: "/path/to/reference.pdb"
+#     on_chains: ["A", "B", "C"]
+# superimpose_reference_path: "/path/to/reference.pdb"
+# superimpose_on_chains: ["A", "B", "C"]
+
+# ── Antibody-only knobs (leave commented here) ────────────────────────────────
+# numbering_roles: ["vh", "vl"]
+# numbering_scheme: "imgt"
+# cdr_definition: "imgt"
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["ligand", "receptor"]
+#     left_role: "ligand"
+#     right_role: "receptor"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
 
 # ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cluster"
+  # - "cdr_entropy"
 dataset_analysis_mode: "post_merge"
-
+dataset_analysis_params: {}
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 dataset_annotations:
+  dataset_id: "protein_protein_complex"
   project: "atomworks_example"
   dataset_name: "protein_protein_complex"
   modality: "protein_protein"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
 
+# ── Runtime controls ───────────────────────────────────────────────────────────
 keep_intermediate_outputs: false
 keep_prepared_structures: false
+checkpoint_enabled: false
+# checkpoint_interval: 25

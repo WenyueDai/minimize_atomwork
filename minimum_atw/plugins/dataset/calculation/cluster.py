@@ -18,9 +18,13 @@ def _cluster_mode(params: dict[str, object] | None) -> str:
     aliases = {
         "interface_ca": "interface_ca",
         "interface_epitope_ca": "interface_ca",
+        "superimposed_interface_ca": "superimposed_interface_ca",
     }
     if mode not in aliases:
-        raise ValueError("cluster.mode must be 'interface_ca' (or legacy alias 'interface_epitope_ca')")
+        raise ValueError(
+            "cluster.mode must be 'interface_ca', 'superimposed_interface_ca' "
+            "(or legacy alias 'interface_epitope_ca')"
+        )
     return aliases[mode]
 
 
@@ -146,17 +150,66 @@ def _medoid_index(distance_matrix: np.ndarray, members: list[int]) -> int:
     return best_member
 
 
-def _prepared_path_map(out_dir: Path) -> dict[str, str]:
+def _resolve_load_path(value: object, *, out_dir: Path) -> str | None:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    candidate = Path(normalized)
+    if not candidate.is_absolute():
+        candidate = (out_dir / candidate).resolve()
+    else:
+        candidate = candidate.resolve()
+    if not candidate.exists():
+        return None
+    return str(candidate)
+
+
+def _prepared_path_map(out_dir: Path, structures: pd.DataFrame | None = None) -> dict[str, str]:
+    out: dict[str, str] = {}
+    if structures is not None and not structures.empty and "path" in structures.columns and "prepared__path" in structures.columns:
+        for source_path, prepared_path in zip(
+            structures["path"].astype(str),
+            structures["prepared__path"].astype(str),
+            strict=False,
+        ):
+            resolved = _resolve_load_path(prepared_path, out_dir=out_dir)
+            if resolved:
+                out[str(source_path)] = resolved
+
     manifest_path = out_dir / "_prepared" / "prepared_manifest.parquet"
     if not manifest_path.exists():
-        return {}
+        return out
     frame = pd.read_parquet(manifest_path)
     if frame.empty or "path" not in frame.columns or "prepared_path" not in frame.columns:
+        return out
+    for source_path, prepared_path in zip(frame["path"].astype(str), frame["prepared_path"].astype(str), strict=False):
+        resolved = _resolve_load_path(prepared_path, out_dir=out_dir)
+        if resolved and str(source_path) not in out:
+            out[str(source_path)] = resolved
+    return out
+
+
+def _superimposed_path_map(out_dir: Path, structures: pd.DataFrame | None = None) -> dict[str, str]:
+    if structures is None or structures.empty or "path" not in structures.columns:
         return {}
-    return {
-        str(path): str(prepared_path)
-        for path, prepared_path in zip(frame["path"].astype(str), frame["prepared_path"].astype(str), strict=False)
-    }
+    out: dict[str, str] = {}
+    has_transformed = "sup__transformed_path" in structures.columns
+    has_prepare_superimpose = "sup__coordinates_applied" in structures.columns
+    has_prepared_path = "prepared__path" in structures.columns
+    for row in structures.itertuples(index=False):
+        source_path = str(getattr(row, "path", "") or "")
+        if not source_path:
+            continue
+        if has_transformed:
+            transformed = _resolve_load_path(getattr(row, "sup__transformed_path", ""), out_dir=out_dir)
+            if transformed:
+                out[source_path] = transformed
+                continue
+        if has_prepare_superimpose and has_prepared_path:
+            prepared = _resolve_load_path(getattr(row, "prepared__path", ""), out_dir=out_dir)
+            if prepared and bool(getattr(row, "sup__coordinates_applied", False)):
+                out[source_path] = prepared
+    return out
 
 
 @dataclass
@@ -180,21 +233,19 @@ class _ClusterJob:
 
 
 class _StructureLoader:
-    def __init__(self, prepared_map: dict[str, str]):
-        self.prepared_map = prepared_map
+    def __init__(self):
         self._cache: dict[str, Any] = {}
 
-    def load(self, source_path: str):
-        load_path = self.prepared_map.get(str(source_path), str(source_path))
+    def load(self, load_path: str):
         if load_path not in self._cache:
             self._cache[load_path] = load_structure(load_path)
         return self._cache[load_path]
 
 
-def _ca_point_cloud_for_residues(loader: _StructureLoader, source_path: str, residues: list[tuple[str, int]]) -> np.ndarray:
+def _ca_point_cloud_for_residues(loader: _StructureLoader, load_path: str, residues: list[tuple[str, int]]) -> np.ndarray:
     if not residues:
         return np.empty((0, 3), dtype=float)
-    arr = loader.load(source_path)
+    arr = loader.load(load_path)
     coords: list[np.ndarray] = []
     for chain_id, res_id in residues:
         mask = (arr.chain_id.astype(str) == str(chain_id)) & (arr.res_id.astype(int) == int(res_id)) & (arr.atom_name.astype(str) == "CA")
@@ -317,7 +368,7 @@ class ClusterPlugin(BaseDatasetPlugin):
     def required_columns(self, params: dict[str, object]) -> dict[str, list[str]]:
         jobs = _normalize_jobs(params)
         residue_columns = sorted({f"iface__{job.interface_side}_interface_residues" for job in jobs})
-        return {
+        required = {
             "interface": [
                 "path",
                 "assembly_id",
@@ -327,11 +378,22 @@ class ClusterPlugin(BaseDatasetPlugin):
                 *residue_columns,
             ]
         }
+        if any(job.mode == "superimposed_interface_ca" for job in jobs):
+            required["structure"] = [
+                "path",
+                "prepared__path",
+                "sup__coordinates_applied",
+                "sup__transformed_path",
+            ]
+        return required
 
     def run(self, ctx: DatasetAnalysisContext) -> pd.DataFrame | DatasetAnalysisResult:
         params = dict(ctx.params or {})
         jobs = _normalize_jobs(params)
-        loader = _StructureLoader(_prepared_path_map(ctx.out_dir))
+        structures = ctx.grains.get("structure", pd.DataFrame())
+        prepared_map = _prepared_path_map(ctx.out_dir, structures)
+        superimposed_map = _superimposed_path_map(ctx.out_dir, structures)
+        loader = _StructureLoader()
         df = ctx.df_interfaces.copy()
         required_columns = {f"iface__{job.interface_side}_interface_residues" for job in jobs}
         if df.empty or not required_columns.issubset(df.columns):
@@ -350,7 +412,17 @@ class ClusterPlugin(BaseDatasetPlugin):
                 assembly_id = str(getattr(row, "assembly_id", "") or "")
                 pair = str(getattr(row, "pair", "") or "")
                 residues = _parse_residue_tokens(getattr(row, residue_column, ""))
-                point_cloud = _centered(_ca_point_cloud_for_residues(loader, path, residues), center=job.center)
+                if job.mode == "superimposed_interface_ca":
+                    load_path = superimposed_map.get(path)
+                    if load_path is None:
+                        raise ValueError(
+                            "cluster.mode='superimposed_interface_ca' requires either "
+                            "`sup__transformed_path` from persisted superimpose_homology outputs "
+                            "or a saved prepared structure produced by `superimpose_to_reference`"
+                        )
+                else:
+                    load_path = prepared_map.get(path, path)
+                point_cloud = _centered(_ca_point_cloud_for_residues(loader, load_path, residues), center=job.center)
                 if not path or len(point_cloud) == 0:
                     continue
                 records_by_group.setdefault(pair, []).append(

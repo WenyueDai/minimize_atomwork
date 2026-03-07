@@ -29,6 +29,7 @@ def _run_dataset_analyses(cfg: Config, out_dir: Path) -> None:
         dataset_analysis_params=cfg.dataset_analysis_params,
         dataset_annotations=cfg.dataset_annotations,
         reference_dataset_dir=cfg.reference_dataset_dir,
+        cleanup_prepared_after_dataset_analysis=cfg.cleanup_prepared_after_dataset_analysis,
     )
     print("[pipeline] dataset_analyses complete", flush=True)
 

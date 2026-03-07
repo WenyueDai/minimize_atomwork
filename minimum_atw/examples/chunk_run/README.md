@@ -27,6 +27,31 @@ This folder is for manual chunk configs: one config per chunk, one run per confi
   --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
 ```
 
+## Step By Step: What This Manual Chunk Workflow Does
+
+Using [chunk_antibody_antigen_01.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml) and [chunk_antibody_antigen_02.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml):
+
+1. You choose the chunk boundaries yourself and write one YAML per chunk.
+2. Each `run` command executes a normal single-dataset pipeline for that one chunk.
+3. Inside each chunk run, `prepare` loads structures and runs:
+   - `chain_continuity`
+   - `structure_clashes`
+   - `center_on_origin`
+   - `superimpose_to_reference`
+4. The aligned prepared structures are saved under that chunk's `_prepared/` directory.
+5. The configured plugins run on the already-aligned prepared structures.
+6. Because these chunk YAMLs use `dataset_analysis_mode: per_chunk`, dataset analyses run inside each chunk output.
+7. That means each chunk gets its own `dataset.parquet`, and `cluster` writes chunk-local cluster labels onto each chunk's `pdb.parquet`.
+8. After all chunks finish, `merge-datasets` stacks the chunk outputs into one merged dataset.
+9. That merge keeps the final `pdb.parquet`, `dataset__id`, and `dataset__name`, but it does not recompute biologically meaningful whole-dataset clusters by itself.
+10. If you want whole-dataset clustering, run `analyze-dataset` on the merged output with a config that enables `cluster`.
+
+### What Persists
+
+- Each chunk keeps its own `_prepared/` directory by default.
+- The merged output does not automatically get a merged `_prepared/` cache.
+- If you enable `cleanup_prepared_after_dataset_analysis: true` in a chunk YAML, that chunk's `_prepared/` directory is removed only after its dataset analysis succeeds.
+
 ## What these YAMLs show
 
 - explicit manual chunk outputs
@@ -35,6 +60,8 @@ This folder is for manual chunk configs: one config per chunk, one run per confi
 - optional Rosetta scaffold
 - optional `cdr_entropy`
 - enabled interface clustering
+
+See [../README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md) for the field-by-field glossary and when to turn each option on or off.
 
 Execution note:
 

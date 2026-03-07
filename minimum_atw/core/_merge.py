@@ -110,6 +110,73 @@ def _merge_compatibility(config: Config) -> dict[str, Any]:
     return config.merge_compatibility()
 
 
+def _dataset_origin_labels(
+    *,
+    source_dir: Path,
+    raw_config: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    annotations = {}
+    if isinstance(raw_config, dict):
+        maybe_annotations = raw_config.get("dataset_annotations")
+        if isinstance(maybe_annotations, dict):
+            annotations = {str(key): str(value) for key, value in maybe_annotations.items()}
+    dataset_id = str(
+        annotations.get("dataset_id")
+        or annotations.get("dataset_name")
+        or source_dir.name
+    )
+    dataset_name = str(
+        annotations.get("dataset_name")
+        or annotations.get("dataset_id")
+        or dataset_id
+    )
+    return dataset_id, dataset_name
+
+
+def _dataset_annotation_values(
+    *,
+    source_dir: Path,
+    raw_config: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    dataset_id, dataset_name = _dataset_origin_labels(
+        source_dir=source_dir,
+        raw_config=raw_config,
+    )
+    return {
+        "dataset__id": dataset_id,
+        "dataset__name": dataset_name,
+    }
+
+
+def _stamp_dataset_annotation_columns(
+    frame: pd.DataFrame,
+    annotation_values: dict[str, str],
+) -> pd.DataFrame:
+    allowed_dataset_columns = {"dataset__id", "dataset__name"}
+    if frame.empty:
+        out = frame.copy()
+        for column in allowed_dataset_columns:
+            if column not in out.columns:
+                out[column] = pd.Series(dtype="object")
+        return out
+
+    out = frame.copy()
+    extra_dataset_columns = [
+        column
+        for column in out.columns
+        if str(column).startswith("dataset__") and str(column) not in allowed_dataset_columns
+    ]
+    if extra_dataset_columns:
+        out = out.drop(columns=extra_dataset_columns)
+    for column, value in annotation_values.items():
+        if column not in out.columns:
+            out[column] = str(value)
+            continue
+        out[column] = out[column].fillna("").astype(str)
+        out.loc[out[column].eq(""), column] = str(value)
+    return out
+
+
 def _metadata_merge_compatibility(metadata: dict[str, Any]) -> dict[str, Any] | None:
     compatibility = metadata.get("merge_compatibility")
     if compatibility is not None:
@@ -136,6 +203,17 @@ def _validate_source_table_columns(
 
     expected_columns = reference_columns[table_name]
     if set(source_columns) != set(expected_columns):
+        differing = set(source_columns) ^ set(expected_columns)
+        if differing and all(str(column).startswith("dataset__") for column in differing):
+            merged_columns = list(expected_columns)
+            for column in source_columns:
+                if column not in merged_columns:
+                    merged_columns.append(column)
+            reference_columns[table_name] = merged_columns
+            for column in merged_columns:
+                if column not in frame.columns:
+                    frame[column] = pd.NA
+            return frame.loc[:, merged_columns]
         raise ValueError(
             f"Incompatible columns for {table_name} in {source_dir}: "
             f"expected {expected_columns}, got {source_columns}"
@@ -174,6 +252,14 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
     merged_status = _merge_tracking_frames(status_frames)
     merged_bad = _merge_tracking_frames(bad_frames)
     status_summary = _status_summary(merged_status)
+    annotation_values = _dataset_annotation_values(
+        source_dir=out_dir,
+        raw_config=cfg.model_dump(mode="json"),
+    )
+    merged_pdb = _stamp_dataset_annotation_columns(
+        merged_pdb,
+        annotation_values,
+    )
 
     _write_pdb_table(out_dir, merged_pdb, filename=output_files["pdb"])
     _write_plugin_status_if_needed(
@@ -242,12 +328,24 @@ def merge_dataset_outputs(source_out_dirs: list[str | Path], out_dir: str | Path
                 "out_dir": str(source_dir),
                 "output_kind": metadata.get("output_kind", "unknown"),
                 "output_files": output_files_from_metadata(metadata),
+                "dataset_id": _dataset_origin_labels(
+                    source_dir=source_dir,
+                    raw_config=metadata.get("config") if isinstance(metadata.get("config"), dict) else None,
+                )[0],
             }
         )
         source_output_files = output_files_from_metadata(metadata)
         if target_output_files is None:
             target_output_files = source_output_files
         frame = _read_pdb_table(pdb_output_path(source_dir, metadata=metadata))
+        annotation_values = _dataset_annotation_values(
+            source_dir=source_dir,
+            raw_config=metadata.get("config") if isinstance(metadata.get("config"), dict) else None,
+        )
+        frame = _stamp_dataset_annotation_columns(
+            frame,
+            annotation_values,
+        )
         pdb_frames.append(_validate_source_table_columns(PDB_TABLE_NAME, source_dir, frame, reference_columns))
         source_status_frame = _read_frame(source_dir / f"plugin_status{TABLE_SUFFIX}", STATUS_COLS)
         status_frames.append(source_status_frame)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import biotite.structure as struc
 import numpy as np
 
 from ...annotations import role_unique_residue_count
@@ -15,10 +16,9 @@ class RoleStatsPlugin(RolePlugin):
             if len(role_aa) == 0:
                 continue
 
-            # Calculate basic statistics
             coords = role_aa.coord
             centroid = np.mean(coords, axis=0)
-            radius = np.max(np.linalg.norm(coords - centroid, axis=1))
+            radius = float(struc.gyration_radius(role_aa))
 
             yield {
                 "grain": "role",
@@ -27,5 +27,5 @@ class RoleStatsPlugin(RolePlugin):
                 "centroid_x": float(centroid[0]),
                 "centroid_y": float(centroid[1]),
                 "centroid_z": float(centroid[2]),
-                "radius_of_gyration": float(radius),
+                "radius_of_gyration": radius,
             }

@@ -188,6 +188,36 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             self.assertNotIn("region", result.columns)
             self.assertNotIn("shannon_entropy", result.columns)
 
+    def test_cleanup_prepared_outputs_after_success_when_requested(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
+            out_dir = Path(tmp_dir)
+            prepared_dir = out_dir / "_prepared"
+            prepared_dir.mkdir()
+            (prepared_dir / "marker.txt").write_text("keep until analysis succeeds")
+
+            pd.DataFrame(
+                [
+                    {
+                        "path": "/tmp/example_1.pdb",
+                        "assembly_id": "1",
+                        "pair": "vh__antigen",
+                        "role_left": "vh",
+                        "role_right": "antigen",
+                    }
+                ]
+            ).to_parquet(out_dir / "interfaces.parquet", index=False)
+
+            summary = analyze_dataset_outputs(
+                out_dir,
+                dataset_analyses=("interface_summary",),
+                cleanup_prepared_after_dataset_analysis=True,
+            )
+
+            result = read_dataset_analysis(out_dir, "interface_summary")
+            self.assertEqual(len(result), 1)
+            self.assertEqual(summary["cleaned_prepared_outputs"], 1)
+            self.assertFalse(prepared_dir.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

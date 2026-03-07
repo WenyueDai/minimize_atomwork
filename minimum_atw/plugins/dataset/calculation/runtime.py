@@ -26,6 +26,7 @@ from ....core.tables import (
 )
 from . import DATASET_CALCULATION_REGISTRY, DEFAULT_DATASET_CALCULATIONS, DatasetAnalysisContext, DatasetAnalysisResult
 from ....core.registry import instantiate_unit
+from ....runtime.workspace import prepared_dir as _prepared_dir
 
 
 def _read_dataset_metadata(out_dir: Path) -> dict[str, object]:
@@ -156,6 +157,14 @@ def _normalize_analysis_result(
     )
 
 
+def _cleanup_prepared_outputs(out_dir: Path) -> bool:
+    prepared = _prepared_dir(out_dir)
+    if not prepared.exists():
+        return False
+    shutil.rmtree(prepared)
+    return True
+
+
 def analyze_dataset_outputs(
     out_dir: Path,
     *,
@@ -163,6 +172,7 @@ def analyze_dataset_outputs(
     dataset_analysis_params: dict[str, dict[str, object]] | None = None,
     dataset_annotations: dict[str, str] | None = None,
     reference_dataset_dir: str | None = None,
+    cleanup_prepared_after_dataset_analysis: bool = False,
 ) -> dict[str, int | str]:
     out_dir = Path(out_dir).resolve()
     print(f"[dataset] start out_dir={out_dir}", flush=True)
@@ -263,6 +273,10 @@ def analyze_dataset_outputs(
         _write_updated_metadata(out_dir, metadata, pdb_frame=merged_pdb)
     summary["n_dataset_rows"] = int(len(combined))
     summary["dataset_output"] = str(dataset_path)
+    cleaned_prepared = False
+    if cleanup_prepared_after_dataset_analysis:
+        cleaned_prepared = _cleanup_prepared_outputs(out_dir)
+    summary["cleaned_prepared_outputs"] = int(cleaned_prepared)
     print(
         f"[dataset] complete dataset_rows={summary['n_dataset_rows']} "
         f"dataset_output={dataset_path.name}",

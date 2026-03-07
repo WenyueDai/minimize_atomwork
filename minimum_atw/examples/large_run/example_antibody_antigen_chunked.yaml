@@ -1,28 +1,40 @@
 # Antibody-antigen profile for chunked / distributed runs.
 #
-# Run (parallel chunks):
-#   python -m minimum_atw.cli run-chunked --config ... --chunk-size 50 --workers 4
+# Internal chunk workers:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+#     --chunk-size 50 --workers 4
 #
-# Run (offline plan → execute on cluster → merge):
-#   python -m minimum_atw.cli plan-chunks --config ... --chunk-size 50 --plan-dir ./plan
-#   # submit each chunk_*.yaml to your cluster
-#   python -m minimum_atw.cli merge-planned-chunks --plan-dir ./plan --out-dir ./merged
+# Offline plan -> cluster -> merge:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli plan-chunks \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+#     --chunk-size 50 --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-planned-chunks \
+#     --plan-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunk_plan \
+#     --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_chunked
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_antibody_antigen_chunked"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
-  antigen:  ["A"]
-  vh:       ["C"]
-  vl:       ["B"]
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
   antibody: ["B", "C"]
 
 interface_pairs:
   - ["antibody", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -30,8 +42,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -42,15 +59,15 @@ plugins:
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
   - "abepitope_score"
-  - "superimpose_homology"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
 abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
+# ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
-  superimpose_homology:
+  superimpose_to_reference:
     reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
     on_chains: ["A", "B", "C"]
 
@@ -59,26 +76,41 @@ numbering_roles: ["vh", "vl"]
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
 
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+
 # ── Dataset analyses ───────────────────────────────────────────────────────────
-# dataset_analysis_mode: "post_merge"   — default; runs only after final merge
-# dataset_analysis_mode: "per_chunk"    — run after each chunk, merge later
-# dataset_analysis_mode: "both"         — run per chunk AND after final merge
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cluster"
   # - "cdr_entropy"
-dataset_analysis_mode: "post_merge"
+dataset_analysis_mode: "post_merge"   # post_merge | per_chunk | both
 
 dataset_analysis_params: {}
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 
 dataset_annotations:
+  dataset_id: "antibody_antigen_chunked"
   project: "atomworks_example"
   dataset_name: "antibody_antigen_chunked"
   modality: "antibody_antigen"
   execution_mode: "run-chunked"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
 
+# ── Runtime controls ───────────────────────────────────────────────────────────
 keep_intermediate_outputs: false
-keep_prepared_structures: false
-# checkpoint_enabled: true
+keep_prepared_structures: true
+checkpoint_enabled: false
 # checkpoint_interval: 25

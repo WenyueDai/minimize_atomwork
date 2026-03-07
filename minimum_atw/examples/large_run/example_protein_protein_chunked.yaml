@@ -1,21 +1,30 @@
 # Generic protein-protein complex profile for chunked / distributed runs.
 #
-# Run (parallel chunks):
-#   python -m minimum_atw.cli run-chunked --config ... --chunk-size 50 --workers 4
+# Run:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-chunked \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
+#     --chunk-size 50 --workers 4
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_protein_protein_chunked"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
   receptor: ["B", "C"]
-  ligand:   ["A"]
+  ligand: ["A"]
 
 interface_pairs:
   - ["ligand", "receptor"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -23,8 +32,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  # - name: "superimpose_to_reference"
+  #   grain: "pdb"               # enable only when you have a real reference_path below
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -32,32 +46,56 @@ plugins:
   - "role_stats"
   - "interface_contacts"
   - "interface_metrics"
-  - "superimpose_homology"
   # - "abepitope_score"
   # - "antibody_cdr_lengths"
   # - "antibody_cdr_sequences"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
+# interface_cell_size: 5.0
+# abepitope_atom_radius: 4.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
-plugin_params:
-  superimpose_homology:
-    reference_path: "/path/to/reference.pdb"
-    on_chains: ["A", "B", "C"]
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+# plugin_params:
+#   superimpose_to_reference:
+#     reference_path: "/path/to/reference.pdb"
+#     on_chains: ["A", "B", "C"]
+
+# ── Antibody-only knobs (leave commented here) ────────────────────────────────
+# numbering_roles: ["vh", "vl"]
+# numbering_scheme: "imgt"
+# cdr_definition: "imgt"
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["ligand", "receptor"]
+#     left_role: "ligand"
+#     right_role: "receptor"
 
 # ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cluster"
+  # - "cdr_entropy"
 dataset_analysis_mode: "post_merge"
-
+dataset_analysis_params: {}
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 dataset_annotations:
+  dataset_id: "protein_protein_chunked"
   project: "atomworks_example"
   dataset_name: "protein_protein_chunked"
   modality: "protein_protein"
   execution_mode: "run-chunked"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
 
+# ── Runtime controls ───────────────────────────────────────────────────────────
 keep_intermediate_outputs: false
 keep_prepared_structures: false
+checkpoint_enabled: false
+# checkpoint_interval: 25

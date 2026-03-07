@@ -14,18 +14,29 @@ from ..core.output_files import (
     DATASET_METADATA_NAME,
     PLUGIN_STATUS_OUTPUT_NAME,
     RUN_METADATA_NAME,
+    pdb_output_path,
     output_files_from_config,
     output_files_from_metadata,
     read_output_metadata,
 )
 from ..plugins.base import Context
-from ..core.tables import MANIFEST_COLS, PDB_TABLE_NAME, TABLE_SUFFIX, empty_pdb_rows, prefix_row, read_frame
+from ..core.tables import (
+    MANIFEST_COLS,
+    PDB_TABLE_NAME,
+    TABLE_SUFFIX,
+    empty_pdb_rows,
+    prefix_row,
+    read_frame,
+    read_pdb_table,
+    write_pdb_table,
+)
 
 
 PREPARED_DIRNAME = "_prepared"
 PREPARED_STRUCTURES_DIRNAME = "structures"
 PREPARED_MANIFEST_NAME = "prepared_manifest.parquet"
 PLUGINS_DIRNAME = "_plugins"
+SUPERIMPOSED_STRUCTURES_DIRNAME = "superimposed_structures"
 OPTIONAL_DEBUG_OUTPUT_FILES = [PLUGIN_STATUS_OUTPUT_NAME]
 
 
@@ -228,6 +239,10 @@ def plugins_dir(out_dir: Path) -> Path:
     return out_dir / PLUGINS_DIRNAME
 
 
+def superimposed_structures_dir(out_dir: Path) -> Path:
+    return out_dir / SUPERIMPOSED_STRUCTURES_DIRNAME
+
+
 def plugin_pdb_path(out_dir: Path, plugin_name: str) -> Path:
     return plugins_dir(out_dir) / f"{plugin_name}.pdb{TABLE_SUFFIX}"
 
@@ -253,12 +268,59 @@ def clear_final_outputs(out_dir: Path, *, cfg: Config | None = None) -> None:
     analysis_dir = out_dir / "dataset_analysis"
     if analysis_dir.exists():
         shutil.rmtree(analysis_dir)
+def _rewrite_embedded_output_paths(target_out_dir: Path, source_out_dir: Path) -> None:
+    metadata = read_output_metadata(target_out_dir)
+    pdb_path = pdb_output_path(target_out_dir, metadata=metadata)
+    if pdb_path.exists():
+        frame = read_pdb_table(pdb_path)
+        for column in ("prepared__path", "sup__transformed_path"):
+            if column not in frame.columns:
+                continue
+            updated: list[object] = []
+            for value in frame[column].tolist():
+                raw = str(value or "").strip()
+                if not raw:
+                    updated.append(value)
+                    continue
+                try:
+                    resolved = Path(raw).resolve()
+                    relative = resolved.relative_to(source_out_dir.resolve())
+                    updated.append(str((target_out_dir.resolve() / relative).resolve()))
+                except Exception:
+                    updated.append(value)
+            frame[column] = updated
+        write_pdb_table(target_out_dir, frame, filename=pdb_path.name)
+
+    manifest_path = prepared_manifest_path(target_out_dir)
+    if manifest_path.exists():
+        manifest = read_frame(manifest_path, MANIFEST_COLS)
+        if "prepared_path" in manifest.columns:
+            updated: list[str] = []
+            for value in manifest["prepared_path"].astype(str).tolist():
+                raw = str(value or "").strip()
+                if not raw:
+                    updated.append(raw)
+                    continue
+                try:
+                    resolved = Path(raw).resolve()
+                    relative = resolved.relative_to(source_out_dir.resolve())
+                    updated.append(str((target_out_dir.resolve() / relative).resolve()))
+                except Exception:
+                    updated.append(raw)
+            manifest["prepared_path"] = updated
+        manifest.to_parquet(manifest_path, index=False)
 
 
 def copy_final_outputs(source_out_dir: Path, target_out_dir: Path, *, cfg: Config | None = None) -> None:
     metadata = read_output_metadata(source_out_dir)
     filenames = final_output_files(cfg=cfg, metadata=metadata)
     clear_final_outputs(target_out_dir, cfg=cfg)
+    target_prepared = prepared_dir(target_out_dir)
+    if target_prepared.exists():
+        shutil.rmtree(target_prepared)
+    target_superimposed = superimposed_structures_dir(target_out_dir)
+    if target_superimposed.exists():
+        shutil.rmtree(target_superimposed)
     for filename in filenames:
         source_path = source_out_dir / filename
         if source_path.exists():
@@ -267,6 +329,14 @@ def copy_final_outputs(source_out_dir: Path, target_out_dir: Path, *, cfg: Confi
         source_path = source_out_dir / filename
         if source_path.exists():
             shutil.copy2(source_path, target_out_dir / filename)
+    if cfg is not None and cfg.keep_prepared_structures:
+        source_prepared = prepared_dir(source_out_dir)
+        if source_prepared.exists():
+            shutil.copytree(source_prepared, target_prepared, dirs_exist_ok=True)
+    source_superimposed = superimposed_structures_dir(source_out_dir)
+    if source_superimposed.exists():
+        shutil.copytree(source_superimposed, target_superimposed, dirs_exist_ok=True)
+    _rewrite_embedded_output_paths(target_out_dir, source_out_dir)
 
 
 def prepared_filename(source_path: Path) -> str:

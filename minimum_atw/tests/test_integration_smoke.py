@@ -150,6 +150,7 @@ class IntegrationSmokeTests(unittest.TestCase):
                         "interface_pairs": [["binder", "target"]],
                         "plugins": ["identity"],
                         "keep_intermediate_outputs": True,
+                        "dataset_annotations": {"dataset_id": "toy_run", "project": "smoke"},
                     },
                     sort_keys=False,
                 )
@@ -174,6 +175,8 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(len(roles), 2)
             self.assertEqual(len(interfaces), 1)
             self.assertIn("id__n_atoms_total", structures.columns)
+            self.assertIn("dataset__id", structures.columns)
+            self.assertIn("dataset__name", structures.columns)
             self.assertIn("source__name", structures.columns)
             self.assertIn("source__format", structures.columns)
             self.assertIn("source__size_bytes", structures.columns)
@@ -182,6 +185,8 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertIn("id__n_atoms", roles.columns)
             self.assertEqual(structures.iloc[0]["source__name"], "toy_complex.pdb")
             self.assertEqual(structures.iloc[0]["source__format"], "pdb")
+            self.assertEqual(str(structures.iloc[0]["dataset__id"]), "toy_run")
+            self.assertEqual(str(structures.iloc[0]["dataset__name"]), "toy_run")
             self.assertEqual(int(structures.iloc[0]["source__n_atoms_loaded"]), 4)
             self.assertEqual(int(structures.iloc[0]["source__n_chains_loaded"]), 2)
             self.assertEqual(metadata["output_kind"], "run")

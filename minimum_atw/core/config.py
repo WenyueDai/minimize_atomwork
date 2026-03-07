@@ -152,6 +152,7 @@ class Config(BaseModel):
     keep_prepared_structures: bool = False
     checkpoint_enabled: bool = False
     checkpoint_interval: int = 100
+    cleanup_prepared_after_dataset_analysis: bool = False
 
     dataset_analysis_mode: str = "post_merge"
     dataset_analysis_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
@@ -360,6 +361,15 @@ class Config(BaseModel):
             raise ValueError("rosetta_packstat_oversample must be at least 1")
         if self.pdb_output_name == self.dataset_output_name:
             raise ValueError("pdb_output_name and dataset_output_name must be different")
+        prepare_names = {item["name"] for item in self.manipulations}
+        if "superimpose_to_reference" in prepare_names:
+            self.keep_prepared_structures = True
+        if "superimpose_to_reference" in prepare_names and "superimpose_homology" in self.plugins:
+            raise ValueError(
+                "superimpose_to_reference and superimpose_homology cannot be enabled together; "
+                "both write sup__* columns, so choose either prepare-stage coordinate rewriting "
+                "or plugin-stage superposition metrics"
+            )
         return self
 
     def prepare_names_by_grain(self) -> dict[str, list[str]]:
@@ -424,6 +434,7 @@ class Config(BaseModel):
             "keep_prepared_structures",
             "checkpoint_enabled",
             "checkpoint_interval",
+            "cleanup_prepared_after_dataset_analysis",
             "dataset_analyses",
             "dataset_analysis_mode",
             "dataset_analysis_params",

@@ -105,6 +105,7 @@ class ConfigTests(unittest.TestCase):
         cfg = Config(input_dir="/tmp/in", out_dir="/tmp/out")
         self.assertFalse(cfg.checkpoint_enabled)
         self.assertEqual(cfg.checkpoint_interval, 100)
+        self.assertFalse(cfg.cleanup_prepared_after_dataset_analysis)
 
         # interval must be positive
         with self.assertRaises(ValueError):
@@ -159,6 +160,24 @@ class ConfigTests(unittest.TestCase):
             cfg.interface_pairs_for_outputs(),
             [("binder", "target"), ("binder", "chains_A_B")],
         )
+
+    def test_prepare_and_plugin_superimpose_are_mutually_exclusive(self) -> None:
+        with self.assertRaises(ValueError):
+            Config(
+                input_dir="/tmp/in",
+                out_dir="/tmp/out",
+                manipulations=[{"name": "superimpose_to_reference", "grain": "pdb"}],
+                plugins=["superimpose_homology"],
+            )
+
+    def test_prepare_superimpose_forces_prepared_structure_persistence(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            manipulations=[{"name": "superimpose_to_reference", "grain": "pdb"}],
+            keep_prepared_structures=False,
+        )
+        self.assertTrue(cfg.keep_prepared_structures)
 
 
 if __name__ == "__main__":

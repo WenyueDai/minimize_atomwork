@@ -1,21 +1,37 @@
 # Chunk 01 — antibody-antigen manual chunk workflow.
-# Merge all chunks with: python -m minimum_atw.cli merge-planned-chunks --plan-dir ./plan --out-dir ./merged
+#
+# Run this chunk:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+#
+# Merge manual chunks:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
+#     --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
+#     --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_01 \
+#     --source-out-dir /home/eva/minimum_atomworks/out_chunk_antibody_antigen_02
 
+# ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01"
 out_dir: "/home/eva/minimum_atomworks/out_chunk_antibody_antigen_01"
 assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
 
 # ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
-  antigen:  ["A"]
-  vh:       ["C"]
-  vl:       ["B"]
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
   antibody: ["B", "C"]
 
 interface_pairs:
   - ["antibody", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
+# Prepare plugins are configured here as `{name, grain}` items.
+# quality_controls:
+#   - "chain_continuity"
+#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -23,8 +39,13 @@ manipulations:
     grain: "pdb"
   - name: "center_on_origin"
     grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
 
-# ── Calculations ───────────────────────────────────────────────────────────────
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
@@ -35,14 +56,15 @@ plugins:
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
   - "abepitope_score"
-  - "superimpose_homology"
+  # - "rosetta_interface_example"
 
 contact_distance: 5.0
 abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
 
-# ── Per-plugin configuration ───────────────────────────────────────────────────
+# ── Plugin-specific configuration ──────────────────────────────────────────────
 plugin_params:
-  superimpose_homology:
+  superimpose_to_reference:
     reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/reference/7e9b_reference_rank_001.pdb"
     on_chains: ["A", "B", "C"]
 
@@ -51,15 +73,36 @@ numbering_roles: ["vh", "vl"]
 numbering_scheme: "imgt"
 cdr_definition: "imgt"
 
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+
 # ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cluster"
-dataset_analysis_mode: "per_chunk"
+  # - "cdr_entropy"
+dataset_analysis_mode: "per_chunk"    # post_merge | per_chunk | both
+dataset_analysis_params: {}
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 
 dataset_annotations:
+  dataset_id: "antibody_antigen_chunk_01"
   project: "atomworks_chunked_example"
   dataset_name: "antibody_antigen_chunk_01"
   modality: "antibody_antigen"
   chunk_id: "01"
+  # Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25

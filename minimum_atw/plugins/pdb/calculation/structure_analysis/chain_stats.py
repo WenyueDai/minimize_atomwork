@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import biotite.structure as struc
 import numpy as np
 
 from ...annotations import chain_unique_residue_count
@@ -15,10 +16,9 @@ class ChainStatsPlugin(ChainPlugin):
             if len(chain_aa) == 0:
                 continue
 
-            # Calculate basic statistics
             coords = chain_aa.coord
             centroid = np.mean(coords, axis=0)
-            radius = np.max(np.linalg.norm(coords - centroid, axis=1))
+            radius = float(struc.gyration_radius(chain_aa))
 
             yield {
                 "grain": "chain",
@@ -27,5 +27,5 @@ class ChainStatsPlugin(ChainPlugin):
                 "centroid_x": float(centroid[0]),
                 "centroid_y": float(centroid[1]),
                 "centroid_z": float(centroid[2]),
-                "radius_of_gyration": float(radius),
+                "radius_of_gyration": radius,
             }

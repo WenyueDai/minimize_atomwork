@@ -1,0 +1,60 @@
+# Compare multiple already-completed dataset out_dirs after `merge-datasets`.
+#
+# Workflow:
+#   1. Run dataset A:
+#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#   2. Run dataset B:
+#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+#   3. Merge those finished out_dirs:
+#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge-datasets \
+#        --out-dir /home/eva/minimum_atomworks/out_compare_ab \
+#        --source-out-dir /home/eva/minimum_atomworks/out_dataset_a \
+#        --source-out-dir /home/eva/minimum_atomworks/out_dataset_b
+#   4. Analyze the merged output:
+#      /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
+#        --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
+#
+# Note:
+#   `analyze-dataset` only reads `out_dir` plus dataset-analysis settings below.
+#   `input_dir` is still required by the shared config schema, but is not used here.
+
+input_dir: "JUST_A_PLACEHOLDER_TO_SATISFY_SCHEMA"
+out_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/out_merge_ab"
+
+# These analyses run on the merged pooled interfaces.
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "post_merge"
+
+dataset_analysis_params:
+  cluster:
+    jobs:
+      - name: "cross_dataset_paratope"
+        mode: "interface_ca"
+        interface_side: "left"
+        distance_threshold: 2.0
+        center: true
+      - name: "cross_dataset_epitope"
+        mode: "interface_ca"
+        interface_side: "right"
+        distance_threshold: 2.0
+        center: true
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true  # no-op unless this out_dir still has a _prepared cache
+
+dataset_annotations:
+  dataset_id: "merged_dataset_pool"
+  project: "cross_dataset_compare"
+  dataset_name: "merged_dataset_pool"
+  analysis_goal: "within_dataset_and_between_dataset_interface_clustering"
+  # Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# reference_dataset_dir: "/home/eva/minimum_atomworks/out_reference_dataset"
+# Currently none of the built-in dataset analyses consume `reference_dataset_dir`.

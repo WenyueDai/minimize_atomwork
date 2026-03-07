@@ -1,0 +1,417 @@
+{
+  "config": {
+    "abepitope_atom_radius": 4.0,
+    "assembly_id": "1",
+    "cdr_definition": "imgt",
+    "checkpoint_enabled": false,
+    "checkpoint_interval": 100,
+    "clash_distance": 2.0,
+    "clash_scope": "all",
+    "contact_distance": 5.0,
+    "dataset_analyses": [
+      "dataset_annotations",
+      "interface_summary",
+      "cluster"
+    ],
+    "dataset_analysis_mode": "post_merge",
+    "dataset_analysis_params": {
+      "cluster": {
+        "jobs": [
+          {
+            "center": true,
+            "distance_threshold": 2.0,
+            "interface_side": "left",
+            "name": "paratope"
+          },
+          {
+            "center": true,
+            "distance_threshold": 2.0,
+            "interface_side": "right",
+            "name": "epitope"
+          }
+        ]
+      }
+    },
+    "dataset_annotations": {
+      "dataset_id": "dataset_a",
+      "dataset_name": "dataset_a",
+      "modality": "antibody_antigen",
+      "notes": "source dataset A; aligned on antigen chain A only",
+      "project": "cross_dataset_compare"
+    },
+    "dataset_output_name": "dataset.parquet",
+    "input_dir": "/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/data/chunk_01",
+    "interface_cell_size": null,
+    "interface_pairs": [
+      [
+        "antibody",
+        "antigen"
+      ]
+    ],
+    "keep_intermediate_outputs": false,
+    "keep_prepared_structures": false,
+    "manipulations": [
+      {
+        "grain": "pdb",
+        "name": "chain_continuity"
+      },
+      {
+        "grain": "pdb",
+        "name": "structure_clashes"
+      },
+      {
+        "grain": "pdb",
+        "name": "center_on_origin"
+      }
+    ],
+    "numbering_roles": [
+      "vh",
+      "vl"
+    ],
+    "numbering_scheme": "imgt",
+    "out_dir": "/tmp/minimum_atw_run_d0xx1ccl",
+    "pdb_output_name": "pdb.parquet",
+    "plugin_params": {
+      "superimpose_homology": {
+        "on_chains": [
+          "A"
+        ],
+        "reference_path": "/home/eva/minimum_atomworks/path/to/reference_antigen_chain_A_only.pdb"
+      }
+    },
+    "plugins": [
+      "identity",
+      "chain_stats",
+      "role_sequences",
+      "role_stats",
+      "interface_contacts",
+      "interface_metrics",
+      "antibody_cdr_lengths",
+      "antibody_cdr_sequences",
+      "abepitope_score",
+      "superimpose_homology"
+    ],
+    "reference_dataset_dir": null,
+    "roles": {
+      "antibody": [
+        "B",
+        "C"
+      ],
+      "antigen": [
+        "A"
+      ],
+      "vh": [
+        "C"
+      ],
+      "vl": [
+        "B"
+      ]
+    },
+    "rosetta_add_regular_scores_to_scorefile": true,
+    "rosetta_atomic_burial_cutoff": 0.01,
+    "rosetta_compute_packstat": true,
+    "rosetta_database": null,
+    "rosetta_executable": null,
+    "rosetta_interface_cutoff": 8.0,
+    "rosetta_interface_targets": [],
+    "rosetta_pack_input": true,
+    "rosetta_pack_separated": true,
+    "rosetta_packstat_oversample": null,
+    "rosetta_preprocess_with_score_jd2": false,
+    "rosetta_sasa_calculator_probe_radius": 1.4,
+    "rosetta_score_jd2_executable": null,
+    "superimpose_on_chains": [],
+    "superimpose_reference_path": null
+  },
+  "counts": {
+    "bad": 0,
+    "chains": 15,
+    "interfaces": 5,
+    "pdb": 45,
+    "roles": 20,
+    "status": 65,
+    "structures": 5
+  },
+  "merge_compatibility": {
+    "abepitope_atom_radius": 4.0,
+    "assembly_id": "1",
+    "cdr_definition": "imgt",
+    "clash_distance": 2.0,
+    "clash_scope": "all",
+    "contact_distance": 5.0,
+    "interface_cell_size": null,
+    "interface_pairs": [
+      [
+        "antibody",
+        "antigen"
+      ]
+    ],
+    "manipulations": [
+      {
+        "grain": "pdb",
+        "name": "chain_continuity"
+      },
+      {
+        "grain": "pdb",
+        "name": "structure_clashes"
+      },
+      {
+        "grain": "pdb",
+        "name": "center_on_origin"
+      }
+    ],
+    "numbering_roles": [
+      "vh",
+      "vl"
+    ],
+    "numbering_scheme": "imgt",
+    "plugins": [
+      "identity",
+      "chain_stats",
+      "role_sequences",
+      "role_stats",
+      "interface_contacts",
+      "interface_metrics",
+      "antibody_cdr_lengths",
+      "antibody_cdr_sequences",
+      "abepitope_score",
+      "superimpose_homology"
+    ],
+    "roles": {
+      "antibody": [
+        "B",
+        "C"
+      ],
+      "antigen": [
+        "A"
+      ],
+      "vh": [
+        "C"
+      ],
+      "vl": [
+        "B"
+      ]
+    },
+    "rosetta_add_regular_scores_to_scorefile": true,
+    "rosetta_atomic_burial_cutoff": 0.01,
+    "rosetta_compute_packstat": true,
+    "rosetta_database": null,
+    "rosetta_executable": null,
+    "rosetta_interface_cutoff": 8.0,
+    "rosetta_interface_targets": [],
+    "rosetta_pack_input": true,
+    "rosetta_pack_separated": true,
+    "rosetta_packstat_oversample": null,
+    "rosetta_preprocess_with_score_jd2": false,
+    "rosetta_sasa_calculator_probe_radius": 1.4,
+    "rosetta_score_jd2_executable": null,
+    "superimpose_on_chains": [],
+    "superimpose_reference_path": null
+  },
+  "output_files": {
+    "dataset": "dataset.parquet",
+    "pdb": "pdb.parquet"
+  },
+  "output_kind": "run",
+  "plugin_execution": {
+    "groups": [
+      {
+        "execution_mode": "batched",
+        "input_model": "atom_array",
+        "plugins": [
+          "identity",
+          "chain_stats",
+          "role_sequences",
+          "role_stats",
+          "interface_contacts",
+          "interface_metrics",
+          "antibody_cdr_lengths",
+          "antibody_cdr_sequences",
+          "superimpose_homology"
+        ]
+      },
+      {
+        "execution_mode": "isolated",
+        "input_model": "hybrid",
+        "plugins": [
+          "abepitope_score"
+        ]
+      }
+    ],
+    "plugins": {
+      "abepitope_score": {
+        "execution_mode": "isolated",
+        "failure_policy": "continue",
+        "input_model": "hybrid"
+      },
+      "antibody_cdr_lengths": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "antibody_cdr_sequences": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "chain_stats": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "identity": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "interface_contacts": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "interface_metrics": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "role_sequences": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "role_stats": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      },
+      "superimpose_homology": {
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "input_model": "atom_array"
+      }
+    }
+  },
+  "prepare_execution": {
+    "grains": {
+      "dataset": [],
+      "pdb": [
+        "chain_continuity",
+        "structure_clashes",
+        "center_on_origin"
+      ]
+    }
+  },
+  "status_summary": {
+    "failed": 5,
+    "ok": 60
+  },
+  "table_columns": {
+    "pdb": [
+      "path",
+      "assembly_id",
+      "grain",
+      "chain_id",
+      "role",
+      "pair",
+      "role_left",
+      "role_right",
+      "sub_id",
+      "source__name",
+      "source__format",
+      "source__size_bytes",
+      "source__mtime_ns",
+      "source__n_atoms_loaded",
+      "source__n_chains_loaded",
+      "continuity__has_break",
+      "continuity__n_breaks",
+      "clash__has_clash",
+      "clash__n_clashing_atom_pairs",
+      "clash__n_clashing_atoms",
+      "center__centroid_x",
+      "center__centroid_y",
+      "center__centroid_z",
+      "id__n_atoms_total",
+      "id__n_chains",
+      "id__has_nan_coord",
+      "id__n_atoms",
+      "chstat__n_residues",
+      "chstat__centroid_x",
+      "chstat__centroid_y",
+      "chstat__centroid_z",
+      "chstat__radius_of_gyration",
+      "rolseq__chain_ids",
+      "rolseq__n_chains",
+      "rolseq__sequence_length_total",
+      "rolseq__sequence",
+      "rolseq__sequence_by_chain",
+      "rolstat__n_residues",
+      "rolstat__centroid_x",
+      "rolstat__centroid_y",
+      "rolstat__centroid_z",
+      "rolstat__radius_of_gyration",
+      "iface__contact_distance",
+      "iface__n_contact_atom_pairs",
+      "iface__n_left_contact_atoms",
+      "iface__n_right_contact_atoms",
+      "iface__n_left_interface_residues",
+      "iface__n_right_interface_residues",
+      "iface__left_interface_residues",
+      "iface__right_interface_residues",
+      "iface__n_left_vh_cdr1_interface_residues",
+      "iface__left_vh_cdr1_interface_residues",
+      "iface__n_left_vh_cdr2_interface_residues",
+      "iface__left_vh_cdr2_interface_residues",
+      "iface__n_left_vh_cdr3_interface_residues",
+      "iface__left_vh_cdr3_interface_residues",
+      "iface__n_left_vl_cdr1_interface_residues",
+      "iface__left_vl_cdr1_interface_residues",
+      "iface__n_left_vl_cdr2_interface_residues",
+      "iface__left_vl_cdr2_interface_residues",
+      "iface__n_left_vl_cdr3_interface_residues",
+      "iface__left_vl_cdr3_interface_residues",
+      "ifm__n_residue_contact_pairs",
+      "ifm__residue_contact_pairs",
+      "ifm__left_interface_residue_labels",
+      "ifm__right_interface_residue_labels",
+      "ifm__left_interface_charge_sum",
+      "ifm__left_interface_hydrophobic_fraction",
+      "ifm__left_interface_polar_fraction",
+      "ifm__left_interface_aromatic_fraction",
+      "ifm__left_interface_glycine_fraction",
+      "ifm__left_interface_proline_fraction",
+      "ifm__right_interface_charge_sum",
+      "ifm__right_interface_hydrophobic_fraction",
+      "ifm__right_interface_polar_fraction",
+      "ifm__right_interface_aromatic_fraction",
+      "ifm__right_interface_glycine_fraction",
+      "ifm__right_interface_proline_fraction",
+      "abcdr__cdr1_length",
+      "abcdr__cdr2_length",
+      "abcdr__cdr3_length",
+      "abseq__chain_ids",
+      "abseq__numbering_scheme",
+      "abseq__cdr_definition",
+      "abseq__sequence_length",
+      "abseq__cdr1_sequence",
+      "abseq__cdr2_sequence",
+      "abseq__cdr3_sequence",
+      "abepitope__atom_radius",
+      "abepitope__score",
+      "abepitope__target_score",
+      "cluster__paratope_cluster_id",
+      "cluster__paratope_cluster_size",
+      "cluster__paratope_representative_path",
+      "cluster__paratope_distance_to_representative",
+      "cluster__paratope_n_points",
+      "cluster__paratope_interface_side",
+      "cluster__paratope_mode",
+      "cluster__epitope_cluster_id",
+      "cluster__epitope_cluster_size",
+      "cluster__epitope_representative_path",
+      "cluster__epitope_distance_to_representative",
+      "cluster__epitope_n_points",
+      "cluster__epitope_interface_side",
+      "cluster__epitope_mode"
+    ]
+  }
+}
