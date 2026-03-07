@@ -28,6 +28,7 @@ def _run_dataset_analyses(cfg: Config, out_dir: Path) -> None:
         dataset_analyses=tuple(cfg.dataset_analyses),
         dataset_analysis_params=cfg.dataset_analysis_params,
         dataset_annotations=cfg.dataset_annotations,
+        reference_dataset_dir=cfg.reference_dataset_dir,
     )
     print("[pipeline] dataset_analyses complete", flush=True)
 

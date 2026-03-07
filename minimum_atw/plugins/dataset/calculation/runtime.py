@@ -162,6 +162,7 @@ def analyze_dataset_outputs(
     dataset_analyses: tuple[str, ...] | None = None,
     dataset_analysis_params: dict[str, dict[str, object]] | None = None,
     dataset_annotations: dict[str, str] | None = None,
+    reference_dataset_dir: str | None = None,
 ) -> dict[str, int | str]:
     out_dir = Path(out_dir).resolve()
     print(f"[dataset] start out_dir={out_dir}", flush=True)
@@ -214,11 +215,19 @@ def analyze_dataset_outputs(
 
         grain_names = list(required.keys()) if required else ["interface", "role"]
         grains = {grain_name: load_table(grain_name) for grain_name in grain_names}
+        if reference_dataset_dir is not None:
+            ref_dir = Path(reference_dataset_dir).resolve()
+            ref_metadata = _read_dataset_metadata(ref_dir)
+            ref_grain_names = list(required.keys()) if required else ["interface", "role"]
+            reference_grains = {g: _read_output_table(ref_dir, g) for g in ref_grain_names}
+        else:
+            reference_grains = {}
         analysis_ctx = DatasetAnalysisContext(
             out_dir=out_dir,
             grains=grains,
             params=params,
             annotations=dict(dataset_annotations or {}),
+            reference_grains=reference_grains,
         )
         dataset_frame, pdb_frame = _normalize_analysis_result(analysis_name, plugin.run(analysis_ctx))
         if "analysis" in dataset_frame.columns:

@@ -6,8 +6,6 @@ from typing import Iterable
 class BaseQualityControl:
     name = ""
     prefix = ""
-    extension_class = "pdb_quality_control"
-    analysis_category = "quality_control"
     prepare_section = "quality_control"
 
     def run(self, ctx) -> Iterable[dict]:

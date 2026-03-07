@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from ...interface_annotations import interface_contact_summary_for_roles
-from ..base import Context, InterfacePlugin
+from ...annotations import interface_contact_summary_for_roles
+from ....base import Context, InterfacePlugin
 from .interface_metrics import (
     _cell_size,
     format_residue_labels,

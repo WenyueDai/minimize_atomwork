@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...annotations import chain_unique_residue_count
-from ..base import ChainPlugin, Context
+from ....base import ChainPlugin, Context
 
 
 class ChainStatsPlugin(ChainPlugin):

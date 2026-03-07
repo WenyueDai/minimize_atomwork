@@ -1,115 +1,181 @@
 # Examples
 
-This folder contains the maintained example configs for the current `minimum_atw` package layout.
+Example configs for `minimum_atw`. Each YAML is self-contained and runnable.
 
-Current package model:
+## Quick start
 
-- `pdb/quality_control`
-- `pdb/manipulation`
-- `pdb/calculation`
-- `dataset/quality_control`
-- `dataset/manipulation`
-- `dataset/calculation`
+```bash
+# One-shot run (prepare → calculate → merge → dataset analyses)
+python -m minimum_atw.cli run \
+  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+```
 
-Current final outputs:
+Or stage by stage:
 
-- one PDB-side parquet: `pdb.parquet` by default
-- one dataset-side parquet: `dataset.parquet` by default
-- `run_metadata.json`
-- `dataset_metadata.json`
+```bash
+CONFIG=minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 
-You may override the parquet filenames in YAML with:
+python -m minimum_atw.cli prepare          --config "$CONFIG"
+python -m minimum_atw.cli run-plugin       --config "$CONFIG" --plugin interface_metrics
+python -m minimum_atw.cli merge            --config "$CONFIG"
+python -m minimum_atw.cli analyze-dataset  --config "$CONFIG"
+```
+
+Python environment: `/home/eva/miniconda3/envs/atw_pp/bin/python`  
+Working directory: `/home/eva/minimum_atomworks`
+
+---
+
+## Package model
+
+Three plugin categories, three YAML keys:
+
+| Category | YAML key | When it runs | What it does |
+|---|---|---|---|
+| `pdb_prepare` | `quality_controls` / `manipulations` | Prepare phase, per structure | Annotates or transforms each structure before calculations |
+| `pdb_calculation` | `plugins` | Execute phase, per structure | Produces rows merged into `pdb.parquet` |
+| `dataset_calculation` | `dataset_analyses` | After merge | Aggregates across the full dataset |
+
+**Built-in prepare plugins:**
+
+| Name | Key | What it does |
+|---|---|---|
+| `chain_continuity` | `quality_controls` | Flags residue-ID gaps and backbone breaks per chain |
+| `structure_clashes` | `quality_controls` | Counts inter-chain atom clashes |
+| `center_on_origin` | `manipulations` | Centers the structure's centroid at the origin |
+
+**Built-in calculation plugins (`plugins:`):**
+
+| Name | What it produces |
+|---|---|
+| `identity` | Atom/chain/residue counts per structure |
+| `chain_stats` | Per-chain length and sequence stats |
+| `role_sequences` | Per-role amino-acid sequence |
+| `role_stats` | Per-role atom/residue counts |
+| `interface_contacts` | Per-residue interface contacts |
+| `interface_metrics` | Interface area, buried SASA, hydrogen bonds |
+| `antibody_cdr_lengths` | CDR loop lengths (requires `numbering_roles`) |
+| `antibody_cdr_sequences` | CDR loop sequences |
+| `abepitope_score` | AbEpiTope epitope score (requires `hmmsearch`) |
+| `superimpose_homology` | Per-structure RMSD to a reference structure |
+| `rosetta_interface_example` | Rosetta InterfaceAnalyzer metrics (requires Rosetta) |
+
+Plugin-specific config goes under `plugin_params`:
 
 ```yaml
-# pdb_output_name: "20250307_pdb.parquet"
-# dataset_output_name: "20250307_dataset.parquet"
+plugin_params:
+  superimpose_homology:
+    reference_path: "/path/to/reference.pdb"
+    on_chains: ["A", "B", "C"]
 ```
 
-Use this Python environment:
+**Built-in dataset analyses (`dataset_analyses:`):**
 
-```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python
-```
+| Name | What it produces |
+|---|---|
+| `dataset_annotations` | Copies `dataset_annotations` dict into `dataset.parquet` |
+| `interface_summary` | Per-dataset interface residue statistics |
+| `cluster` | Interface-residue clustering (writes back onto `pdb.parquet`) |
+| `cdr_entropy` | Per-CDR sequence entropy across the dataset |
 
-Run commands from:
+---
 
-```bash
-cd /home/eva/minimum_atomworks
-```
+## Outputs
+
+| File | Contents |
+|---|---|
+| `pdb.parquet` | All per-structure / per-chain / per-role / per-interface rows |
+| `dataset.parquet` | Dataset-level analysis rows |
+| `run_metadata.json` | Run config, counts, column manifest |
+| `dataset_metadata.json` | Dataset analysis metadata |
+
+The `grain` column in `pdb.parquet` discriminates row types:
+`structure` · `chain` · `role` · `interface`
+
+---
 
 ## Folders
 
-- [simple_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md): one-shot local runs and plugin development
-- [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md): `run-chunked` and `plan-chunks`
-- [chunk_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md): one-config-per-chunk manual workflows
+- [simple_run/](simple_run/README.md) — one-shot local runs and plugin development
+- [large_run/](large_run/README.md) — `run-chunked` and `plan-chunks` for large datasets
+- [chunk_run/](chunk_run/README.md) — one-config-per-chunk manual workflows
 
-## Example policy
+### Simple run
 
-- Built-in QC and native PDB/interface plugins are enabled when they fit the profile.
-- Rosetta remains scaffolded but commented out by default.
-- AbEpiTope is enabled in antibody-oriented examples.
-- `cdr_entropy` is scaffolded but off by default.
-- `cluster` is enabled by default in all examples.
+| File | Profile |
+|---|---|
+| [example_antibody_antigen_light.yaml](simple_run/example_antibody_antigen_light.yaml) | Minimal antibody–antigen for dev/testing |
+| [example_antibody_antigen_pdb.yaml](simple_run/example_antibody_antigen_pdb.yaml) | Full antibody–antigen (all native plugins) |
+| [example_vhh_antigen.yaml](simple_run/example_vhh_antigen.yaml) | VHH (single-domain) against antigen |
+| [example_protein_protein_complex.yaml](simple_run/example_protein_protein_complex.yaml) | Generic receptor–ligand |
 
-## Execution behavior
+### Large run (chunked)
 
-- Native `atom_array` plugins are batched together.
-- External or file-bound plugins such as `abepitope_score` and `rosetta_interface_example` run in isolated workers.
-- Those execution groups can run concurrently, so enabling an external plugin no longer forces the native plugin batch to wait for it to finish first.
+| File | Profile |
+|---|---|
+| [example_antibody_antigen_chunked.yaml](large_run/example_antibody_antigen_chunked.yaml) | Antibody–antigen, `run-chunked` |
+| [example_vhh_antigen_chunked.yaml](large_run/example_vhh_antigen_chunked.yaml) | VHH–antigen, `run-chunked` |
+| [example_protein_protein_chunked.yaml](large_run/example_protein_protein_chunked.yaml) | Protein–protein, `run-chunked` |
 
-## Dataset analyses in the examples
+### Manual chunk workflow
 
-Enabled by default:
+| File | Notes |
+|---|---|
+| [chunk_antibody_antigen_01.yaml](chunk_run/chunk_antibody_antigen_01.yaml) | Chunk 01 config |
+| [chunk_antibody_antigen_02.yaml](chunk_run/chunk_antibody_antigen_02.yaml) | Chunk 02 config |
+| [chunk_config_manifest_example.txt](chunk_run/chunk_config_manifest_example.txt) | Manifest for `merge-planned-chunks` |
 
-- `dataset_annotations`
-- `interface_summary`
-- `cluster`
+---
 
-Optional and commented out:
-
-- `cdr_entropy`
-
-Current clustering surface is interface-focused, and the default is already “both sides”:
+## Minimal YAML reference
 
 ```yaml
+input_dir: "./pdbs"
+out_dir:   "./results"
+
+roles:
+  binder: ["A"]
+  target: ["B"]
+interface_pairs:
+  - ["binder", "target"]
+
+quality_controls:
+  - "chain_continuity"
+  - "structure_clashes"
+
+manipulations:
+  - "center_on_origin"
+
+plugins:
+  - "identity"
+  - "interface_contacts"
+  - "interface_metrics"
+  - "superimpose_homology"
+
+plugin_params:
+  superimpose_homology:
+    reference_path: "./reference.pdb"
+    on_chains: ["A", "B"]
+
 dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
   - "cluster"
+
+dataset_annotations:
+  project: "my_project"
 ```
 
-Interpretation:
+## Clustering notes
 
-- with no extra `dataset_analysis_params.cluster` block, the plugin emits two jobs:
-  - `left`
-  - `right`
-- dataset scope is used only to compute the clusters
-- the assignments are written back onto `pdb.parquet` on `grain == "interface"`
-- `right` means the right side of each configured interface pair
-- `left` means the left side
+`cluster` with no extra params emits `left` and `right` jobs automatically
+(paratope and epitope for antibody runs). Cluster assignments are written back
+onto `grain == "interface"` rows in `pdb.parquet`, not into `dataset.parquet`.
 
-For antibody-antigen examples with `["antibody", "antigen"]`:
+## Writing a new plugin
 
-- `right` means antigen epitope clustering
-- `left` means antibody paratope clustering
+Copy [plugins/pdb/calculation/template/template_plugin.py](../plugins/pdb/calculation/template/template_plugin.py),
+implement `run(ctx) -> Iterable[dict]`, add an instance to `_builtin_pdb_calculations()` in
+[plugins/pdb/calculation/__init__.py](../plugins/pdb/calculation/__init__.py).
 
-This clustering uses symmetric Chamfer distance on interface-residue `CA` point clouds. It is most meaningful when the dataset has already been placed in a comparable frame, which is why the antibody-oriented examples keep `superimpose_homology` scaffolded and configured.
-
-If you want explicit names like `epitope` and `paratope` instead of `right` and `left`, you can still override the default with a `cluster.jobs` block.
-
-## Ready-to-run local examples
-
-- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml)
-- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml)
-- [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml)
-- [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml)
-
-## Chunk-aware examples
-
-- [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
-- [example_vhh_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml)
-- [example_protein_protein_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml)
-
-## Manual chunk examples
-
-- [chunk_antibody_antigen_01.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml)
-- [chunk_antibody_antigen_02.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml)
-- [chunk_config_manifest_example.txt](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt)
+That's it — no base-class attributes required beyond `name` and `prefix`.

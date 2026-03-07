@@ -28,13 +28,14 @@ class PrepareSectionsTests(unittest.TestCase):
         cfg = Config(
             input_dir="/tmp/in",
             out_dir="/tmp/out",
-            manipulations=["chain_continuity", "center_on_origin"],
+            manipulations=[
+                {"name": "chain_continuity", "grain": "pdb"},
+                {"name": "center_on_origin", "grain": "pdb"},
+            ],
         )
 
         metadata = _prepare_execution_metadata(cfg)
-        self.assertEqual(metadata["sections"]["quality_control"], ["chain_continuity"])
-        self.assertEqual(metadata["sections"]["structure"], ["center_on_origin"])
-        self.assertEqual(metadata["sections"]["dataset"], [])
+        self.assertEqual(metadata["grains"]["pdb"], ["chain_continuity", "center_on_origin"])
 
     def test_quality_control_stage_writes_continuity_and_clash_fields(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_prepare_qc_") as tmp_dir:
@@ -69,7 +70,10 @@ class PrepareSectionsTests(unittest.TestCase):
                         "out_dir": str(out_dir),
                         "roles": {"binder": ["A"], "target": ["B"]},
                         "interface_pairs": [["binder", "target"]],
-                        "quality_controls": ["chain_continuity", "structure_clashes"],
+                        "manipulations": [
+                            {"name": "chain_continuity", "grain": "pdb"},
+                            {"name": "structure_clashes", "grain": "pdb"},
+                        ],
                         "plugins": [],
                     },
                     sort_keys=False,

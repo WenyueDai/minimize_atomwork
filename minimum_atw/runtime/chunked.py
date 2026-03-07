@@ -157,6 +157,7 @@ def merge_planned_chunks(
             dataset_analyses=tuple(source_config.dataset_analyses),
             dataset_analysis_params=source_config.dataset_analysis_params,
             dataset_annotations=source_config.dataset_annotations,
+            reference_dataset_dir=source_config.reference_dataset_dir,
         )
 
     counts["chunks"] = len(plan["chunks"])
@@ -217,6 +218,7 @@ def run_chunked_pipeline(
                 dataset_analyses=tuple(cfg.dataset_analyses),
                 dataset_analysis_params=cfg.dataset_analysis_params,
                 dataset_annotations=cfg.dataset_annotations,
+                reference_dataset_dir=cfg.reference_dataset_dir,
             )
 
     merged_counts["chunks"] = len(chunks)

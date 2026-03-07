@@ -1,7 +1,6 @@
 """Execute phase: run pdb_calculation plugins against prepared structures."""
 
 from __future__ import annotations
-import concurrent.futures
 from dataclasses import dataclass
 from pathlib import Path
 import threading
@@ -175,21 +174,63 @@ def _resolve_plugin_specs(plugin_names: list[str]) -> list[PluginExecutionSpec]:
     return [_plugin_execution_spec(plugin_name) for plugin_name in plugin_names]
 
 
+def _validate_plugin_requires(specs: list[PluginExecutionSpec]) -> None:
+    configured = {spec.name for spec in specs}
+    for spec in specs:
+        missing = [r for r in getattr(spec.plugin, "requires", []) if r not in configured]
+        if missing:
+            raise ValueError(
+                f"Plugin '{spec.name}' requires plugins that are not configured: {missing}"
+            )
+
+
 def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
-    atom_array_specs: list[PluginExecutionSpec] = []
-    isolated_specs: list[PluginExecutionSpec] = []
+    """Build an ordered execution plan respecting 'requires' dependencies.
+
+    Returns groups in topological order: each group can only start after all
+    prior groups have completed. Within a group, execution semantics are:
+    - atom_array specs at level 0 are batched together (single-pass file load)
+    - all other specs run as isolated single-plugin groups
+    """
+    _validate_plugin_requires(specs)
+
+    spec_by_name = {spec.name: spec for spec in specs}
+
+    # Compute each spec's dependency depth via memoised DFS
+    depths: dict[str, int] = {}
+
+    def _depth(name: str, visiting: frozenset[str]) -> int:
+        if name in depths:
+            return depths[name]
+        if name in visiting:
+            chain = " -> ".join(sorted(visiting)) + f" -> {name}"
+            raise ValueError(f"Circular dependency detected: {chain}")
+        visiting = visiting | {name}
+        spec = spec_by_name.get(name)
+        reqs = [r for r in getattr(spec.plugin if spec else None, "requires", []) if r in spec_by_name]
+        d = (max(_depth(r, visiting) for r in reqs) + 1) if reqs else 0
+        depths[name] = d
+        return d
 
     for spec in specs:
-        if spec.execution_mode == "batched" and spec.input_model == "atom_array":
-            atom_array_specs.append(spec)
-        else:
-            isolated_specs.append(spec)
+        _depth(spec.name, frozenset())
+
+    max_depth = max(depths.values(), default=0)
 
     plan: list[list[PluginExecutionSpec]] = []
-    if atom_array_specs:
-        plan.append(atom_array_specs)
-    for spec in isolated_specs:
-        plan.append([spec])
+    for depth in range(max_depth + 1):
+        level_specs = [s for s in specs if depths[s.name] == depth]
+        if depth == 0:
+            # Batch eligible atom_array specs; isolate everything else
+            batchable = [s for s in level_specs if s.execution_mode == "batched" and s.input_model == "atom_array" and not getattr(s.plugin, "requires", [])]
+            isolated = [s for s in level_specs if s not in batchable]
+            if batchable:
+                plan.append(batchable)
+            for s in isolated:
+                plan.append([s])
+        else:
+            for s in level_specs:
+                plan.append([s])
     return plan
 
 
@@ -344,19 +385,10 @@ def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
     }
     groups = _plan_plugin_execution(specs)
 
-    if len(groups) <= 1:
-        for group in groups:
-            _execute_plugin_group(cfg, manifest, group, states)
-    else:
-        max_workers = len(groups)
-        _log(f"[execute] groups={len(groups)} workers={max_workers}")
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [
-                executor.submit(_execute_plugin_group, cfg, manifest, group, states)
-                for group in groups
-            ]
-            for future in concurrent.futures.as_completed(futures):
-                future.result()
+    if len(groups) > 1:
+        _log(f"[execute] groups={len(groups)}")
+    for group in groups:
+        _execute_plugin_group(cfg, manifest, group, states)
 
     total_counts = {PDB_TABLE_NAME: 0, "status": 0, "bad": 0}
     for state in states.values():

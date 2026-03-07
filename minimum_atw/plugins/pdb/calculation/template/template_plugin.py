@@ -1,30 +1,25 @@
-from __future__ import annotations
-
 """
 Minimal scaffold for adding a new PDB calculation plugin.
 
-Copy the class you need into the appropriate package:
-- structure plugin -> minimum_atw/plugins/pdb/calculation/structure_analysis/
-- chain plugin -> minimum_atw/plugins/pdb/calculation/structure_analysis/
-- role plugin -> minimum_atw/plugins/pdb/calculation/structure_analysis/
-- interface plugin -> minimum_atw/plugins/pdb/calculation/interface_analysis/
+Copy the class you need into the appropriate sub-package:
+  structure / chain / role plugins  →  plugins/pdb/calculation/structure_analysis/
+  interface plugins                 →  plugins/pdb/calculation/interface_analysis/
 
-This file is intentionally not imported by the plugin registry.
+Then register the instance in plugins/pdb/calculation/__init__.py under _builtin_pdb_calculations().
+
+This file is NOT imported by the plugin registry — it is a reference template only.
 """
 
-from ..base import BasePlugin, ChainPlugin, Context, InterfacePlugin, RolePlugin
+from __future__ import annotations
+
+from minimum_atw.plugins.base import BasePlugin, ChainPlugin, Context, InterfacePlugin, RolePlugin
 
 
 class TemplateStructurePlugin(BasePlugin):
+    """Emits one row per structure (grain = 'structure')."""
+
     name = "template_structure"
     prefix = "tmpl"
-    execution = "in_process"
-    input_model = "atom_array"
-    execution_mode = "batched"
-    failure_policy = "continue"
-
-    def available(self, ctx: Context) -> tuple[bool, str]:
-        return True, ""
 
     def run(self, ctx: Context):
         yield {
@@ -37,6 +32,8 @@ class TemplateStructurePlugin(BasePlugin):
 
 
 class TemplateChainPlugin(ChainPlugin):
+    """Emits one row per chain (grain = 'chain')."""
+
     name = "template_chain"
     prefix = "tmpl_chain"
 
@@ -49,6 +46,8 @@ class TemplateChainPlugin(ChainPlugin):
 
 
 class TemplateRolePlugin(RolePlugin):
+    """Emits one row per role (grain = 'role')."""
+
     name = "template_role"
     prefix = "tmpl_role"
 
@@ -61,10 +60,10 @@ class TemplateRolePlugin(RolePlugin):
 
 
 class TemplateInterfacePlugin(InterfacePlugin):
+    """Emits one row per interface pair (grain = 'interface')."""
+
     name = "template_interface"
     prefix = "tmpl_iface"
-    input_model = "hybrid"
-    execution_mode = "isolated"
 
     def run(self, ctx: Context):
         for left_role, right_role, left, right in self.iter_role_pairs(ctx):

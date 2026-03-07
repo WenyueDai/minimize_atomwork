@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from ..base import BasePlugin, Context
+from ....base import BasePlugin, Context
 
 
 class IdentityPlugin(BasePlugin):

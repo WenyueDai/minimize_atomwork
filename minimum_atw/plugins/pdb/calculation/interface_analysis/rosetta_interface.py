@@ -11,7 +11,7 @@ from typing import Any
 import numpy as np
 from biotite.structure.io import save_structure
 
-from ..base import Context, InterfacePlugin
+from ....base import Context, InterfacePlugin
 
 
 ROSETTA_CHAIN_IDS = tuple(string.ascii_uppercase + string.ascii_lowercase + string.digits)

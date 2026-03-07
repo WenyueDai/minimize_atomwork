@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from ..base import Context
+from ....base import Context
 from .base import AntibodyPluginBase
 from .antibody_numbering import cdr_sequences
 

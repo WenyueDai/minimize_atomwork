@@ -1,106 +1,77 @@
+# VHH-antigen profile: single-domain antibody against a multi-chain antigen.
+#
+# Run:
+#   python -m minimum_atw.cli run --config example_vhh_antigen.yaml
+
 input_dir: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb"
 out_dir: "/home/eva/minimum_atomworks/out_vhh_antigen"
-# pdb_output_name: "20250212_pdb.parquet"
-# dataset_output_name: "20250212_dataset.parquet"
 assembly_id: "1"
 
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
 roles:
   antigen: ["A", "B"]
-  vhh: ["C"]
-  binder: ["C"]
+  vhh:     ["C"]
+  binder:  ["C"]
 
 interface_pairs:
   - ["vhh", "antigen"]
   - ["binder", "antigen"]
 
-quality_controls:
-  - "chain_continuity"
-  - "structure_clashes"
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
 
-structure_manipulations:
-  - "center_on_origin"
-
-dataset_manipulations:
-  - "superimpose_homology"
-
-# Native atom-array plugins are batched together.
-# External/file-bound plugins such as abepitope_score or optional Rosetta run in isolated workers.
-# Those groups can run concurrently during one pipeline execution.
+# ── Calculations ───────────────────────────────────────────────────────────────
 plugins:
   - "identity"
   - "chain_stats"
   - "role_sequences"
   - "role_stats"
-  - "abepitope_score"
   - "interface_contacts"
   - "interface_metrics"
   - "antibody_cdr_lengths"
   - "antibody_cdr_sequences"
+  - "abepitope_score"
+  - "superimpose_homology"
   # - "rosetta_interface_example"
 
 contact_distance: 5.0
-# interface_cell_size: 5.0
 abepitope_atom_radius: 4.0
 
-# Rosetta InterfaceAnalyzer scaffold.
-# Uncomment the plugin above and fill these in when you want Rosetta metrics.
-# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-# rosetta_database: "/path/to/rosetta/database"
-# rosetta_preprocess_with_score_jd2: true
-# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
-# rosetta_interface_targets:
-#   - pair: ["vhh", "antigen"]
-#     left_role: "vhh"
-#     right_role: "antigen"
-#   - pair: ["binder", "antigen"]
-#     left_role: "binder"
-#     right_role: "antigen"
-# rosetta_pack_input: true
-# rosetta_pack_separated: true
-# rosetta_compute_packstat: true
-# rosetta_add_regular_scores_to_scorefile: true
-# rosetta_packstat_oversample: 100
-# rosetta_atomic_burial_cutoff: 0.01
-# rosetta_sasa_calculator_probe_radius: 1.4
-# rosetta_interface_cutoff: 8.0
+# ── Per-plugin configuration ───────────────────────────────────────────────────
+plugin_params:
+  superimpose_homology:
+    reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
+    on_chains: ["A", "B", "C"]
 
-superimpose_reference_path: "/home/eva/20260202_atomworks_plug_play/atw_pp/atw_pp/examples/default_input/antibody_antigen_pdb/7e9b_ag_C_ab_L_H_unrelaxed_rank_001_alphafold2_multimer_v3_model_3_seed_000_2024.pdb"
-superimpose_on_chains: ["A", "B", "C"]
-keep_intermediate_outputs: false
-keep_prepared_structures: false
-# checkpoint_enabled: true
-# checkpoint_interval: 25
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vhh"]
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
 
+# ── Dataset analyses ───────────────────────────────────────────────────────────
 dataset_analyses:
   - "dataset_annotations"
   - "interface_summary"
   - "cluster"
   # - "cdr_entropy"
-# dataset_analysis_mode: "per_chunk"
-# dataset_analysis_mode: "both"
 dataset_analysis_mode: "post_merge"
 
-dataset_analysis_params:
+dataset_analysis_params: {}
   # cdr_entropy:
   #   roles: ["vhh"]
   #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
 
-numbering_roles:
-  - "vhh"
-
-numbering_scheme: "imgt"
-cdr_definition: "imgt"
-# numbering_scheme: "chothia"
-# cdr_definition: "north"
-# numbering_scheme: "kabat"
-# cdr_definition: "kabat"
-# numbering_scheme: "aho"
-# cdr_definition: "north"
-
 dataset_annotations:
   project: "atomworks_example"
-  dataset_name: "vhh_antigen_reframing_of_antibody_example"
+  dataset_name: "vhh_antigen"
   modality: "vhh_antigen"
-  source: "atw_pp default input reinterpreted as VHH-antigen"
-  notes: "single-chain binder against a multi-chain antigen; binder role mirrors vhh for interface-level workflows"
-  profile: "vhh_non_rosetta_full"
+  notes: "single-chain binder; binder role mirrors vhh for interface-level workflows"
+
+keep_intermediate_outputs: false
+keep_prepared_structures: false

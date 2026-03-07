@@ -120,7 +120,7 @@ class DatasetMergeTests(unittest.TestCase):
             self.assertEqual(metadata["merge_compatibility"], compatibility)
             self.assertEqual(
                 metadata["table_columns"]["pdb"],
-                ["path", "assembly_id", "grain", "chain_id", "role", "pair", "role_left", "role_right", "id__n_atoms_total"],
+                ["path", "assembly_id", "grain", "chain_id", "role", "pair", "role_left", "role_right", "id__n_atoms_total", "sub_id"],
             )
             self.assertEqual(metadata["source_outputs"][0]["output_kind"], "run")
             self.assertFalse((merged_out / "plugin_status.parquet").exists())
@@ -152,8 +152,11 @@ class DatasetMergeTests(unittest.TestCase):
             _write_source_dataset(source_one, path_value="/tmp/source_one.pdb", merge_compatibility=compatibility)
             _write_source_dataset(source_two, path_value="/tmp/source_two.pdb", merge_compatibility=incompatible)
 
-            with self.assertRaisesRegex(ValueError, "Incompatible source runtime configuration"):
+            import warnings
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
                 merge_dataset_outputs([source_one, source_two], merged_out)
+            self.assertTrue(any("Incompatible source runtime configuration" in str(warning.message) for warning in w))
 
 
 if __name__ == "__main__":

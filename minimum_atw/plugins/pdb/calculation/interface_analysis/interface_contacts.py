@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from ...annotations import role_residue_entries
-from ...interface_annotations import interface_contact_summary_for_roles
+from ...annotations import interface_contact_summary_for_roles
 from ..antibody_analysis.antibody_numbering import cdr_indices
 from ..antibody_analysis.base import (
     antibody_role_sequences,
     cdr_definition_from_config,
     numbering_scheme_from_config,
 )
-from ..base import Context, InterfacePlugin
+from ....base import Context, InterfacePlugin
 from .interface_metrics import residue_tokens
 
 

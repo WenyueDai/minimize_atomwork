@@ -15,7 +15,7 @@ try:
         role_residue_entries,
         role_sequences_by_chain,
     )
-    from minimum_atw.plugins.pdb.interface_annotations import interface_contact_summary_for_roles
+    from minimum_atw.plugins.pdb.annotations import interface_contact_summary_for_roles
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "numpy", "pydantic"}:
         raise

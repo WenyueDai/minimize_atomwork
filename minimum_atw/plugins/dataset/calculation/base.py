@@ -13,6 +13,7 @@ class DatasetAnalysisContext:
     grains: dict[str, pd.DataFrame]
     params: dict[str, Any] = field(default_factory=dict)
     annotations: dict[str, Any] = field(default_factory=dict)
+    reference_grains: dict[str, pd.DataFrame] = field(default_factory=dict)
 
     @property
     def df_interfaces(self) -> pd.DataFrame:

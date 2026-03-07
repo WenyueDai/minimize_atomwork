@@ -3,7 +3,7 @@ from __future__ import annotations
 from importlib.util import find_spec
 
 from ...annotations import role_sequences_by_chain
-from ..base import BasePlugin, Context
+from ....base import BasePlugin, Context
 
 
 DEFAULT_NUMBERING_ROLES = ("vh", "vl", "vhh")

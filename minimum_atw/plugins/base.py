@@ -9,7 +9,6 @@ import biotite.structure as struc
 
 
 GrainName = Literal["structure", "chain", "role", "interface"]
-InputModelName = Literal["atom_array", "prepared_file", "hybrid"]
 _T = TypeVar("_T")
 
 
@@ -48,12 +47,7 @@ class BasePlugin:
     name = ""
     prefix = ""
     grain: GrainName = "structure"
-    input_model: InputModelName = "atom_array"
-    execution = "in_process"
-    execution_mode = "batched"
-    failure_policy = "continue"
-    extension_class = "pdb_calculation"
-    analysis_category = "structure_analysis"
+    requires: list[str] = []
 
     def run(self, ctx: Context) -> Iterable[dict]:
         raise NotImplementedError
@@ -61,10 +55,13 @@ class BasePlugin:
     def available(self, _ctx: Context) -> tuple[bool, str]:
         return True, ""
 
+    def plugin_params(self, ctx: Context) -> dict:
+        """Return plugin-local parameters from ctx.config.plugin_params[self.name]."""
+        return dict(getattr(ctx.config, "plugin_params", {}).get(self.name, {}))
+
 
 class InterfacePlugin(BasePlugin):
     grain: GrainName = "interface"
-    analysis_category = "interface_analysis"
 
     def iter_role_pairs(self, ctx: Context):
         for left_role, right_role in ctx.config.interface_pairs:
@@ -86,7 +83,6 @@ class InterfacePlugin(BasePlugin):
 
 class ChainPlugin(BasePlugin):
     grain: GrainName = "chain"
-    analysis_category = "structure_analysis"
 
     def iter_chains(self, ctx: Context):
         for chain_id, chain_aa in ctx.chains.items():
@@ -104,7 +100,6 @@ class ChainPlugin(BasePlugin):
 
 class RolePlugin(BasePlugin):
     grain: GrainName = "role"
-    analysis_category = "structure_analysis"
 
     def iter_roles(self, ctx: Context):
         for role_name, role_aa in ctx.roles.items():

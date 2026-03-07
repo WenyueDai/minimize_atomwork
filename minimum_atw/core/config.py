@@ -11,7 +11,8 @@ from .output_files import (
     normalize_output_filename,
 )
 
-PREPARE_SECTION_ORDER = ("quality_control", "structure", "dataset_quality_control", "dataset")
+PREPARE_SECTION_ORDER = ("quality_control", "structure")
+GRAIN_ORDER = ("pdb", "dataset")
 DATASET_ANALYSIS_MODES = {"post_merge", "per_chunk", "both"}
 NUMBERING_SCHEMES = {"imgt", "chothia", "kabat", "aho"}
 CDR_DEFINITIONS = {"imgt", "north", "kabat"}
@@ -100,11 +101,6 @@ def _normalize_prepare_section(value: str | None) -> str:
         "structure": "structure",
         "structure_manipulation": "structure",
         "structure_manipulations": "structure",
-        "dataset_quality_control": "dataset_quality_control",
-        "dataset_quality_controls": "dataset_quality_control",
-        "dataset": "dataset",
-        "dataset_manipulation": "dataset",
-        "dataset_manipulations": "dataset",
     }
     return aliases.get(normalized, "structure")
 
@@ -140,11 +136,7 @@ class Config(BaseModel):
     roles: dict[str, list[str]] = Field(default_factory=dict)
     interface_pairs: list[tuple[str, str]] = Field(default_factory=list)
 
-    quality_controls: list[str] = Field(default_factory=list)
-    structure_manipulations: list[str] = Field(default_factory=list)
-    dataset_quality_controls: list[str] = Field(default_factory=list)
-    dataset_manipulations: list[str] = Field(default_factory=list)
-    manipulations: list[str] = Field(default_factory=list)
+    manipulations: list[dict[str, str]] = Field(default_factory=list)
     plugins: list[str] = Field(default_factory=list)
     dataset_analyses: list[str] = Field(default_factory=list)
     pdb_output_name: str = DEFAULT_PDB_OUTPUT_NAME
@@ -163,10 +155,13 @@ class Config(BaseModel):
 
     dataset_analysis_mode: str = "post_merge"
     dataset_analysis_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    plugin_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dataset_annotations: dict[str, str] = Field(default_factory=dict)
 
     superimpose_reference_path: str | None = None
     superimpose_on_chains: list[str] = Field(default_factory=list)
+
+    reference_dataset_dir: str | None = None
 
     numbering_roles: list[str] = Field(default_factory=list)
     numbering_scheme: str = "imgt"
@@ -187,11 +182,6 @@ class Config(BaseModel):
     rosetta_interface_cutoff: float = 8.0
 
     @field_validator(
-        "quality_controls",
-        "structure_manipulations",
-        "dataset_quality_controls",
-        "dataset_manipulations",
-        "manipulations",
         "plugins",
         "dataset_analyses",
         "numbering_roles",
@@ -201,6 +191,29 @@ class Config(BaseModel):
     @classmethod
     def _normalize_name_lists(cls, value: Any) -> list[str]:
         return _normalize_unique_str_list(value)
+
+    @field_validator("manipulations", mode="before")
+    @classmethod
+    def _normalize_manipulations(cls, value: Any) -> list[dict[str, str]]:
+        if value is None:
+            return []
+        out: list[dict[str, str]] = []
+        seen: set[tuple[str, str]] = set()
+        for item in value:
+            if not isinstance(item, dict):
+                raise ValueError("manipulations must be list of dicts")
+            name = _normalize_optional_str(item.get("name"))
+            grain = _normalize_optional_str(item.get("grain"))
+            if name is None or grain is None:
+                continue
+            if grain not in {"pdb", "dataset"}:
+                raise ValueError(f"grain must be 'pdb' or 'dataset', got {grain}")
+            key = (name, grain)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"name": name, "grain": grain})
+        return out
 
     @field_validator("roles", mode="before")
     @classmethod
@@ -241,6 +254,7 @@ class Config(BaseModel):
 
     @field_validator(
         "superimpose_reference_path",
+        "reference_dataset_dir",
         "rosetta_executable",
         "rosetta_database",
         "rosetta_score_jd2_executable",
@@ -253,7 +267,7 @@ class Config(BaseModel):
             return None
         return str(Path(normalized).expanduser())
 
-    @field_validator("dataset_analysis_params", mode="before")
+    @field_validator("dataset_analysis_params", "plugin_params", mode="before")
     @classmethod
     def _normalize_dataset_analysis_params(cls, value: Any) -> dict[str, dict[str, Any]]:
         return _normalize_nested_mapping(value)
@@ -348,31 +362,19 @@ class Config(BaseModel):
             raise ValueError("pdb_output_name and dataset_output_name must be different")
         return self
 
-    def prepare_names_by_section(
-        self,
-        *,
-        section_by_name: Mapping[str, str] | None = None,
-    ) -> dict[str, list[str]]:
-        grouped = {
-            "quality_control": list(self.quality_controls),
-            "structure": list(self.structure_manipulations),
-            "dataset_quality_control": list(self.dataset_quality_controls),
-            "dataset": list(self.dataset_manipulations),
-        }
-        seen = {name for names in grouped.values() for name in names}
-        lookup = dict(section_by_name or {})
-        for name in self.manipulations:
-            if name in seen:
-                continue
-            grouped[_normalize_prepare_section(lookup.get(name))].append(name)
-            seen.add(name)
+    def prepare_names_by_grain(self) -> dict[str, list[str]]:
+        grouped = {"pdb": [], "dataset": []}
+        for item in self.manipulations:
+            name = item["name"]
+            grain = item["grain"]
+            grouped[grain].append(name)
         return grouped
 
-    def ordered_prepare_names(self, *, section_by_name: Mapping[str, str] | None = None) -> list[str]:
-        grouped = self.prepare_names_by_section(section_by_name=section_by_name)
+    def ordered_prepare_names(self) -> list[str]:
+        grouped = self.prepare_names_by_grain()
         ordered: list[str] = []
-        for section in PREPARE_SECTION_ORDER:
-            ordered.extend(grouped[section])
+        for grain in GRAIN_ORDER:
+            ordered.extend(grouped[grain])
         return ordered
 
     def chunk_dataset_analyses(self) -> list[str]:
@@ -425,6 +427,8 @@ class Config(BaseModel):
             "dataset_analyses",
             "dataset_analysis_mode",
             "dataset_analysis_params",
+            "plugin_params",
+            "reference_dataset_dir",
             "dataset_annotations",
             "pdb_output_name",
             "dataset_output_name",

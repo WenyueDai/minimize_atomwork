@@ -9,17 +9,14 @@ class ExtensionCatalogTests(unittest.TestCase):
     def test_extensions_are_separated_by_scope_and_function(self) -> None:
         catalog = extension_catalog()
 
-        self.assertIn("pdb_quality_control", catalog)
-        self.assertIn("pdb_manipulation", catalog)
+        self.assertIn("pdb_prepare", catalog)
         self.assertIn("pdb_calculation", catalog)
-        self.assertIn("dataset_quality_control", catalog)
-        self.assertIn("dataset_manipulation", catalog)
         self.assertIn("dataset_calculation", catalog)
 
-        self.assertEqual([item.name for item in catalog["pdb_quality_control"]], ["chain_continuity", "structure_clashes"])
-        self.assertEqual([item.name for item in catalog["pdb_manipulation"]], ["center_on_origin"])
-        self.assertEqual(catalog["dataset_quality_control"], [])
-        self.assertEqual(catalog["dataset_manipulation"], [])
+        self.assertEqual(
+            [item.name for item in catalog["pdb_prepare"]],
+            ["center_on_origin", "chain_continuity", "structure_clashes"],
+        )
         self.assertEqual(
             [item.name for item in catalog["pdb_calculation"]],
             [

@@ -181,6 +181,7 @@ def main() -> None:
             dataset_analyses=tuple(cfg.dataset_analyses) or None,
             dataset_analysis_params=cfg.dataset_analysis_params,
             dataset_annotations=cfg.dataset_annotations,
+            reference_dataset_dir=cfg.reference_dataset_dir,
         )
         print("Dataset analysis complete")
         for key, value in summary.items():

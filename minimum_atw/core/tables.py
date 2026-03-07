@@ -18,6 +18,7 @@ PDB_KEY_COLS = [
     "pair",
     "role_left",
     "role_right",
+    "sub_id",  # catch-all sub-identity for custom grains (residue, domain, site, …)
 ]
 IDENTITY_COLS = set(PDB_KEY_COLS)
 STATUS_COLS = ["path", "assembly_id", "plugin", "status", "message"]
@@ -50,8 +51,8 @@ REDUNDANT_PDB_COLUMN_PAIRS = (
 
 def normalize_grain(value: Any) -> str:
     normalized = str(value or "structure").strip().lower()
-    if normalized not in PDB_GRAINS:
-        raise ValueError(f"Unknown grain '{value}'. Expected one of: {', '.join(PDB_GRAINS)}")
+    if not normalized:
+        return "structure"
     return normalized
 
 
@@ -142,9 +143,12 @@ def merge_pdb_frames(base: pd.DataFrame, extra: pd.DataFrame) -> pd.DataFrame:
     if extra.empty:
         return sort_pdb_frame(base)
 
-    missing = [col for col in keys if col not in extra.columns]
-    if missing:
-        raise ValueError(f"Missing merge keys for pdb: {', '.join(missing)}")
+    # Fill any missing key columns (e.g. sub_id on legacy frames) with empty string.
+    for key in keys:
+        if key not in base.columns:
+            base = base.assign(**{key: ""})
+        if key not in extra.columns:
+            extra = extra.assign(**{key: ""})
 
     extra = extra.loc[:, list(dict.fromkeys([*keys, *[col for col in extra.columns if col not in keys]]))]
 

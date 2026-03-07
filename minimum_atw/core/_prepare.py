@@ -10,10 +10,7 @@ from typing import Any
 import pandas as pd
 from biotite.structure.io import save_structure
 
-from ..plugins.dataset.manipulation import DATASET_MANIPULATION_REGISTRY
-from ..plugins.dataset.quality_control import DATASET_QUALITY_CONTROL_REGISTRY
-from ..plugins.pdb.manipulation import PDB_MANIPULATION_REGISTRY
-from ..plugins.pdb.quality_control import PDB_QUALITY_CONTROL_REGISTRY
+from ..plugins.pdb import PDB_PREPARE_REGISTRY
 from ..runtime.workspace import (
     base_rows_for_context as _base_rows_for_context,
     discover_inputs as _discover,
@@ -22,7 +19,7 @@ from ..runtime.workspace import (
     prepared_manifest_path as _prepared_manifest_path,
     run_unit as _run_unit,
 )
-from .config import Config, PREPARE_SECTION_ORDER
+from .config import Config, GRAIN_ORDER
 from .registry import instantiate_unit
 from .tables import (
     BAD_COLS,
@@ -33,6 +30,7 @@ from .tables import (
     TABLE_SUFFIX,
     append_rows as _append_rows,
     count_pdb_rows as _count_pdb_rows,
+    merge_pdb_frames as _merge_pdb_frames,
     read_frame as _read_frame,
     read_pdb_table as _read_pdb_table,
     rows_to_pdb_frame as _rows_to_pdb_frame,
@@ -160,51 +158,40 @@ def _write_prepared_structure(prepared_path: Path | None, ctx: Any) -> None:
     save_structure(prepared_path, ctx.aa)
 
 
-def _rows_to_stage_frame(base_rows: list[dict[str, Any]], extra_rows: list[dict[str, Any]]) -> pd.DataFrame:
-    rows = list(base_rows)
-    rows.extend(extra_rows)
-    return _rows_to_pdb_frame(rows)
+def _merge_unit_rows_into_frame(frame: pd.DataFrame, unit_rows: list[dict[str, Any]]) -> pd.DataFrame:
+    if not unit_rows:
+        return frame
+    extra = _rows_to_pdb_frame(unit_rows)
+    return _merge_pdb_frames(frame, extra)
 
 
-def _prepare_units_by_section(cfg: Config) -> dict[str, list[Any]]:
-    prepare_registry = dict(PDB_QUALITY_CONTROL_REGISTRY)
-    for registry_name, registry in (
-        ("pdb_manipulation", PDB_MANIPULATION_REGISTRY),
-        ("dataset_quality_control", DATASET_QUALITY_CONTROL_REGISTRY),
-        ("dataset_manipulation", DATASET_MANIPULATION_REGISTRY),
-    ):
-        overlap = set(prepare_registry) & set(registry)
-        if overlap:
-            raise ValueError(
-                f"Duplicate prepare unit names across prepare registries (current={registry_name}): {sorted(overlap)}"
-            )
-        prepare_registry.update(registry)
-    section_by_name = {
-        name: str(getattr(unit, "prepare_section", "structure") or "structure")
-        for name, unit in prepare_registry.items()
+def _prepare_units_by_grain(cfg: Config) -> dict[str, list[Any]]:
+    grain_by_name = {
+        name: "pdb" if str(getattr(unit, "prepare_section", "structure") or "structure") in ("quality_control", "structure") else "dataset"
+        for name, unit in PDB_PREPARE_REGISTRY.items()
     }
-    grouped_names = cfg.prepare_names_by_section(section_by_name=section_by_name)
-    grouped_units: dict[str, list[Any]] = {section: [] for section in PREPARE_SECTION_ORDER}
-    for section in PREPARE_SECTION_ORDER:
-        for unit_name in grouped_names[section]:
-            grouped_units[section].append(instantiate_unit(prepare_registry[unit_name]))
+    grouped_names = cfg.prepare_names_by_grain()
+    grouped_units: dict[str, list[Any]] = {grain: [] for grain in GRAIN_ORDER}
+    for grain in GRAIN_ORDER:
+        for unit_name in grouped_names[grain]:
+            grouped_units[grain].append(instantiate_unit(PDB_PREPARE_REGISTRY[unit_name]))
     return grouped_units
 
 
 def _ordered_prepare_units(cfg: Config) -> list[Any]:
-    grouped_units = _prepare_units_by_section(cfg)
+    grouped_units = _prepare_units_by_grain(cfg)
     ordered: list[Any] = []
-    for section in PREPARE_SECTION_ORDER:
-        ordered.extend(grouped_units[section])
+    for grain in GRAIN_ORDER:
+        ordered.extend(grouped_units[grain])
     return ordered
 
 
 def prepare_execution_metadata(cfg: Config) -> dict[str, Any]:
-    grouped_units = _prepare_units_by_section(cfg)
+    grouped_units = _prepare_units_by_grain(cfg)
     return {
-        "sections": {
-            section: [unit.name for unit in grouped_units[section]]
-            for section in PREPARE_SECTION_ORDER
+        "grains": {
+            grain: [unit.name for unit in grouped_units[grain]]
+            for grain in GRAIN_ORDER
         }
     }
 
@@ -270,11 +257,16 @@ def _prepare_outputs_checkpointed(
             continue
 
         manipulation_ok = True
-        manipulation_rows: list[dict[str, Any]] = []
         status_rows: list[dict[str, Any]] = []
         bad_rows: list[dict[str, Any]] = []
+
+        base_rows = _base_rows_for_context(ctx)
+        stage_frame = _rows_to_pdb_frame(base_rows)
+
         for unit in manipulation_units:
-            manipulation_ok = _run_unit(ctx, unit, manipulation_rows, status_rows) and manipulation_ok
+            unit_rows: list[dict[str, Any]] = []
+            manipulation_ok = _run_unit(ctx, unit, unit_rows, status_rows) and manipulation_ok
+            stage_frame = _merge_unit_rows_into_frame(stage_frame, unit_rows)
             unit_progress[unit.name] += 1
             status = status_rows[-1] if status_rows else {}
             counts = unit_status_counts[unit.name]
@@ -294,7 +286,6 @@ def _prepare_outputs_checkpointed(
             done_paths.add(src_str)
             continue
 
-        base_rows = _base_rows_for_context(ctx)
         prepared_path, manifest_entry = _prepared_manifest_entry(
             cfg,
             source_path,
@@ -307,7 +298,7 @@ def _prepare_outputs_checkpointed(
         _write_prepared_structure(prepared_path, ctx)
         _append_stage_outputs(
             prepared_dir,
-            _rows_to_stage_frame(base_rows, manipulation_rows),
+            stage_frame,
             status_rows,
             bad_rows,
         )

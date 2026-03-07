@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 from ...annotations import role_sequences_by_chain
-from ..base import Context, RolePlugin
+from ....base import Context, RolePlugin
 
 
 class RoleSequencesPlugin(RolePlugin):

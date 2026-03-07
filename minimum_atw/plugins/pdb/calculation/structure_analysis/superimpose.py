@@ -7,7 +7,7 @@ import biotite.structure as struc
 import numpy as np
 from biotite.structure.io import load_structure
 
-from ..base import BasePlugin, Context
+from ....base import BasePlugin, Context
 
 
 @lru_cache(maxsize=16)
@@ -67,9 +67,12 @@ class SuperimposePlugin(BasePlugin):
         return True, ""
 
     def run(self, ctx: Context):
+        params = self.plugin_params(ctx)
+        ref_path = params.get("reference_path") or getattr(ctx.config, "superimpose_reference_path", None)
+        on_chains_cfg = params.get("on_chains") or getattr(ctx.config, "superimpose_on_chains", [])
         if self._reference is None:
-            if getattr(ctx.config, "superimpose_reference_path", None):
-                self._reference_path = str(Path(ctx.config.superimpose_reference_path).expanduser().resolve())
+            if ref_path:
+                self._reference_path = str(Path(ref_path).expanduser().resolve())
                 self._reference = _load_reference(self._reference_path)
             else:
                 self._reference = ctx.aa.copy()
@@ -83,7 +86,7 @@ class SuperimposePlugin(BasePlugin):
                 return
 
         fixed = self._reference
-        on_chains = tuple(str(chain_id) for chain_id in ctx.config.superimpose_on_chains if str(chain_id))
+        on_chains = tuple(str(chain_id) for chain_id in on_chains_cfg if str(chain_id))
 
         mobile = ctx.aa.copy()
         fixed_anchor = _select_chains(fixed, on_chains)

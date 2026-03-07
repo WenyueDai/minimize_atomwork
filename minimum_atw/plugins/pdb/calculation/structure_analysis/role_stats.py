@@ -3,7 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from ...annotations import role_unique_residue_count
-from ..base import RolePlugin, Context
+from ....base import RolePlugin, Context
 
 
 class RoleStatsPlugin(RolePlugin):

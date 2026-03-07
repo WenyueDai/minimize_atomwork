@@ -6,8 +6,6 @@ from typing import Iterable
 class BaseStructureManipulation:
     name = ""
     prefix = ""
-    extension_class = "pdb_manipulation"
-    analysis_category = "structure_manipulation"
     prepare_section = "structure"
 
     def run(self, ctx) -> Iterable[dict]:

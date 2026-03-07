@@ -1,82 +1,38 @@
 # Simple Run Examples
 
-These configs are for local runs, debugging, and plugin development.
-
-Quick start:
+Local runs for development and plugin testing.
 
 ```bash
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+python -m minimum_atw.cli run \
+  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
 ```
 
 ## Files
 
-- [example_antibody_antigen_light.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml): smallest antibody-antigen development profile
-- [example_antibody_antigen_pdb.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml): fuller antibody-antigen profile
-- [example_vhh_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_vhh_antigen.yaml): VHH-antigen profile
-- [example_protein_protein_complex.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_protein_protein_complex.yaml): generic protein-protein profile
+| Config | Profile |
+|---|---|
+| [example_antibody_antigen_light.yaml](example_antibody_antigen_light.yaml) | Minimal antibody–antigen dev profile |
+| [example_antibody_antigen_pdb.yaml](example_antibody_antigen_pdb.yaml) | Full antibody–antigen, all native plugins |
+| [example_vhh_antigen.yaml](example_vhh_antigen.yaml) | VHH single-domain binder |
+| [example_protein_protein_complex.yaml](example_protein_protein_complex.yaml) | Generic protein–protein complex |
 
-## What is enabled by default
-
-All simple examples show:
-
-- explicit `quality_controls`
-- explicit `structure_manipulations`
-- explicit `dataset_manipulations`
-- the appropriate PDB calculation plugins
-- `dataset_annotations`
-- `interface_summary`
-
-Antibody-oriented examples also enable:
-
-- `abepitope_score`
-- `antibody_cdr_lengths`
-- `antibody_cdr_sequences`
-- antibody numbering config
-
-Optional and commented by default:
-
-- `rosetta_interface_example`
-- `cdr_entropy`
-
-Enabled by default:
-
-- `cluster`
-
-Execution note:
-
-- native `atom_array` plugins are batched together
-- external or file-bound plugins such as `abepitope_score` and optional Rosetta run in isolated workers
-- those groups can run concurrently during one `run`, so external tools do not have to wait for the full native batch to finish first
-
-Cluster behavior in the examples:
-
-```yaml
-dataset_analyses:
-  - "cluster"
-```
-
-With no extra cluster params, `cluster` emits both `left` and `right` jobs automatically.
-Those assignments are written onto interface rows in `pdb.parquet`, not as long-form rows in `dataset.parquet`.
-
-For `["antibody", "antigen"]` that means:
-
-- `right`: antigen epitope clustering
-- `left`: antibody paratope clustering
-
-## Useful staged commands
+## Staged commands
 
 ```bash
-CONFIG=/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+CONFIG=minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli prepare --config "$CONFIG"
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run-plugin --config "$CONFIG" --plugin interface_contacts
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli merge --config "$CONFIG"
-/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset --config "$CONFIG"
+python -m minimum_atw.cli prepare          --config "$CONFIG"
+python -m minimum_atw.cli run-plugin       --config "$CONFIG" --plugin interface_contacts
+python -m minimum_atw.cli merge            --config "$CONFIG"
+python -m minimum_atw.cli analyze-dataset  --config "$CONFIG"
 ```
 
-## Notes
+## YAML keys at a glance
 
-- Final outputs are the configured PDB parquet, the configured dataset parquet, and the metadata JSON files.
-- `plugin_status.parquet` and `bad_files.parquet` are debug or failure artifacts, not the main outputs.
-- AbEpiTope requires both the Python package and `hmmsearch` on `PATH`.
+```yaml
+quality_controls:   # run before calculations; annotate without moving atoms
+manipulations:      # run before calculations; can transform coordinates
+plugins:            # calculations producing rows in pdb.parquet
+plugin_params:      # per-plugin config dict (e.g. superimpose_homology params)
+dataset_analyses:   # post-merge analyses producing rows in dataset.parquet
+```
