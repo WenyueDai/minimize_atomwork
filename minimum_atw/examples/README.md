@@ -41,7 +41,7 @@ PREPARE  →  EXECUTE  →  MERGE  →  DATASET ANALYSIS
 : Writes `_prepared/pdb.parquet` (QC + manipulation output rows, unified by a `grain` column), `_prepared/prepared_manifest.parquet`, and `_prepared/bad_files.parquet`. This directory is the **cache boundary** — downstream stages read from it.
 
 **EXECUTE** (`run_plugins`)
-: Reads `prepared_manifest.parquet`, reloads each prepared structure, and runs each configured `pdb_calculation` plugin sequentially. Each plugin calls `available(ctx)` first — returning `(False, reason)` skips the structure silently. Rows are accumulated in a `TableBuffer` that spills to disk when the memory threshold is crossed. After all structures, each plugin flushes to `_plugins/<name>/pdb.parquet`. All columns are namespaced by `prefix` (e.g. `iface__`, `rolstat__`). The registry rejects prefix and name collisions at startup.
+: Reads `prepared_manifest.parquet`, reloads each prepared structure, and runs each configured `pdb_calculation` plugin sequentially. Each plugin calls `available(ctx)` first — returning `(False, reason)` skips the structure silently. Rows are accumulated in a `TableBuffer` that spills to disk when the memory threshold is crossed. After all structures, each plugin flushes to `_plugins/<name>/pdb.parquet`. All columns are namespaced by `prefix` (e.g. `iface__`, `rolstat__`). The registry rejects prefix and name collisions at startup. The executor also plans CPU and GPU worker pools up front and records the resulting mixed-job and staged submission hints in `run_metadata.json`.
 
 **MERGE** (`merge_outputs`)
 : LEFT JOINs each plugin's `pdb.parquet` onto `_prepared/pdb.parquet` using the identity key columns (`path`, `assembly_id`, `grain`, and `chain_id` / `role` / `pair` as applicable). All base rows are always preserved — plugins that skipped a structure contribute `NaN`. Writes `out_dir/pdb.parquet` (the single wide table), `plugin_status.parquet`, and `bad_files.parquet`.
@@ -55,7 +55,8 @@ PREPARE  →  EXECUTE  →  MERGE  →  DATASET ANALYSIS
 ## Example folders
 
 - [simple_run/](simple_run/README.md): one-shot local runs and plugin development
-- [large_run/](large_run/README.md): `run-chunked`, `plan-chunks`, and `merge-planned-chunks`
+- [large_run/](large_run/README.md): `run-chunked`, `plan-chunks`, `merge-planned-chunks`, and `submit-slurm`
+- [large_run/HPC_SLURM_GUIDE.md](large_run/HPC_SLURM_GUIDE.md): concrete Slurm recipes for the new `submit-slurm` command, including both mixed chunk jobs and automatic staged CPU/GPU submissions
 - [chunk_run/](chunk_run/README.md): manual one-config-per-chunk workflows
 - [multi_dataset/](multi_dataset/README.md): compare clustering within each dataset, then on pooled merged outputs
 
@@ -69,7 +70,7 @@ The four example folders are not redundant. They represent four different operat
 
 - `large_run`
   Use this when you have one logically single dataset, but it is too large or slow to run comfortably as one local process.
-  Example: you have 10,000 structures and want to split them automatically into chunks, run them in parallel, then merge and analyze the full dataset once at the end.
+  Example: you have 10,000 structures and want to split them automatically into chunks, then either run them locally in parallel or submit the whole chunked job graph to Slurm from one command.
 
 - `chunk_run`
   Use this when you want manual control over chunk boundaries or scheduler submission, and you are comfortable managing one YAML per chunk.
@@ -164,6 +165,17 @@ In practice, a common progression is:
 | `keep_prepared_structures` | Save prepared structures to disk | You want to inspect or reuse prepared coordinates, or you use `superimpose_to_reference` and want later dataset analyses to reload aligned structures | You only need merged tabular outputs and are not using prepare-stage superposition |
 | `checkpoint_enabled` | Resume prepare / plugin execution from previous outputs | Long runs, unstable environments, scheduler preemption | Short local runs |
 | `checkpoint_interval` | Flush cadence for checkpointed prepare/plugin outputs | Long runs where you want a balance between resume granularity and write amplification; lower means more frequent checkpoints, higher means fewer larger flushes | You are not using checkpointing or the default cadence is fine |
+| `chunk_cpu_capacity` | Node-level CPU budget used by `run-chunked` to cap how many chunks can execute at once | You want deterministic chunk concurrency on HPC instead of relying on `os.cpu_count()` or scheduler env vars | You are running single-dataset pipelines or are happy with automatic CPU detection |
+| `cpu_workers` | Planned size of the CPU plugin worker pool | You are preparing for pool-aware plugin scheduling or want the target runtime budget recorded in metadata | You are using the default single CPU pool worker |
+| `gpu_workers` | Planned size of the GPU plugin worker pool | You intend to run CUDA-tagged plugins separately from CPU plugins | You have no GPU plugin pool yet |
+| `gpu_devices` | Preferred GPU IDs for the GPU worker pool | You want the planned runtime metadata to capture a device affinity such as `["0", "1"]` | Device placement will be handled externally |
+
+### Scheduler metadata
+
+- `run_metadata.json -> plugin_execution.scheduler_resources.single_job` is the peak mixed-job request for one run.
+- `run_metadata.json -> plugin_execution.scheduler_resources.submission_plan` is the staged CPU-only versus GPU-enabled submission advice for that same run.
+- `chunk_plan.json -> resource_plan.recommended_chunk_job` is the per-chunk mixed-job request produced by `plan-chunks`.
+- `chunk_plan.json -> resource_plan.submission_plan` is the staged CPU-only versus GPU-enabled view for one planned chunk.
 
 ### Rosetta-only controls
 
@@ -202,6 +214,10 @@ These only matter if `rosetta_interface_example` is enabled.
 | `antibody_cdr_lengths` | CDR lengths for antibody roles |
 | `antibody_cdr_sequences` | CDR sequences for antibody roles |
 | `abepitope_score` | AbEpiTope scores for antibody-antigen interfaces |
+| `ablang2_score` | AbLang2 sequence log-likelihoods for antibody roles |
+| `esm_if1_score` | ESM-IF1 inverse-folding log-likelihoods for protein roles |
+| `pdockq_score` | pDockQ interface confidence estimate |
+| `dockq_score` | DockQ interface agreement against a native reference |
 | `superimpose_homology` | Legacy metrics-only superposition plugin; prefer `superimpose_to_reference` when downstream analyses should use aligned coordinates |
 | `rosetta_interface_example` | Example Rosetta InterfaceAnalyzer integration |
 
@@ -214,13 +230,19 @@ These only matter if `rosetta_interface_example` is enabled.
 | `cluster` | Cluster labels written back onto interface rows |
 | `cdr_entropy` | Sequence entropy for configured CDR roles / regions |
 
+## Resource guidance
+
+- GPU-preferred built-ins in the current examples are `abepitope_score`, `ablang2_score`, and `esm_if1_score`.
+- CPU-preferred built-ins are Rosetta, DockQ/pDockQ, interface geometry/contact metrics, numbering, clustering, and the post-merge dataset analyses.
+- If you enable a GPU-capable plugin with `device: auto`, also set `gpu_workers` and usually `gpu_devices` so the scheduler metadata matches the real job you intend to request on HPC.
+
 ## Outputs
 
 | File | Meaning |
 |---|---|
 | `pdb.parquet` | All `structure`, `chain`, `role`, and `interface` rows |
 | `dataset.parquet` | Dataset-analysis rows |
-| `run_metadata.json` | Run config, counts, and output-file metadata |
+| `run_metadata.json` | Run config, counts, output-file metadata, and scheduler resource hints including staged CPU/GPU submission advice |
 | `dataset_metadata.json` | Merged dataset metadata |
 | `_prepared/` and `_plugins/` | Intermediate outputs kept when `keep_intermediate_outputs: true` |
 

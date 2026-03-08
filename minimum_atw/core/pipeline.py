@@ -11,6 +11,10 @@ from ..runtime.chunked import (
     plan_chunked_pipeline as _plan_chunked_pipeline,
     run_chunked_pipeline as _run_chunked_pipeline,
 )
+from ..runtime.slurm import (
+    submit_slurm_chunked_pipeline as _submit_slurm_chunked_pipeline,
+    submit_slurm_plan as _submit_slurm_plan,
+)
 from ..runtime.workspace import copy_final_outputs as _copy_final_outputs
 from ._execute import run_plugin, run_plugins  # noqa: F401 — re-exported
 from ._prepare import prepare_execution_metadata as _prepare_execution_metadata
@@ -80,3 +84,77 @@ def plan_chunked_pipeline(cfg: Config, *, chunk_size: int, plan_dir: str | Path)
 def merge_planned_chunks(plan_dir: str | Path, *, out_dir: str | Path | None = None) -> dict[str, int]:
     """Merge outputs from a previously planned chunked run."""
     return _merge_planned_chunks(plan_dir, out_dir=out_dir)
+
+
+def submit_slurm_plan(
+    plan_dir: str | Path,
+    *,
+    workdir: str | Path,
+    python_bin: str | Path,
+    mode: str = "auto",
+    out_dir: str | Path | None = None,
+    dry_run: bool = False,
+    array_limit: int | None = None,
+    log_dir: str | Path | None = None,
+    sbatch_common_args: list[str] | None = None,
+    sbatch_mixed_args: list[str] | None = None,
+    sbatch_cpu_args: list[str] | None = None,
+    sbatch_gpu_args: list[str] | None = None,
+    sbatch_merge_args: list[str] | None = None,
+) -> dict[str, object]:
+    """Submit an existing chunk plan to Slurm."""
+    return _submit_slurm_plan(
+        plan_dir,
+        workdir=workdir,
+        python_bin=python_bin,
+        mode=mode,
+        out_dir=out_dir,
+        dry_run=dry_run,
+        array_limit=array_limit,
+        log_dir=log_dir,
+        sbatch_common_args=sbatch_common_args,
+        sbatch_mixed_args=sbatch_mixed_args,
+        sbatch_cpu_args=sbatch_cpu_args,
+        sbatch_gpu_args=sbatch_gpu_args,
+        sbatch_merge_args=sbatch_merge_args,
+    )
+
+
+def submit_slurm_chunked_pipeline(
+    cfg: Config | None,
+    *,
+    chunk_size: int | None,
+    plan_dir: str | Path,
+    reuse_plan: bool = False,
+    workdir: str | Path,
+    python_bin: str | Path,
+    mode: str = "auto",
+    out_dir: str | Path | None = None,
+    dry_run: bool = False,
+    array_limit: int | None = None,
+    log_dir: str | Path | None = None,
+    sbatch_common_args: list[str] | None = None,
+    sbatch_mixed_args: list[str] | None = None,
+    sbatch_cpu_args: list[str] | None = None,
+    sbatch_gpu_args: list[str] | None = None,
+    sbatch_merge_args: list[str] | None = None,
+) -> dict[str, object]:
+    """Plan chunked work if needed, then submit it to Slurm."""
+    return _submit_slurm_chunked_pipeline(
+        cfg,
+        chunk_size=chunk_size,
+        plan_dir=plan_dir,
+        reuse_plan=reuse_plan,
+        workdir=workdir,
+        python_bin=python_bin,
+        mode=mode,
+        out_dir=out_dir,
+        dry_run=dry_run,
+        array_limit=array_limit,
+        log_dir=log_dir,
+        sbatch_common_args=sbatch_common_args,
+        sbatch_mixed_args=sbatch_mixed_args,
+        sbatch_cpu_args=sbatch_cpu_args,
+        sbatch_gpu_args=sbatch_gpu_args,
+        sbatch_merge_args=sbatch_merge_args,
+    )

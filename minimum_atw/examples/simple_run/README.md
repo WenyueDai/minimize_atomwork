@@ -1,6 +1,7 @@
 # Simple Run Examples
 
 Local runs for development and plugin testing.
+These configs keep the scheduler knobs mostly commented, then write the real planning result to `run_metadata.json` under `plugin_execution.scheduler_resources`.
 
 ```bash
 python -m minimum_atw.cli run \
@@ -62,7 +63,7 @@ The CLI validates the YAML into a `Config` object via pydantic. `discover_inputs
 
 1. Reads the prepared `.bcif` from `_prepared/structures/`.
 2. Rebuilds a fresh `Context(aa, chains, roles, config)` from the cached file — the same aligned coordinates that were saved during prepare.
-3. Runs each configured `pdb_calculation` plugin sequentially:
+3. Runs each configured `pdb_calculation` plugin sequentially. The runtime still plans CPU and GPU worker pools here so the finished `run_metadata.json` tells you whether this config is best treated as one mixed job or split CPU/GPU stages on HPC:
    - `identity` — emits identity rows for grain=structure (`id__n_atoms_total`, `id__n_chains`), grain=chain (`id__n_atoms`), and grain=role (`id__n_atoms`) in a single `run()` call.
    - `chain_stats` — emits one grain=chain row per chain: `chstat__n_residues`, `chstat__centroid_x/y/z`, `chstat__radius_of_gyration`.
    - `role_sequences` — emits one grain=role row per role: `rolseq__sequence`, `rolseq__sequence_by_chain`, etc.
@@ -106,6 +107,11 @@ The final state is: `out_dir/pdb.parquet` with cluster labels written back in, a
 ## YAML keys at a glance
 
 See [../README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md) for the full flag glossary and on/off guidance.
+
+Resource note:
+
+- If you enable `abepitope_score`, `ablang2_score`, or `esm_if1_score`, set `gpu_workers` and usually `gpu_devices` in the YAML so the recorded scheduler metadata reflects a real GPU request.
+- Rosetta, DockQ/pDockQ, clustering, and the post-merge dataset analyses remain CPU-oriented.
 
 These simple-run YAMLs are the best starting point when:
 

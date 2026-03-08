@@ -88,7 +88,7 @@
   <text x="38" y="495" font-size="10" fill="#14532d">load_prepared_manifest(out_dir)  →  path → prepared_path mapping</text>
 
   <rect x="30" y="507" width="486" height="22" fill="#f0fdf4" stroke="#86efac" stroke-width="1" rx="3"/>
-  <text x="38" y="522" font-size="10" fill="#14532d">_plan_plugin_execution(specs)  →  ordered list of plugin specs to run</text>
+  <text x="38" y="522" font-size="10" fill="#14532d">plan_plugin_waves(specs) [_schedule.py]  →  wave list of parallel plugin groups</text>
 
   <rect x="30" y="534" width="486" height="90" fill="#f0fdf4" stroke="#86efac" stroke-width="1" rx="3"/>
   <text x="38" y="549" font-size="10" font-style="italic" fill="#374151">for group in execution_plan:</text>
@@ -130,7 +130,7 @@
   <text x="564" y="177" font-size="10" fill="#713f12">discover_inputs(input_dir)  →  all *.pdb / *.cif  →  chunk_input_paths(paths, chunk_size)</text>
 
   <rect x="556" y="189" width="536" height="28" fill="#fefce8" stroke="#fde68a" stroke-width="1" rx="3"/>
-  <text x="564" y="202" font-size="10" fill="#713f12">ProcessPoolExecutor(workers)  or  ThreadPoolExecutor  (PermissionError fallback)</text>
+  <text x="564" y="202" font-size="10" fill="#713f12">process_or_thread_pool(workers)  [runtime/_pool.py]  —  prefers Process; falls back to Thread on PermissionError</text>
   <text x="564" y="214" font-size="10" fill="#713f12">prepare_chunk_input_dir(chunk_input_dir, paths)  →  symlink each file</text>
 
   <!-- parallel workers -->
@@ -263,9 +263,9 @@
   <text x="38" y="956" font-size="10" fill="#14532d">Crash during prepare?  Resume from last completed structure. Same for plugin execution.</text>
 
   <rect x="30" y="968" width="506" height="50" fill="#dcfce7" stroke="#86efac" stroke-width="1" rx="3"/>
-  <text x="38" y="983" font-size="10" fill="#14532d" font-weight="bold">Plugin execution order</text>
-  <text x="38" y="997" font-size="10" fill="#14532d">Plugins run sequentially in configured order. Each writes to its own</text>
-  <text x="38" y="1011" font-size="10" fill="#14532d">_plugins/&lt;name&gt;/pdb.parquet, then all are merged in one final pass.</text>
+  <text x="38" y="983" font-size="10" fill="#14532d" font-weight="bold">Plugin wave scheduling</text>
+  <text x="38" y="997" font-size="10" fill="#14532d">plan_plugin_waves() groups compatible plugins, assigns dependency-respecting waves.</text>
+  <text x="38" y="1011" font-size="10" fill="#14532d">CPU and GPU groups in the same wave run concurrently. Each group writes to _plugins/&lt;name&gt;/pdb.parquet.</text>
 
   <rect x="30" y="1023" width="506" height="50" fill="#dcfce7" stroke="#86efac" stroke-width="1" rx="3"/>
   <text x="38" y="1038" font-size="10" fill="#14532d" font-weight="bold">Separate prepare &amp; execute via CLI</text>

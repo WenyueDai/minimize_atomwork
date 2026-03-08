@@ -5,12 +5,14 @@ This folder is for chunk-aware workflows:
 - `run-chunked`
 - `plan-chunks`
 - `merge-planned-chunks`
+- `submit-slurm`
 
 ## Files
 
 - [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml)
 - [example_vhh_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml)
 - [example_protein_protein_chunked.yaml](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/example_protein_protein_chunked.yaml)
+- [HPC_SLURM_GUIDE.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/HPC_SLURM_GUIDE.md)
 
 ## Run with internal chunk workers
 
@@ -21,9 +23,11 @@ python -m minimum_atw.cli run-chunked \
   --workers 2
 ```
 
+`--workers` is an upper bound, not a guarantee. `run-chunked` now reduces concurrent chunks when needed so the per-chunk `cpu_workers` and `gpu_workers` pools do not oversubscribe the visible node CPUs or GPUs.
+
 ## Plan chunk configs for a scheduler
 
-Use `plan-chunks` to generate one config file per chunk, run them independently (e.g. via SLURM array job), then merge with `merge-planned-chunks`.
+Use `plan-chunks` to generate one config file per chunk, run them independently, then merge with `merge-planned-chunks`. If you are on Slurm, `submit-slurm` can now generate the chunk plan and submit the full mixed or staged CPU/GPU job graph for you.
 
 **Step 1 — plan:**
 
@@ -34,7 +38,27 @@ python -m minimum_atw.cli plan-chunks \
   --plan-dir /path/to/your/chunk_plan
 ```
 
-This writes one YAML per chunk into `chunk_plan/`, each with its own `input_dir` and `out_dir`.
+This writes one YAML per chunk into `chunk_plan/`, each with its own `input_dir` and `out_dir`. The top-level `chunk_plan.json` also records a `resource_plan` block with per-wave CPU/GPU demand, a `recommended_chunk_job` request, a staged `submission_plan` for CPU-only versus GPU-enabled phases, and the maximum chunk concurrency allowed by the current node budgets.
+
+Use the planner outputs like this:
+
+- `resource_plan.recommended_chunk_job`: one mixed chunk job request
+- `resource_plan.submission_plan.job_classes`: separate CPU-only and GPU-enabled chunk job shapes
+- `resource_plan.max_concurrent_chunks`: upper bound for how many such chunks fit on the current node budget
+
+**One-command Slurm submission:**
+
+```bash
+python -m minimum_atw.cli submit-slurm \
+  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --chunk-size 10 \
+  --plan-dir /path/to/your/chunk_plan \
+  --mode auto \
+  --dry-run
+```
+
+Remove `--dry-run` to call `sbatch`. Use `--mode mixed` to force one mixed CPU+GPU chunk job per array task, or `--mode staged` to force separate CPU-node and GPU-node jobs driven by `resource_plan.submission_plan`.
+If you use `submit-slurm`, it already handles the per-chunk run stage and the final `merge-planned-chunks` dependency chain for you.
 
 **Step 2 — run each chunk** (e.g. SLURM array job; see the scheduler pattern in [chunk_run/README.md](../chunk_run/README.md)):
 
@@ -66,6 +90,7 @@ python -m minimum_atw.cli merge-planned-chunks \
 - enabled interface clustering
 
 See [../README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md) for the field glossary and flag guidance.
+For concrete Slurm submission recipes, see [HPC_SLURM_GUIDE.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/HPC_SLURM_GUIDE.md).
 
 ## Step By Step: What `run-chunked` Does
 
@@ -75,7 +100,7 @@ Using [example_antibody_antigen_chunked.yaml](/home/eva/minimum_atomworks/minimu
 
 ### Step 1 — Config, discovery, and chunk planning
 
-The CLI validates the YAML into `Config`. `discover_inputs(cfg.input_dir)` finds all `.pdb` and `.cif` files. `chunk_input_paths(paths, chunk_size)` splits the discovered list into groups of at most `chunk_size` structures. A `ProcessPoolExecutor(max_workers=workers)` is created (falling back to `ThreadPoolExecutor` if the process pool raises a `PermissionError` in restricted environments).
+The CLI validates the YAML into `Config`. `discover_inputs(cfg.input_dir)` finds all `.pdb` and `.cif` files. `chunk_input_paths(paths, chunk_size)` splits the discovered list into groups of at most `chunk_size` structures. `run-chunked` then computes an effective chunk concurrency from three inputs: the requested `--workers`, the node-level CPU budget (`chunk_cpu_capacity`, scheduler env vars, or `os.cpu_count()`), and the per-chunk plugin pool demands (`cpu_workers`, `gpu_workers`, `gpu_devices`). CPU-only chunk workers run in a shared executor; GPU-enabled chunk workers are assigned disjoint GPU device slices so concurrent chunks do not fight over the same devices. `plan-chunks` exposes the same calculation in `chunk_plan.json` so you can request chunk resources before launching anything.
 
 ### Step 2 — Per-chunk input workspace
 
@@ -130,7 +155,7 @@ Because these configs use `dataset_analysis_mode: post_merge`, `analyze_dataset_
 - `cdr_entropy` writes per-role, per-region Shannon entropy rows to `dataset.parquet`.
 - `cluster` reads interface residue columns, reloads Cα coordinates from each row's `prepared__path` (the aligned prepared structure from that row's chunk), and writes cluster labels back onto `out_dir/pdb.parquet`.
 
-Because the cluster plugin reloads structures through `prepared__path`, it uses the aligned prepared coordinates from whichever chunk produced each row. For globally consistent alignment across all chunks, use an explicit `reference_path` in the superimpose config (see Practical note below).
+Because the cluster plugin reloads structures through `prepared__path`, it uses the aligned prepared coordinates from whichever chunk produced each row. For globally consistent alignment across all chunks, use an explicit `reference_path` in the superimpose config (see Practical note below). This final merged analysis stage is CPU-only in the built-in examples, so it can usually run on cheaper CPU nodes after any GPU-heavy chunk jobs have completed.
 
 ### What Persists
 
@@ -161,3 +186,4 @@ Because the chunked examples now use `superimpose_to_reference`, they are the mo
 
 - `dataset_analysis_mode: post_merge` is the cleanest default for clustering because clusters are only meaningful on the merged dataset.
 - If you need per-chunk analyses for operational reasons, keep `cluster` commented out unless you explicitly want per-chunk cluster labels.
+- For GPU-capable plugins such as `abepitope_score`, `ablang2_score`, and `esm_if1_score`, set `gpu_workers` and usually `gpu_devices` in the chunk YAML so `chunk_plan.json` produces useful GPU requests.

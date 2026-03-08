@@ -194,6 +194,14 @@ class IntegrationSmokeTests(unittest.TestCase):
             self.assertEqual(metadata["status_summary"], {"ok": 1})
             self.assertEqual(metadata["config"]["plugins"], ["identity"])
             self.assertEqual(metadata["merge_compatibility"]["plugins"], ["identity"])
+            self.assertEqual(
+                metadata["plugin_execution"]["scheduler_resources"]["single_job"],
+                {"cpu_threads": 1, "gpu_devices": 0},
+            )
+            self.assertEqual(
+                metadata["plugin_execution"]["scheduler_resources"]["submission_plan"]["recommended_mode"],
+                "cpu_only",
+            )
             self.assertIn("pdb", metadata["table_columns"])
             self.assertIn("id__n_atoms_total", metadata["table_columns"]["pdb"])
             self.assertFalse((out_dir / "bad_files.parquet").exists())

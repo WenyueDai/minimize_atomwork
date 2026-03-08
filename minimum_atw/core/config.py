@@ -158,6 +158,10 @@ class Config(BaseModel):
     dataset_analysis_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     plugin_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     dataset_annotations: dict[str, str] = Field(default_factory=dict)
+    chunk_cpu_capacity: int | None = None
+    cpu_workers: int = 1
+    gpu_workers: int = 0
+    gpu_devices: list[str] = Field(default_factory=list)
 
     superimpose_reference_path: str | None = None
     superimpose_on_chains: list[str] = Field(default_factory=list)
@@ -187,6 +191,7 @@ class Config(BaseModel):
         "dataset_analyses",
         "numbering_roles",
         "superimpose_on_chains",
+        "gpu_devices",
         mode="before",
     )
     @classmethod
@@ -273,6 +278,15 @@ class Config(BaseModel):
     def _normalize_dataset_analysis_params(cls, value: Any) -> dict[str, dict[str, Any]]:
         return _normalize_nested_mapping(value)
 
+    @field_validator("chunk_cpu_capacity", "cpu_workers", "gpu_workers", mode="before")
+    @classmethod
+    def _normalize_worker_counts(cls, value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+        return int(value)
+
     @field_validator("dataset_annotations", mode="before")
     @classmethod
     def _normalize_dataset_annotations(cls, value: Any) -> dict[str, str]:
@@ -353,6 +367,12 @@ class Config(BaseModel):
             raise ValueError("numbering_scheme='aho' requires cdr_definition")
         if self.checkpoint_interval < 1:
             raise ValueError("checkpoint_interval must be at least 1")
+        if self.chunk_cpu_capacity is not None and self.chunk_cpu_capacity < 1:
+            raise ValueError("chunk_cpu_capacity must be at least 1")
+        if self.cpu_workers < 1:
+            raise ValueError("cpu_workers must be at least 1")
+        if self.gpu_workers < 0:
+            raise ValueError("gpu_workers must be at least 0")
         if self.clash_distance <= 0:
             raise ValueError("clash_distance must be positive")
         if self.clash_scope not in CLASH_SCOPES:
@@ -441,6 +461,10 @@ class Config(BaseModel):
             "plugin_params",
             "reference_dataset_dir",
             "dataset_annotations",
+            "chunk_cpu_capacity",
+            "cpu_workers",
+            "gpu_workers",
+            "gpu_devices",
             "pdb_output_name",
             "dataset_output_name",
         }

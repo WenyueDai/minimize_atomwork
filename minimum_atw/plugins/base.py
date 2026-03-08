@@ -48,6 +48,13 @@ class BasePlugin:
     prefix = ""
     grain: GrainName = "structure"
     requires: list[str] = []
+    input_model = "atom_array"
+    execution_mode = "batched"
+    worker_pool = "cpu"
+    device_kind = "cpu"
+    max_workers: int | None = None
+    cpu_threads_per_worker: int | None = None
+    gpu_devices_per_worker: int | None = None
 
     def run(self, ctx: Context) -> Iterable[dict]:
         raise NotImplementedError
@@ -58,6 +65,29 @@ class BasePlugin:
     def plugin_params(self, ctx: Context) -> dict:
         """Return plugin-local parameters from ctx.config.plugin_params[self.name]."""
         return dict(getattr(ctx.config, "plugin_params", {}).get(self.name, {}))
+
+    def scheduling(self, _cfg: Any | None = None) -> dict[str, Any]:
+        """Return scheduler-facing metadata for execution planning."""
+        worker_pool = str(getattr(self, "worker_pool", "cpu") or "cpu").strip().lower()
+        max_workers = getattr(self, "max_workers", None)
+        if max_workers is not None:
+            max_workers = max(1, int(max_workers))
+        raw_cpu_threads = getattr(self, "cpu_threads_per_worker", None)
+        cpu_threads_per_worker = 1 if raw_cpu_threads in {None, ""} else max(1, int(raw_cpu_threads))
+        raw_gpu_devices = getattr(self, "gpu_devices_per_worker", None)
+        if raw_gpu_devices in {None, ""}:
+            gpu_devices_per_worker = 1 if worker_pool == "gpu" else 0
+        else:
+            gpu_devices_per_worker = max(0, int(raw_gpu_devices))
+        return {
+            "input_model": str(getattr(self, "input_model", "atom_array") or "atom_array").strip().lower(),
+            "execution_mode": str(getattr(self, "execution_mode", "batched") or "batched").strip().lower(),
+            "worker_pool": worker_pool,
+            "device_kind": str(getattr(self, "device_kind", "cpu") or "cpu").strip().lower(),
+            "max_workers": max_workers,
+            "cpu_threads_per_worker": cpu_threads_per_worker,
+            "gpu_devices_per_worker": gpu_devices_per_worker,
+        }
 
 
 class InterfacePlugin(BasePlugin):

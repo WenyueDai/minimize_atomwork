@@ -369,7 +369,9 @@ class RosettaInterfaceExamplePlugin(InterfacePlugin):
     name = "rosetta_interface_example"
     prefix = "rosetta"
 
-    def available(self, ctx: Context) -> tuple[bool, str]:
+    def available(self, ctx: Context | None) -> tuple[bool, str]:
+        if ctx is None:
+            return True, ""
         executable = _resolve_executable(ctx.config)
         if executable:
             database = _resolve_database(executable, ctx.config)

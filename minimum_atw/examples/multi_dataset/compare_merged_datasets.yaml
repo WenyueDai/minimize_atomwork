@@ -19,6 +19,7 @@
 # Note:
 #   `analyze-dataset` only reads `out_dir` plus dataset-analysis settings below.
 #   `input_dir` is still required by the shared config schema, but is not used here.
+#   This merged comparison step is CPU-only in the built-in example stack.
 
 input_dir: "JUST_A_PLACEHOLDER_TO_SATISFY_SCHEMA"
 out_dir: "/path/to/your/out_compare_ab"
@@ -58,3 +59,5 @@ dataset_annotations:
 
 # reference_dataset_dir: "/home/eva/minimum_atomworks/out_reference_dataset"
 # Currently none of the built-in dataset analyses consume `reference_dataset_dir`.
+# cpu_workers: 4             # merged dataset analysis is CPU-only here
+# gpu_workers: 0

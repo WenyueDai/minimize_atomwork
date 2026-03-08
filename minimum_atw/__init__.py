@@ -10,6 +10,8 @@ from .core.pipeline import (
     run_pipeline,
     run_plugin,
     run_plugins,
+    submit_slurm_chunked_pipeline,
+    submit_slurm_plan,
 )
 from .plugins.dataset.calculation.runtime import analyze_dataset_outputs
 
@@ -24,4 +26,6 @@ __all__ = [
     "run_pipeline",
     "run_plugin",
     "run_plugins",
+    "submit_slurm_chunked_pipeline",
+    "submit_slurm_plan",
 ]

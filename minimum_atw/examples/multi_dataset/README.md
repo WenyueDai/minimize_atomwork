@@ -22,6 +22,9 @@ So the built-in way to compare datasets today is:
 - separate runs for per-dataset analysis
 - a merged run for pooled cross-dataset analysis
 
+The source dataset runs may be mixed CPU/GPU jobs depending on which plugins are enabled.
+The merged `analyze-dataset` step in this example is CPU-only.
+
 It is not yet a true "dataset A versus dataset B" differential analysis mode.
 
 ## Recommended workflow
@@ -66,7 +69,7 @@ Using [dataset_a_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/
 
 During **PREPARE**, each structure is loaded into a biotite `AtomArray`, QC units run (`chain_continuity`, `structure_clashes`), then structure manipulation units run (`center_on_origin`, `superimpose_to_reference`). `superimpose_to_reference` mutates `ctx.aa` in place — all downstream plugins for this run will see the aligned coordinates. The transformed structure is saved to `_prepared/structures/<name>.bcif` and `prepared__path` is recorded in `_prepared/pdb.parquet`.
 
-During **EXECUTE**, each `pdb_calculation` plugin reads the prepared aligned structure, calls `available(ctx)` to decide whether to run, and yields prefixed column rows accumulated in a `TableBuffer`. Each plugin writes its output to `_plugins/<name>/pdb.parquet`.
+During **EXECUTE**, each `pdb_calculation` plugin reads the prepared aligned structure, calls `available(ctx)` to decide whether to run, and yields prefixed column rows accumulated in a `TableBuffer`. Each plugin writes its output to `_plugins/<name>/pdb.parquet`. The same run also records `plugin_execution.scheduler_resources` in `run_metadata.json`, so dataset A and dataset B can be sized independently for HPC submission.
 
 During **MERGE**, `merge_outputs(cfg_a)` LEFT JOINs each plugin's output onto the prepare-stage base rows. The result is `out_dataset_a/pdb.parquet` — a single wide table with every QC, manipulation, and plugin column side-by-side. All base rows are preserved; plugins that skipped a structure contribute `NaN`.
 
@@ -96,6 +99,8 @@ The merged `pdb.parquet` contains both datasets' `within_dataset_*` cluster colu
 - `cluster` with job names like `cross_dataset_paratope` and `cross_dataset_epitope` — reloads Cα coordinates from each row's `prepared__path` (which points into the source dataset's `_prepared/` directory), computes RMSD clusters on the **pooled** interface population from both datasets, and writes `cluster__cross_dataset_paratope_cluster_id` etc. back onto `out_compare_ab/pdb.parquet`.
 - `interface_summary` aggregates counts across the pooled dataset.
 - `cdr_entropy` computes entropy over the pooled sequence distribution.
+
+This merged analysis step is CPU-oriented: clustering, summary aggregation, and entropy all run on CPU in the built-in codebase.
 
 Because each row's `prepared__path` still points into `out_dataset_a/_prepared/` or `out_dataset_b/_prepared/`, the cross-dataset cluster plugin can reload the original aligned prepared structures as long as those `_prepared/` directories still exist.
 
@@ -148,6 +153,11 @@ plugin_params:
 That rewrites the coordinates during prepare. The aligned prepared structures are preserved automatically so merged dataset analyses can reload them later.
 
 Use either the prepare-stage manipulation or the plugin-stage superposition in a given run, not both. The prepare-stage path is the recommended one for cross-dataset work.
+
+Scheduler note:
+
+- Size dataset A and dataset B from their own `run_metadata.json -> plugin_execution.scheduler_resources`.
+- Size the final merged `analyze-dataset` job as CPU-only.
 
 The source-dataset and merged-dataset cluster jobs intentionally use different names so both sets of cluster labels can coexist in the final merged `pdb.parquet`.
 

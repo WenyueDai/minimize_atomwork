@@ -1,8 +1,16 @@
 # Chunk 01 — antibody-antigen manual chunk workflow.
 #
+# If you do not need fixed hand-written chunk boundaries, prefer
+# `minimum_atw/examples/large_run/*.yaml` plus `minimum_atw.cli submit-slurm`.
+#
 # Run this chunk:
 #   python -m minimum_atw.cli run \
 #     --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+#
+# Scheduler note:
+#   each chunk writes `run_metadata.json -> plugin_execution.scheduler_resources`,
+#   so a pilot chunk can tell you whether to request one mixed job or separate
+#   CPU-only and GPU-enabled stages for the full array.
 #
 # Merge manual chunks after both chunks finish:
 #   python -m minimum_atw.cli merge-datasets \
@@ -28,10 +36,6 @@ interface_pairs:
   - ["antibody", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
-# Prepare plugins are configured here as `{name, grain}` items.
-# quality_controls:
-#   - "chain_continuity"
-#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -47,18 +51,30 @@ manipulations:
 
 # ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
+  # — structure grain —
   - "identity"
+  # - "superimpose_homology"    # legacy metrics-only path; leave off when superimpose_to_reference is enabled
+
+  # — chain grain —
   - "chain_stats"
+
+  # — role grain —
   - "role_sequences"
   - "role_stats"
+  - "antibody_cdr_lengths"    # requires numbering_roles; abnumber package
+  - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
   - "interface_contacts"
   - "interface_metrics"
-  - "antibody_cdr_lengths"
-  - "antibody_cdr_sequences"
-  - "abepitope_score"
-  # - "rosetta_interface_example"
+  - "abepitope_score"         # GPU-preferred; requires abepitope package
+  - "pdockq_score"
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
 
-contact_distance: 5.0
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
 abepitope_atom_radius: 4.0
 # interface_cell_size: 5.0
 
@@ -66,12 +82,34 @@ abepitope_atom_radius: 4.0
 plugin_params:
   superimpose_to_reference:
     reference_path: "/path/to/your/reference.pdb"
-    on_chains: ["A", "B", "C"]
+    on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
+    # anchor_atoms: "CA"          # CA | backbone (default: CA)
+
+  # superimpose_homology:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A"]              # anchor chains for RMSD alignment
+
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  # dockq_score:
+  #   reference_path: "/path/to/your/native_complex.pdb"   # required
+  #   receptor_role: "antigen"   # role to superimpose on for LRMS (default: right-side role)
+  #   contact_distance: 5.0      # Å cutoff for Fnat contacts (default: 5.0)
+
+  # abepitope_score:
+  #   device: auto               # auto | cpu | cuda | 0 (default: auto)
+
+  # ablang2_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+
+  # esm_if1_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vh", "vl"]
-numbering_scheme: "imgt"
-cdr_definition: "imgt"
+numbering_scheme: "imgt"   # imgt | chothia | kabat | aho
+cdr_definition: "imgt"     # imgt | north | kabat
 
 # ── Optional Rosetta scaffold ──────────────────────────────────────────────────
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
@@ -106,3 +144,7 @@ keep_intermediate_outputs: false
 keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25
+# cpu_workers: 4            # per-chunk CPU pool for geometry/QC/cluster-friendly work
+# gpu_workers: 1            # per-chunk GPU pool for abepitope_score / ablang2_score / esm_if1_score
+# gpu_devices: ["0"]        # visible GPU IDs for scheduler-aware device assignment
+# run_metadata.json will then include both single_job and submission_plan hints.

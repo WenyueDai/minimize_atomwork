@@ -6,6 +6,10 @@
 #
 # Keep this config aligned with dataset_a_antibody_antigen.yaml so the merged
 # comparison is meaningful.
+#
+# Scheduler note:
+#   this source run can be mixed CPU/GPU because AbEpiTope is enabled by default.
+#   Its `run_metadata.json` records both peak mixed-job and staged submission hints.
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/path/to/your/dataset_b_pdb_files"
@@ -27,10 +31,6 @@ interface_pairs:
   # - ["vh", "antigen"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
-# Prepare plugins are configured here as `{name, grain}` items.
-# quality_controls:
-#   - "chain_continuity"
-#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -46,18 +46,30 @@ clash_scope: "all"
 
 # ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
+  # — structure grain —
   - "identity"
+  # - "superimpose_homology"    # legacy metrics-only path; leave off when superimpose_to_reference is enabled
+
+  # — chain grain —
   - "chain_stats"
+
+  # — role grain —
   - "role_sequences"
   - "role_stats"
+  - "antibody_cdr_lengths"    # requires numbering_roles; abnumber package
+  - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
   - "interface_contacts"
   - "interface_metrics"
-  - "antibody_cdr_lengths"
-  - "antibody_cdr_sequences"
-  - "abepitope_score"
-  # - "rosetta_interface_example"
+  - "abepitope_score"         # GPU-preferred; requires abepitope package
+  - "pdockq_score"
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
 
-contact_distance: 5.0
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
 abepitope_atom_radius: 4.0
 # interface_cell_size: 5.0
 
@@ -65,14 +77,34 @@ abepitope_atom_radius: 4.0
 plugin_params:
   superimpose_to_reference:
     reference_path: "/path/to/your/reference_antigen_chain_A_only.pdb"
-    on_chains: ["A"]  # align on antigen only; transform the full complex before downstream calculations
-# superimpose_reference_path: "/path/to/reference.pdb"
-# superimpose_on_chains: ["A"]
+    on_chains: ["A"]              # align on antigen only; transform the full complex before downstream calculations
+    # anchor_atoms: "CA"          # CA | backbone (default: CA)
+
+  # superimpose_homology:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A"]              # anchor chains for RMSD alignment
+
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  # dockq_score:
+  #   reference_path: "/path/to/your/native_complex.pdb"   # required
+  #   receptor_role: "antigen"   # role to superimpose on for LRMS (default: right-side role)
+  #   contact_distance: 5.0      # Å cutoff for Fnat contacts (default: 5.0)
+
+  # abepitope_score:
+  #   device: auto               # auto | cpu | cuda | 0 (default: auto)
+
+  # ablang2_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+
+  # esm_if1_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vh", "vl"]
-numbering_scheme: "imgt"
-cdr_definition: "imgt"
+numbering_scheme: "imgt"   # imgt | chothia | kabat | aho
+cdr_definition: "imgt"     # imgt | north | kabat
 
 # ── Optional Rosetta scaffold ──────────────────────────────────────────────────
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
@@ -98,7 +130,7 @@ dataset_analyses:
   - "interface_summary"
   - "cluster"
   # - "cdr_entropy"
-dataset_analysis_mode: "post_merge"
+dataset_analysis_mode: "post_merge"   # post_merge | per_chunk | both
 
 dataset_analysis_params:
   cluster:
@@ -132,3 +164,7 @@ keep_intermediate_outputs: false
 keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25
+# cpu_workers: 4            # CPU pool for geometry/QC/cluster/merge-friendly plugins
+# gpu_workers: 1            # GPU pool for abepitope_score / ablang2_score / esm_if1_score
+# gpu_devices: ["0"]        # visible GPU IDs for scheduler-aware device assignment
+# run_metadata.json will then include both single_job and submission_plan hints.

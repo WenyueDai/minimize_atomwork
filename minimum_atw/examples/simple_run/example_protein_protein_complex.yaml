@@ -10,6 +10,11 @@
 #   python -m minimum_atw.cli run-plugins      --config <this_file> --plugins interface_contacts interface_metrics
 #   python -m minimum_atw.cli merge            --config <this_file>
 #   python -m minimum_atw.cli analyze-dataset  --config <this_file>
+#
+# Scheduler note:
+#   this profile is CPU-oriented by default. Only set `gpu_workers` and
+#   `gpu_devices` if you explicitly enable a GPU-capable model plugin such as
+#   esm_if1_score.
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/path/to/your/protein_protein_pdb_files"
@@ -30,10 +35,6 @@ interface_pairs:
   # - ["binder", "target"]
 
 # ── Prepare phase ──────────────────────────────────────────────────────────────
-# Prepare plugins are configured here as `{name, grain}` items.
-# quality_controls:
-#   - "chain_continuity"
-#   - "structure_clashes"
 manipulations:
   - name: "chain_continuity"
     grain: "pdb"
@@ -49,18 +50,30 @@ manipulations:
 
 # ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
+  # — structure grain —
   - "identity"
+  # - "superimpose_homology"    # requires reference_path in plugin_params
+
+  # — chain grain —
   - "chain_stats"
+
+  # — role grain —
   - "role_sequences"
   - "role_stats"
+  # - "antibody_cdr_lengths"    # requires numbering_roles; abnumber package
+  # - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; antibody-specific; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
   - "interface_contacts"
   - "interface_metrics"
-  # - "abepitope_score"          # only for antibody-antigen style inputs
-  # - "antibody_cdr_lengths"     # requires antibody numbering roles
-  # - "antibody_cdr_sequences"   # requires antibody numbering roles
-  # - "rosetta_interface_example"
+  - "pdockq_score"
+  # - "abepitope_score"         # only for antibody-antigen style inputs; requires abepitope package
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
 
-contact_distance: 5.0
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
 # interface_cell_size: 5.0
 # abepitope_atom_radius: 4.0
 
@@ -69,13 +82,27 @@ contact_distance: 5.0
 #   superimpose_to_reference:
 #     reference_path: "/path/to/reference.pdb"
 #     on_chains: ["A", "B", "C"]
-# superimpose_reference_path: "/path/to/reference.pdb"
-# superimpose_on_chains: ["A", "B", "C"]
+#     # anchor_atoms: "CA"       # CA | backbone (default: CA)
+#
+#   superimpose_homology:
+#     reference_path: "/path/to/reference.pdb"
+#     on_chains: ["A"]
+#
+#   pdockq_score:
+#     contact_distance: 8.0     # CB-CB cutoff in Å (default: 8.0)
+#
+#   dockq_score:
+#     reference_path: "/path/to/your/native_complex.pdb"   # required
+#     receptor_role: "receptor"  # role to superimpose on for LRMS (default: right-side role)
+#     contact_distance: 5.0     # Å cutoff for Fnat contacts (default: 5.0)
+#
+#   esm_if1_score:
+#     device: auto              # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
 
 # ── Antibody-only knobs (leave commented here) ────────────────────────────────
 # numbering_roles: ["vh", "vl"]
-# numbering_scheme: "imgt"
-# cdr_definition: "imgt"
+# numbering_scheme: "imgt"   # imgt | chothia | kabat | aho
+# cdr_definition: "imgt"     # imgt | north | kabat
 
 # ── Optional Rosetta scaffold ──────────────────────────────────────────────────
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
@@ -101,7 +128,7 @@ dataset_analyses:
   - "interface_summary"
   - "cluster"
   # - "cdr_entropy"
-dataset_analysis_mode: "post_merge"
+dataset_analysis_mode: "post_merge"   # post_merge | per_chunk | both
 dataset_analysis_params: {}
 # cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
 dataset_annotations:
@@ -117,3 +144,7 @@ keep_intermediate_outputs: false
 keep_prepared_structures: false
 checkpoint_enabled: false
 # checkpoint_interval: 25
+# cpu_workers: 4            # CPU pool for geometry/QC/DockQ/Rosetta-friendly work
+# gpu_workers: 1            # only needed if you enable esm_if1_score or another GPU-capable model plugin
+# gpu_devices: ["0"]
+# run_metadata.json will then include both single_job and submission_plan hints.

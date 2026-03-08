@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 920" font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,6 L10,3 z" fill="#4a6fa5"/>
+    </marker>
+    <marker id="arr-gray" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,6 L10,3 z" fill="#888"/>
+    </marker>
+    <marker id="arr-green" viewBox="0 0 10 6" refX="9" refY="3" markerWidth="8" markerHeight="6" orient="auto">
+      <path d="M0,0 L0,6 L10,3 z" fill="#2d6a4f"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1400" height="920" fill="#eef0f4"/>
+
+  <!-- Header -->
+  <rect x="0" y="0" width="1400" height="58" fill="#1c2541"/>
+  <text x="20" y="26" font-size="20" font-weight="700" fill="white">minimum_atomworks — Module Layer Map</text>
+  <text x="20" y="48" font-size="12" fill="#8899bb">How the codebase is split across layers and what each file is responsible for</text>
+
+  <!-- ─── LAYER 1: core/ ────────────────────────────────────────────── -->
+  <rect x="16" y="72" width="1368" height="248" rx="6" fill="#1d3557" opacity="0.08" stroke="#1d3557" stroke-width="1.5"/>
+  <text x="28" y="94" font-size="13" font-weight="700" fill="#1d3557" letter-spacing="1">CORE LAYER  ·  minimum_atw/core/</text>
+  <text x="28" y="110" font-size="10.5" fill="#555">Policy, configuration, orchestration, scheduling, execution engine. No CLI, no chunk logic here.</text>
+
+  <!-- config.py -->
+  <rect x="28" y="118" width="290" height="188" rx="5" fill="white" stroke="#457b9d" stroke-width="1.5"/>
+  <rect x="28" y="118" width="290" height="28" rx="5" fill="#457b9d"/>
+  <rect x="28" y="134" width="290" height="12" fill="#457b9d"/>
+  <text x="38" y="137" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">config.py</text>
+  <text x="38" y="160" font-size="10" fill="#1d3557">Config  — Pydantic BaseModel</text>
+  <text x="38" y="176" font-size="10" fill="#1d3557">• input_dir, out_dir, roles, interface_pairs</text>
+  <text x="38" y="192" font-size="10" fill="#1d3557">• plugins, dataset_analyses, cpu_workers</text>
+  <text x="38" y="208" font-size="10" fill="#1d3557">• gpu_workers, gpu_devices, chunk_cpu_capacity</text>
+  <text x="38" y="224" font-size="10" fill="#1d3557">• checkpoint_enabled, keep_intermediate_outputs</text>
+  <text x="38" y="240" font-size="9.5" fill="#888">→ loaded once; passed to every stage as cfg</text>
+  <text x="38" y="256" font-size="9.5" fill="#888">→ model_copy(update=...) for per-chunk variants</text>
+  <text x="38" y="297" font-size="10" fill="#888"/>
+
+  <!-- _schedule.py -->
+  <rect x="332" y="118" width="314" height="188" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="332" y="118" width="314" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="332" y="134" width="314" height="12" fill="#2d6a4f"/>
+  <text x="342" y="137" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">_schedule.py  ✦ new after refactor</text>
+  <text x="342" y="160" font-size="10" fill="#1a4a35">PluginExecutionSpec, PlannedPluginGroup</text>
+  <text x="342" y="176" font-size="10" fill="#1a4a35">resolve_plugin_specs(names, cfg)</text>
+  <text x="342" y="192" font-size="10" fill="#1a4a35">plan_plugin_execution(specs) → groups</text>
+  <text x="342" y="208" font-size="10" fill="#1a4a35">plan_plugin_groups(specs) → PlannedPluginGroup[]</text>
+  <text x="342" y="224" font-size="10" fill="#1a4a35">plan_plugin_waves(specs) → wave list</text>
+  <text x="342" y="240" font-size="10" fill="#1a4a35">group_worker_budget, scheduler_resource_metadata</text>
+  <text x="342" y="256" font-size="9.5" fill="#888">→ pure planning; no I/O, no workers</text>
+  <text x="342" y="271" font-size="9.5" fill="#888">→ plugin_execution_metadata (public API entry point)</text>
+
+  <!-- _execute.py -->
+  <rect x="660" y="118" width="314" height="188" rx="5" fill="white" stroke="#1d3557" stroke-width="1.5"/>
+  <rect x="660" y="118" width="314" height="28" rx="5" fill="#1d3557"/>
+  <rect x="660" y="134" width="314" height="12" fill="#1d3557"/>
+  <text x="670" y="137" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">_execute.py  (slimmed after refactor)</text>
+  <text x="670" y="160" font-size="10" fill="#1d3565">_init_group_worker(config_data, device)</text>
+  <text x="670" y="176" font-size="10" fill="#1d3565">_execute_plugin_task(task_record) → result</text>
+  <text x="670" y="192" font-size="10" fill="#1d3565">_run_group_tasks_shared_pool(records, …)</text>
+  <text x="670" y="208" font-size="10" fill="#1d3565">_run_group_tasks_device_slots(records, …)</text>
+  <text x="670" y="224" font-size="10" fill="#1d3565">run_plugins(cfg, …) — main public API</text>
+  <text x="670" y="240" font-size="9.5" fill="#888">→ imports _schedule for planning types</text>
+  <text x="670" y="256" font-size="9.5" fill="#888">→ imports _pool for executor fallback</text>
+  <text x="670" y="271" font-size="9.5" fill="#888">→ re-exports scheduling names for compat</text>
+
+  <!-- pipeline.py + registry -->
+  <rect x="988" y="118" width="384" height="188" rx="5" fill="white" stroke="#6d2e46" stroke-width="1.5"/>
+  <rect x="988" y="118" width="384" height="28" rx="5" fill="#6d2e46"/>
+  <rect x="988" y="134" width="384" height="12" fill="#6d2e46"/>
+  <text x="998" y="137" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">pipeline.py  ·  registry.py  ·  tables.py</text>
+  <text x="998" y="160" font-size="10" fill="#4a1a30">pipeline.py  — run_pipeline, prepare_outputs,</text>
+  <text x="998" y="175" font-size="10" fill="#4a1a30">  run_plugins, merge_outputs, analyze_dataset_outputs</text>
+  <text x="998" y="193" font-size="10" fill="#4a1a30">registry.py  — instantiate_unit (lazy plugin loader)</text>
+  <text x="998" y="210" font-size="10" fill="#4a1a30">tables.py   — BufferedTableWriter, PDB_TABLE_NAME,</text>
+  <text x="998" y="226" font-size="10" fill="#4a1a30">  merge_table_frames, stack_table_frames</text>
+  <text x="998" y="244" font-size="9.5" fill="#888">→ pipeline.py is the only public orchestration surface</text>
+  <text x="998" y="259" font-size="9.5" fill="#888">→ tables.py owns write-and-spill memory management</text>
+
+  <!-- ─── LAYER 2: runtime/ ─────────────────────────────────────────── -->
+  <rect x="16" y="334" width="1368" height="184" rx="6" fill="#2d6a4f" opacity="0.07" stroke="#2d6a4f" stroke-width="1.5"/>
+  <text x="28" y="356" font-size="13" font-weight="700" fill="#2d6a4f" letter-spacing="1">RUNTIME LAYER  ·  minimum_atw/runtime/</text>
+  <text x="28" y="372" font-size="10.5" fill="#555">Execution mechanics, chunk planning, workspace management. Depends on core, not on plugins directly.</text>
+
+  <!-- chunked.py -->
+  <rect x="28" y="380" width="440" height="124" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="28" y="380" width="440" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="28" y="396" width="440" height="12" fill="#2d6a4f"/>
+  <text x="38" y="399" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">chunked.py</text>
+  <text x="38" y="422" font-size="10" fill="#1a4a35">run_chunked_pipeline(cfg, chunk_size, workers)</text>
+  <text x="38" y="438" font-size="10" fill="#1a4a35">plan_chunked_pipeline(cfg, chunk_size, plan_dir)</text>
+  <text x="38" y="454" font-size="10" fill="#1a4a35">merge_planned_chunks(plan_dir, out_dir)</text>
+  <text x="38" y="474" font-size="9.5" fill="#888">→ imports _pool for process_or_thread_pool</text>
+  <text x="38" y="489" font-size="9.5" fill="#888">→ imports _schedule for plugin_execution_metadata</text>
+
+  <!-- _pool.py -->
+  <rect x="486" y="380" width="284" height="124" rx="5" fill="white" stroke="#c9a92c" stroke-width="1.5"/>
+  <rect x="486" y="380" width="284" height="28" rx="5" fill="#c9a92c"/>
+  <rect x="486" y="396" width="284" height="12" fill="#c9a92c"/>
+  <text x="496" y="399" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">_pool.py  ✦ new after refactor</text>
+  <text x="496" y="422" font-size="10" fill="#7a5c00">process_or_thread_pool(max_workers, …)</text>
+  <text x="496" y="438" font-size="10" fill="#7a5c00">  context manager: yields executor</text>
+  <text x="496" y="454" font-size="10" fill="#7a5c00">  tries ProcessPoolExecutor first</text>
+  <text x="496" y="470" font-size="10" fill="#7a5c00">  falls back to ThreadPoolExecutor on PermissionError</text>
+  <text x="496" y="489" font-size="9.5" fill="#888">→ used by chunked.py and _execute.py</text>
+
+  <!-- workspace.py -->
+  <rect x="788" y="380" width="284" height="124" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="788" y="380" width="284" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="788" y="396" width="284" height="12" fill="#2d6a4f"/>
+  <text x="798" y="399" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">workspace.py</text>
+  <text x="798" y="422" font-size="10" fill="#1a4a35">chunk_dir_name, chunk_input_paths</text>
+  <text x="798" y="438" font-size="10" fill="#1a4a35">prepare_chunk_input_dir (symlink)</text>
+  <text x="798" y="454" font-size="10" fill="#1a4a35">clear_final_outputs, CHUNK_PLAN_NAME</text>
+  <text x="798" y="474" font-size="9.5" fill="#888">→ owns chunk workspace layout on disk</text>
+
+  <!-- _prepare.py + context -->
+  <rect x="1090" y="380" width="282" height="124" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="1090" y="380" width="282" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="1090" y="396" width="282" height="12" fill="#2d6a4f"/>
+  <text x="1100" y="399" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">_prepare.py  ·  context.py</text>
+  <text x="1100" y="422" font-size="10" fill="#1a4a35">prepare_context(path, cfg) → Context</text>
+  <text x="1100" y="438" font-size="10" fill="#1a4a35">run_unit(ctx, plugin) → rows</text>
+  <text x="1100" y="454" font-size="10" fill="#1a4a35">Context: aa, chains, roles, config, path</text>
+  <text x="1100" y="474" font-size="9.5" fill="#888">→ per-structure state, rebuilt after manipulation</text>
+
+  <!-- ─── LAYER 3: plugins/ ──────────────────────────────────────────── -->
+  <rect x="16" y="532" width="1368" height="244" rx="6" fill="#6d2e46" opacity="0.07" stroke="#6d2e46" stroke-width="1.5"/>
+  <text x="28" y="554" font-size="13" font-weight="700" fill="#6d2e46" letter-spacing="1">PLUGINS LAYER  ·  minimum_atw/plugins/</text>
+  <text x="28" y="570" font-size="10.5" fill="#555">All extension implementations. Depends on core (for base classes and context), never on runtime or core/_execute.</text>
+
+  <!-- pdb/quality_control -->
+  <rect x="28" y="578" width="240" height="186" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="28" y="578" width="240" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="28" y="594" width="240" height="12" fill="#2d6a4f"/>
+  <text x="38" y="597" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">pdb/quality_control/</text>
+  <text x="38" y="620" font-size="10" fill="#1a4a35">config key: quality_controls</text>
+  <text x="38" y="636" font-size="10" fill="#1a4a35">prepare_section = 'quality_control'</text>
+  <text x="38" y="652" font-size="9.5" fill="#555">chain_continuity</text>
+  <text x="38" y="666" font-size="9.5" fill="#555">structure_clashes</text>
+  <text x="38" y="690" font-size="9" fill="#888">run(ctx) → rows with flag columns</text>
+  <text x="38" y="703" font-size="9" fill="#888">available(ctx) → (bool, reason)</text>
+  <text x="38" y="717" font-size="9" fill="#888">registered in PDB_PREPARE_REGISTRY</text>
+  <text x="38" y="731" font-size="9" fill="#888">runs before coordinate manipulation</text>
+  <text x="38" y="754" font-size="9" fill="#888"/>
+
+  <!-- pdb/manipulation -->
+  <rect x="282" y="578" width="240" height="186" rx="5" fill="white" stroke="#2d6a4f" stroke-width="1.5"/>
+  <rect x="282" y="578" width="240" height="28" rx="5" fill="#2d6a4f"/>
+  <rect x="282" y="594" width="240" height="12" fill="#2d6a4f"/>
+  <text x="292" y="597" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">pdb/manipulation/</text>
+  <text x="292" y="620" font-size="10" fill="#1a4a35">config key: structure_manipulations</text>
+  <text x="292" y="636" font-size="10" fill="#1a4a35">prepare_section = 'structure'</text>
+  <text x="292" y="652" font-size="9.5" fill="#555">center_on_origin</text>
+  <text x="292" y="666" font-size="9.5" fill="#555">superimpose_to_reference</text>
+  <text x="292" y="690" font-size="9" fill="#888">may mutate ctx.aa → call ctx.rebuild_views()</text>
+  <text x="292" y="703" font-size="9" fill="#888">registered in PDB_PREPARE_REGISTRY</text>
+  <text x="292" y="717" font-size="9" fill="#888">runs after QC, before calculation stage</text>
+
+  <!-- pdb/calculation -->
+  <rect x="536" y="578" width="298" height="186" rx="5" fill="white" stroke="#1d3557" stroke-width="1.5"/>
+  <rect x="536" y="578" width="298" height="28" rx="5" fill="#1d3557"/>
+  <rect x="536" y="594" width="298" height="12" fill="#1d3557"/>
+  <text x="546" y="597" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">pdb/calculation/</text>
+  <text x="546" y="620" font-size="10" fill="#1d3565">config key: plugins</text>
+  <text x="546" y="636" font-size="10" fill="#1d3565">identity · chain_stats · role_stats</text>
+  <text x="546" y="652" font-size="10" fill="#1d3565">role_sequences · interface_contacts</text>
+  <text x="546" y="668" font-size="10" fill="#1d3565">interface_metrics · abepitope_score</text>
+  <text x="546" y="684" font-size="10" fill="#1d3565">antibody_cdr_* · rosetta_interface_example</text>
+  <text x="546" y="700" font-size="10" fill="#1d3565">superimpose_homology</text>
+  <text x="546" y="720" font-size="9" fill="#888">BasePlugin / InterfacePlugin / ChainPlugin / RolePlugin</text>
+  <text x="546" y="734" font-size="9" fill="#888">scheduling() → worker_pool, cpu_threads_per_worker, …</text>
+  <text x="546" y="748" font-size="9" fill="#888">registered in PLUGIN_REGISTRY</text>
+
+  <!-- dataset/ -->
+  <rect x="848" y="578" width="524" height="186" rx="5" fill="white" stroke="#6d2e46" stroke-width="1.5"/>
+  <rect x="848" y="578" width="524" height="28" rx="5" fill="#6d2e46"/>
+  <rect x="848" y="594" width="524" height="12" fill="#6d2e46"/>
+  <text x="858" y="597" font-size="11" font-weight="700" fill="white" dominant-baseline="middle">dataset/calculation/  ·  dataset/quality_control/</text>
+  <text x="858" y="620" font-size="10" fill="#4a1a30">config key: dataset_analyses   (calculation)</text>
+  <text x="858" y="636" font-size="10" fill="#4a1a30">interface_summary  ·  cdr_entropy  ·  cluster  ·  dataset_annotations</text>
+  <text x="858" y="652" font-size="10" fill="#4a1a30">BaseDatasetPlugin — run(ctx: DatasetAnalysisContext) → pd.DataFrame</text>
+  <text x="858" y="668" font-size="10" fill="#4a1a30">registered in DATASET_CALCULATION_REGISTRY</text>
+  <text x="858" y="688" font-size="9" fill="#888">cluster writes back to pdb.parquet (exception: all others write to dataset.parquet)</text>
+  <text x="858" y="702" font-size="9" fill="#888">required_columns(params) declares what columns are needed from the merged pdb table</text>
+  <text x="858" y="718" font-size="9" fill="#888">DatasetAnalysisContext: df_interfaces, df_roles, df_structures, out_dir, params, annotations</text>
+
+  <!-- ─── CLI / public surface ───────────────────────────────── -->
+  <rect x="16" y="790" width="1368" height="112" rx="6" fill="#1c2541" opacity="0.06" stroke="#1c2541" stroke-width="1.5"/>
+  <text x="28" y="812" font-size="13" font-weight="700" fill="#1c2541" letter-spacing="1">PUBLIC SURFACE  ·  minimum_atw/cli.py  ·  minimum_atw/__init__.py</text>
+  <text x="28" y="830" font-size="10.5" fill="#555">CLI commands map 1-to-1 with public functions in pipeline.py / chunked.py. __init__.py re-exports the stable API.</text>
+
+  <!-- CLI commands -->
+  <rect x="28" y="840" width="1356" height="52" rx="4" fill="white" stroke="#8899bb" stroke-width="1"/>
+  <text x="38" y="858" font-size="10" fill="#1c2541" font-family="'Courier New', monospace">run → run_pipeline          prepare → prepare_outputs          merge → merge_outputs          analyze-dataset → analyze_dataset_outputs</text>
+  <text x="38" y="877" font-size="10" fill="#1c2541" font-family="'Courier New', monospace">run-chunked → run_chunked_pipeline     plan-chunks → plan_chunked_pipeline     merge-planned-chunks → merge_planned_chunks     merge-datasets → merge_dataset_outputs</text>
+
+  <!-- arrows showing dependencies -->
+  <line x1="486" y1="442" x2="476" y2="442" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="480" y="438" font-size="9" fill="#4a6fa5" text-anchor="middle">uses</text>
+
+  <line x1="660" y1="230" x2="646" y2="230" stroke="#4a6fa5" stroke-width="1.5" marker-end="url(#arr)"/>
+
+</svg>

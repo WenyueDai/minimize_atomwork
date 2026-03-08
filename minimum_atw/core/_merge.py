@@ -282,7 +282,7 @@ def merge_outputs(cfg: Config) -> dict[str, int]:
             "output_kind": "run",
             "config": cfg.model_dump(),
             "prepare_execution": _prepare_execution_metadata(cfg),
-            "plugin_execution": _plugin_execution_metadata(cfg.plugins),
+            "plugin_execution": _plugin_execution_metadata(cfg),
             "counts": counts,
             "status_summary": status_summary,
             "output_files": output_files,

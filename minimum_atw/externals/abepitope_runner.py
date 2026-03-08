@@ -56,7 +56,7 @@ def _load_output_metrics(out_dir: Path) -> dict[str, float]:
 
 
 class AbEpiTopeRuntime:
-    def __init__(self) -> None:
+    def __init__(self, device: str | None = None) -> None:
         import biotite.structure as struc
         import torch
 
@@ -71,6 +71,7 @@ class AbEpiTopeRuntime:
             return self._original_torch_load(*args, **kwargs)
 
         self._torch.load = compat_torch_load
+        self.device = torch.device(device) if device else torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         import abepitope.main as _abepitope_main
         import abepitope.biopdb_utilities as _biopdb_utils
@@ -83,7 +84,7 @@ class AbEpiTopeRuntime:
 
         # Pre-load ESM-IF1 once and patch abepitope so encode_proteins reuses it.
         # Without this, encode_proteins reloads the 142M model from disk every call.
-        _cached_esmif1 = _abepitope_main.ESMIF1Model()
+        _cached_esmif1 = _abepitope_main.ESMIF1Model(device=self.device)
 
         class _CachedESMIF1Model:
             def __new__(cls, *args, **kwargs):
@@ -151,7 +152,7 @@ class AbEpiTopeRuntime:
         return _patched()
 
     def _encode(self, structure_path: Path, enc_dir: Path, tmp_work_dir: Path, *, atom_radius: float):
-        data = self._StructureData()
+        data = self._StructureData(device=self.device)
         data.encode_proteins(structure_path, enc_dir, tmp_work_dir, atom_radius=atom_radius)
         return data
 
@@ -178,21 +179,21 @@ class AbEpiTopeRuntime:
 
                 with self._patch_chain_identity(chain_hints):
                     data = self._encode(structure_path, enc_dir, tmp_work_dir, atom_radius=atom_radius)
-                    eval_abags = self._EvalAbAgs(data)
+                    eval_abags = self._EvalAbAgs(data, device=self.device)
                     eval_abags.predict(out_dir)
                 return _load_output_metrics(out_dir)
 
 
-def run_abepitope(pdb_content: str, *, atom_radius: float = 4.0) -> dict[str, float]:
-    runtime = AbEpiTopeRuntime()
+def run_abepitope(pdb_content: str, *, atom_radius: float = 4.0, device: str | None = None) -> dict[str, float]:
+    runtime = AbEpiTopeRuntime(device=device)
     try:
         return runtime.run(pdb_content, atom_radius=atom_radius)
     finally:
         runtime.close()
 
 
-def _worker_loop() -> int:
-    runtime = AbEpiTopeRuntime()
+def _worker_loop(*, device: str | None = None) -> int:
+    runtime = AbEpiTopeRuntime(device=device)
     try:
         print(json.dumps({"ok": True, "event": "ready"}), flush=True)
         for raw in sys.stdin:
@@ -230,8 +231,26 @@ def _worker_loop() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] == "--worker":
-        return _worker_loop()
+    worker_mode = False
+    device: str | None = None
+    parsed_args: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        arg = str(argv[idx])
+        if arg == "--worker":
+            worker_mode = True
+            idx += 1
+            continue
+        if arg == "--device" and idx + 1 < len(argv):
+            device = str(argv[idx + 1]).strip() or None
+            idx += 2
+            continue
+        parsed_args.append(arg)
+        idx += 1
+    argv = parsed_args
+
+    if worker_mode:
+        return _worker_loop(device=device)
 
     if not argv:
         print("Usage: abepitope_runner.py [--worker] <structure_path> [atom_radius]", file=sys.stderr)
@@ -240,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     structure_path = Path(argv[0]).resolve()
     atom_radius = float(argv[1]) if len(argv) > 1 else 4.0
     pdb_content = structure_path.read_text()
-    metrics = run_abepitope(pdb_content, atom_radius=atom_radius)
+    metrics = run_abepitope(pdb_content, atom_radius=atom_radius, device=device)
     print(json.dumps(metrics))
     return 0
 

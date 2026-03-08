@@ -1,6 +1,8 @@
 # Chunk Run Examples
 
 This folder is for manual chunk configs: one config per chunk, one run per config, then an explicit merge.
+Each chunk writes its own `run_metadata.json`, so you can inspect one pilot chunk before submitting the full array.
+If you want automatic chunk planning and one-command Slurm submission, use the [large_run](../large_run/README.md) examples with `submit-slurm` instead.
 
 ## Files
 
@@ -42,6 +44,7 @@ There is no shared state between chunks at runtime — they are fully isolated p
 Each `minimum-atw run --config chunk_N.yaml` call invokes `run_pipeline(cfg)` internally.
 That function executes four stages in order: **PREPARE → EXECUTE → MERGE → DATASET ANALYSIS**.
 The chunk does not know it is part of a larger dataset — it simply processes its own inputs end to end.
+The resulting `run_metadata.json` also records `plugin_execution.scheduler_resources.single_job` and `plugin_execution.scheduler_resources.submission_plan` for that chunk.
 
 ### Step 3 — PREPARE stage: QC, manipulation, and cache write
 
@@ -74,7 +77,7 @@ The chunk does not know it is part of a larger dataset — it simply processes i
 
 1. Reads the prepared structure from `_prepared/structures/`.
 2. Rebuilds `Context(aa, chains, roles, config)` from the cached file.
-3. Runs each configured `pdb_calculation` plugin sequentially. Each plugin:
+3. Runs each configured `pdb_calculation` plugin sequentially. Each chunk still plans CPU and GPU pools before dispatch, so a pilot chunk tells you the exact resource shape of the full array job. Each plugin:
    - Calls `available(ctx)` first; skips the structure if `False`.
    - Yields one dict per grain row (`grain`, identity key columns, then `prefix__column` output columns).
    - Rows accumulate in a `TableBuffer` (spills to disk if memory threshold is crossed).
@@ -117,15 +120,17 @@ The merged `pdb.parquet` will carry the per-chunk cluster labels from Step 6, bu
 
 ### Step 8 — Optional: recompute whole-dataset clusters
 
-Run `analyze-dataset` on the merged output:
+Run `analyze-dataset` with a config whose `out_dir` points at the merged output.
+The simplest way is to start from one of the chunk YAMLs and change only `out_dir` plus any dataset-analysis settings you want for the merged run.
+
+Example merged-output config:
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli analyze-dataset \
-  --out-dir /home/eva/minimum_atomworks/out_antibody_antigen_merged \
-  --config /home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+  --config /path/to/your/chunk_antibody_antigen_merged.yaml
 ```
 
-This re-runs `analyze_dataset_outputs()` on the full merged `pdb.parquet`. The `cluster` plugin will now see all structures together and produce globally consistent cluster labels, overwriting the per-chunk ones.
+This re-runs `analyze_dataset_outputs()` on the full merged `pdb.parquet`. The `cluster` plugin will now see all structures together and produce globally consistent cluster labels, overwriting the per-chunk ones. This merged re-analysis step is CPU-only in the built-in examples.
 
 ### What Persists
 
@@ -160,6 +165,8 @@ With no extra cluster params, each chunk run emits both `left` and `right` clust
 
 ## Scheduler pattern
 
+This section is for the manual chunk workflow in this folder. If you want the framework to generate Slurm scripts and dependencies for you, use `minimum_atw.cli submit-slurm` from [large_run/HPC_SLURM_GUIDE.md](../large_run/HPC_SLURM_GUIDE.md).
+
 ```bash
 MANIFEST=/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt
 ```
@@ -171,6 +178,7 @@ sbatch --array=1-3 <<'EOF'
 #!/bin/bash
 #SBATCH --job-name=minimum-atw-chunk
 #SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:1          # only when the chunk's submission_plan includes a gpu job class
 #SBATCH --mem=16G
 #SBATCH --time=02:00:00
 #SBATCH --output=logs/%x-%A_%a.out
@@ -184,3 +192,8 @@ CONFIG=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$MANIFEST")
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run --config "$CONFIG"
 EOF
 ```
+
+Scheduler note:
+
+- For CPU-only chunk configs, request the counts from `run_metadata.json -> plugin_execution.scheduler_resources.single_job`.
+- For mixed CPU/GPU chunk configs, prefer `run_metadata.json -> plugin_execution.scheduler_resources.submission_plan.job_classes` so you can decide whether to keep one mixed job shape or split CPU-only and GPU-enabled stages across different node types.

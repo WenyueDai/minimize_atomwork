@@ -14,6 +14,11 @@
 #   python -m minimum_atw.cli run-plugin       --config <this_file> --plugin interface_contacts
 #   python -m minimum_atw.cli merge            --config <this_file>
 #   python -m minimum_atw.cli analyze-dataset  --config <this_file>
+#
+# Scheduler note:
+#   keep `gpu_workers` at 0 for CPU-only planning, or set `gpu_workers` and
+#   `gpu_devices` if you enable abepitope_score / ablang2_score / esm_if1_score
+#   and want scheduler-aware GPU placement in run_metadata.json.
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/path/to/your/pdb_files"
@@ -49,25 +54,60 @@ manipulations:
 
 # ── Per-structure calculations ─────────────────────────────────────────────────
 plugins:
+  # — structure grain —
   - "identity"
-  - "interface_contacts"
-  - "interface_metrics"
+  # - "superimpose_homology"    # requires reference_path in plugin_params
+
+  # — chain grain —
   # - "chain_stats"
+
+  # — role grain —
   # - "role_sequences"
   # - "role_stats"
-  # - "antibody_cdr_lengths"    # requires numbering_roles below
-  # - "antibody_cdr_sequences"  # requires numbering_roles below
-  # - "abepitope_score"         # requires abepitope package installed
+  # - "antibody_cdr_lengths"    # requires numbering_roles; abnumber package
+  # - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; requires: pip install minimum-atomworks[ablang2]
 
-contact_distance: 5.0
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "pdockq_score"
+  # - "abepitope_score"         # GPU-preferred; requires abepitope package
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
+
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
 # abepitope_atom_radius: 4.0
 # interface_cell_size: 5.0
 
 # ── Plugin-specific configuration ──────────────────────────────────────────────
 # plugin_params:
 #   superimpose_to_reference:
-#     reference_path: "/path/to/reference.pdb"
-#     on_chains: ["A", "B", "C"]
+#     reference_path: "/path/to/your/reference.pdb"
+#     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
+#     # anchor_atoms: "CA"          # CA | backbone (default: CA)
+#
+#   superimpose_homology:
+#     reference_path: "/path/to/your/reference.pdb"
+#     on_chains: ["A"]              # anchor chains for RMSD alignment
+#
+#   pdockq_score:
+#     contact_distance: 8.0        # CB-CB cutoff in Å (default: 8.0)
+#
+#   dockq_score:
+#     reference_path: "/path/to/your/native_complex.pdb"   # required
+#     receptor_role: "antigen"     # role to superimpose on for LRMS (default: right-side role)
+#     contact_distance: 5.0        # Å cutoff for Fnat contacts (default: 5.0)
+#
+#   abepitope_score:
+#     device: auto                 # auto | cpu | cuda | 0 (default: auto)
+#
+#   esm_if1_score:
+#     device: auto                 # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+#
+#   ablang2_score:
+#     device: auto                 # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 # Uncomment when enabling antibody_cdr_lengths / antibody_cdr_sequences:
@@ -101,3 +141,7 @@ keep_intermediate_outputs: false
 keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25   # resume prepare/plugin runs after interruptions
+# cpu_workers: 4            # CPU pool for geometry/QC/merge-friendly plugins
+# gpu_workers: 1            # enable when using GPU-capable plugins on GPU
+# gpu_devices: ["0"]        # visible GPU IDs for scheduler-aware device assignment
+# run_metadata.json will then include both single_job and submission_plan hints.

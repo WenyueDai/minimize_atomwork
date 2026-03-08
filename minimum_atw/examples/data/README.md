@@ -4,6 +4,8 @@ Place your input PDB or CIF files here to run the example configs out of the box
 
 The example YAML files use `/path/to/your/pdb_files` as the `input_dir` placeholder.
 Point that to this directory (or any directory containing your structures) before running.
+The example YAMLs also include commented `cpu_workers`, `gpu_workers`, `gpu_devices`, and `chunk_cpu_capacity` hints so you can turn them into scheduler-ready templates for HPC.
+For chunked HPC runs, the `large_run` examples can now be submitted directly with `minimum_atw.cli submit-slurm`.
 
 ## Suggested layout
 

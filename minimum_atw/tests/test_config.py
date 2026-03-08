@@ -106,10 +106,42 @@ class ConfigTests(unittest.TestCase):
         self.assertFalse(cfg.checkpoint_enabled)
         self.assertEqual(cfg.checkpoint_interval, 100)
         self.assertFalse(cfg.cleanup_prepared_after_dataset_analysis)
+        self.assertIsNone(cfg.chunk_cpu_capacity)
+        self.assertEqual(cfg.cpu_workers, 1)
+        self.assertEqual(cfg.gpu_workers, 0)
+        self.assertEqual(cfg.gpu_devices, [])
 
         # interval must be positive
         with self.assertRaises(ValueError):
             Config(input_dir="/tmp/in", out_dir="/tmp/out", checkpoint_interval=0)
+
+    def test_worker_pool_runtime_options_are_normalized(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            chunk_cpu_capacity=" 16 ",
+            cpu_workers=" 4 ",
+            gpu_workers=" 2 ",
+            gpu_devices=[" 0 ", "cuda:1", "0", ""],
+        )
+
+        self.assertEqual(cfg.chunk_cpu_capacity, 16)
+        self.assertEqual(cfg.cpu_workers, 4)
+        self.assertEqual(cfg.gpu_workers, 2)
+        self.assertEqual(cfg.gpu_devices, ["0", "cuda:1"])
+        self.assertNotIn("chunk_cpu_capacity", cfg.merge_compatibility())
+        self.assertNotIn("cpu_workers", cfg.merge_compatibility())
+        self.assertNotIn("gpu_workers", cfg.merge_compatibility())
+        self.assertNotIn("gpu_devices", cfg.merge_compatibility())
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", chunk_cpu_capacity=0)
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", cpu_workers=0)
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", gpu_workers=-1)
 
     def test_aho_requires_cdr_definition(self) -> None:
         with self.assertRaises(ValueError):

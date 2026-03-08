@@ -12,6 +12,7 @@ import sys
 import tempfile
 from importlib.util import find_spec
 from pathlib import Path
+from typing import Any
 
 import biotite.structure as struc
 from biotite.structure.io.pdb import PDBFile
@@ -129,6 +130,20 @@ def _resolve_hmmsearch() -> str | None:
     return None
 
 
+def _resolve_device(param: str) -> str:
+    normalized = str(param or "auto").strip().lower()
+    if normalized == "auto":
+        try:
+            import torch
+
+            return "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            return "cpu"
+    if normalized.isdigit():
+        return f"cuda:{normalized}"
+    return normalized or "cpu"
+
+
 class AbEpiTopeScorePlugin(InterfacePlugin):
     name = "abepitope_score"
     prefix = "abepitope"
@@ -139,7 +154,20 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
     _worker_process: subprocess.Popen[str] | None = None
     _worker_registered: bool = False
     _worker_stderr_handle = None
+    _worker_device: str | None = None
     _metrics_cache: dict[str, dict[str, float]] = {}
+
+    def scheduling(self, cfg: Any | None = None) -> dict[str, Any]:
+        scheduling = super().scheduling(cfg)
+        params = dict(getattr(cfg, "plugin_params", {}).get(self.name, {})) if cfg is not None else {}
+        device = str(params.get("device", "auto") or "auto").strip().lower()
+        gpu_budget = 0
+        if cfg is not None:
+            gpu_budget = max(int(getattr(cfg, "gpu_workers", 0)), len(getattr(cfg, "gpu_devices", []) or []))
+        use_gpu_pool = device.startswith("cuda") or device.isdigit() or (device == "auto" and gpu_budget > 0)
+        scheduling["device_kind"] = "cuda" if use_gpu_pool else (device or "auto")
+        scheduling["worker_pool"] = "gpu" if use_gpu_pool else "cpu"
+        return scheduling
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
         if find_spec("abepitope") is None:
@@ -226,6 +254,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
     def _shutdown_worker(self) -> None:
         proc = self._worker_process
         if proc is None:
+            self._worker_device = None
             self._close_worker_stderr()
             return
         try:
@@ -239,17 +268,25 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
                 proc.kill()
         finally:
             self._worker_process = None
+            self._worker_device = None
             self._close_worker_stderr()
 
-    def _get_worker(self) -> subprocess.Popen[str]:
+    def _get_worker(self, *, device: str) -> subprocess.Popen[str]:
         proc = self._worker_process
-        if proc is not None and proc.poll() is None and proc.stdin is not None and proc.stdout is not None:
+        if (
+            proc is not None
+            and proc.poll() is None
+            and proc.stdin is not None
+            and proc.stdout is not None
+            and self._worker_device == device
+        ):
             return proc
 
         self._shutdown_worker()
         stderr_handle = tempfile.TemporaryFile(mode="w+")
+        command = [sys.executable, str(_runner_script_path()), "--worker", "--device", device]
         proc = subprocess.Popen(
-            [sys.executable, str(_runner_script_path()), "--worker"],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=stderr_handle,
@@ -259,6 +296,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
         )
         self._worker_process = proc
         self._worker_stderr_handle = stderr_handle
+        self._worker_device = device
         if not self._worker_registered:
             atexit.register(self._shutdown_worker)
             self._worker_registered = True
@@ -269,7 +307,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
             self._shutdown_worker()
             raise subprocess.CalledProcessError(
                 returncode=proc.returncode if proc.returncode is not None else 1,
-                cmd=[sys.executable, str(_runner_script_path()), "--worker"],
+                cmd=command,
                 stderr=stderr or "AbEpiTope worker failed to start",
             )
         parsed = json.loads(ready_payload) if ready_payload else {}
@@ -278,7 +316,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
             self._shutdown_worker()
             raise subprocess.CalledProcessError(
                 returncode=proc.returncode if proc.returncode is not None else 1,
-                cmd=[sys.executable, str(_runner_script_path()), "--worker"],
+                cmd=command,
                 stderr=stderr or str(parsed or "AbEpiTope worker failed to initialize"),
             )
         return proc
@@ -289,12 +327,13 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
         *,
         seq_hash: str,
         atom_radius: float,
+        device: str,
         chain_hints: dict[str, list[str]] | None = None,
     ) -> dict[str, float]:
         cached = self._metrics_cache.get(seq_hash)
         if cached is not None:
             return dict(cached)
-        proc = self._get_worker()
+        proc = self._get_worker(device=device)
         if proc.stdin is None or proc.stdout is None:
             return {}
 
@@ -338,6 +377,8 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
 
     def run(self, ctx: Context):
         atom_radius = float(getattr(ctx.config, "abepitope_atom_radius", 4.0))
+        params = self.plugin_params(ctx)
+        device = _resolve_device(str(params.get("device", "auto")))
         for left_role, right_role, left, right in self.iter_role_pairs(ctx):
             pair_atoms = struc.concatenate([left, right])
             pdb_content = _pair_to_pdb_content(pair_atoms)
@@ -353,6 +394,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
                 pdb_content,
                 seq_hash=seq_key,
                 atom_radius=atom_radius,
+                device=device,
                 chain_hints=chain_hints,
             )
             if not metrics:

@@ -28,6 +28,10 @@ dependencies = [
 
 [project.optional-dependencies]
 antibody = ["abnumber"]
+abepitope = ["abepitope"]
+ablang2 = ["ablang2"]
+esm = ["torch", "fair-esm"]
+all = ["abnumber", "abepitope", "ablang2", "torch", "fair-esm"]
 
 [project.scripts]
 minimum-atomworks = "minimum_atw.cli:main"

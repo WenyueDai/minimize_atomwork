@@ -42,6 +42,9 @@ Large-dataset paths:
 - `merge-datasets`
   stack already completed datasets, as long as they are compatible
 
+Plugin execution planning can also separate CPU and GPU plugins into distinct worker pools.
+Independent groups may run in different execution waves so CPU and GPU resources can be used at the same time.
+
 ![High-Level Runtime](minimum_atw/analysis/runtime.svg)
 
 ## Architecture Overview
@@ -61,6 +64,15 @@ Public entrypoints:
 - [minimum_atw/cli.py](/home/eva/minimum_atomworks/minimum_atw/cli.py)
 
 ![High-Level Architecture](minimum_atw/analysis/architecture.svg)
+
+Module-level code layout:
+
+![Module Layer Map](minimum_atw/analysis/module_layers.svg)
+
+Plugin scheduling — how groups and waves are assigned:
+
+![Plugin Wave Scheduler](minimum_atw/analysis/plugin_wave_scheduler.svg)
+
 
 Current plugin taxonomy:
 
@@ -218,7 +230,7 @@ Failure/debug output:
 - `bad_files.parquet` is only written when failures occur
 - `_prepared/` and flat `_plugins/` artifacts are only kept when `keep_intermediate_outputs: true`
 
-`run_metadata.json` and `dataset_metadata.json` also record `output_files` so downstream tools can resolve custom parquet names reliably.
+`run_metadata.json` and `dataset_metadata.json` also record `output_files` so downstream tools can resolve custom parquet names reliably. `run_metadata.json` now also includes `plugin_execution.scheduler_resources`, which summarizes both the peak single-job CPU/GPU demand and a staged submission plan for splitting CPU-only and GPU-enabled phases on HPC.
 
 ## Merge Compatibility
 

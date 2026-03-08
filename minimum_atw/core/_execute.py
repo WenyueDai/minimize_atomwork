@@ -1,6 +1,9 @@
 """Execute phase: run pdb_calculation plugins against prepared structures."""
 
 from __future__ import annotations
+
+import concurrent.futures
+from contextlib import ExitStack
 from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,6 +26,18 @@ from ..runtime.workspace import (
 )
 from .config import Config
 from .registry import instantiate_unit
+from ..runtime._pool import process_or_thread_pool as _process_or_thread_pool
+from ._schedule import (  # noqa: F401 — re-exported for backward compat
+    PlannedPluginGroup,
+    PluginExecutionSpec,
+    group_gpu_devices_per_worker as _group_gpu_devices_per_worker,
+    group_worker_budget as _group_worker_budget,
+    plan_plugin_groups as _plan_plugin_groups,
+    plan_plugin_waves as _plan_plugin_waves,
+    plugin_execution_metadata,
+    resolve_plugin_specs as _resolve_plugin_specs,
+)
+
 from .tables import (
     BAD_COLS,
     BufferedTableWriter,
@@ -36,13 +51,18 @@ from .tables import (
     read_pdb_table as _read_pdb_table,
 )
 
+_LOG_LOCK = threading.Lock()
+_WORKER_STATE = threading.local()
+
+
 def _log(message: str) -> None:
     with _LOG_LOCK:
         print(message, flush=True)
 
 
-_LOG_LOCK = threading.Lock()
-
+# ---------------------------------------------------------------------------
+# Progress helpers
+# ---------------------------------------------------------------------------
 
 def _progress_bar(done: int, total: int, *, width: int = 20) -> str:
     if total <= 0:
@@ -61,7 +81,7 @@ def _status_count_string(counts: dict[str, int]) -> str:
 
 
 def _plugin_progress_line(
-    spec: "PluginExecutionSpec",
+    spec: PluginExecutionSpec,
     *,
     done: int,
     total: int,
@@ -89,11 +109,9 @@ def _should_log_progress(
     return (done - last_logged_done) >= max(int(cadence), 1)
 
 
-@dataclass(frozen=True)
-class PluginExecutionSpec:
-    name: str
-    plugin: Any
-
+# ---------------------------------------------------------------------------
+# State
+# ---------------------------------------------------------------------------
 
 @dataclass
 class PluginRunState:
@@ -175,10 +193,17 @@ class PluginRunState:
         self.bad_writer.materialize(skip_empty=True)
 
     def mark_bad(self, source_path: Path, exc: Exception) -> None:
+        self.mark_bad_message(
+            source_path,
+            error_type=type(exc).__name__,
+            message=str(exc),
+        )
+
+    def mark_bad_message(self, source_path: Path, *, error_type: str, message: str) -> None:
         self.record_result(
             [],
             [],
-            [{"path": str(source_path.resolve()), "error": f"{type(exc).__name__}: {exc}"}],
+            [{"path": str(source_path.resolve()), "error": f"{error_type}: {message}"}],
         )
         self.processed.add(str(source_path))
 
@@ -195,23 +220,32 @@ class PluginRunState:
         return self.root / f"{self.spec.name}.bad_files{TABLE_SUFFIX}"
 
 
+# ---------------------------------------------------------------------------
+# Context cache
+# ---------------------------------------------------------------------------
+
 class _LoadedContextCache:
     def __init__(self) -> None:
         self._templates: dict[tuple[str, str], Context] = {}
         self._failures: dict[tuple[str, str], Exception] = {}
+        self._lock = threading.Lock()
 
     def get(self, source_path: Path, prepared_path: Path, cfg: Config) -> Context:
         key = (str(source_path.resolve()), str(prepared_path.resolve()))
-        if key in self._failures:
-            raise self._failures[key]
-        template = self._templates.get(key)
+        with self._lock:
+            if key in self._failures:
+                raise self._failures[key]
+            template = self._templates.get(key)
         if template is None:
             try:
-                template = _prepare_context(source_path, prepared_path, cfg)
+                loaded = _prepare_context(source_path, prepared_path, cfg)
             except Exception as exc:
-                self._failures[key] = exc
+                with self._lock:
+                    self._failures[key] = exc
                 raise
-            self._templates[key] = template
+            with self._lock:
+                self._templates.setdefault(key, loaded)
+                template = self._templates[key]
         return self._clone(template)
 
     def _clone(self, template: Context) -> Context:
@@ -227,62 +261,337 @@ class _LoadedContextCache:
         return clone
 
 
-def _plugin_execution_spec(plugin_name: str) -> PluginExecutionSpec:
-    if plugin_name not in PLUGIN_REGISTRY:
-        raise KeyError(f"Unknown plugin: {plugin_name}")
-    return PluginExecutionSpec(name=plugin_name, plugin=instantiate_unit(PLUGIN_REGISTRY[plugin_name]))
+# ---------------------------------------------------------------------------
+# Device helpers
+# ---------------------------------------------------------------------------
+
+def _normalize_gpu_device_label(value: str | None) -> str | None:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return None
+    if normalized.isdigit():
+        return f"cuda:{normalized}"
+    return normalized
 
 
-def _resolve_plugin_specs(plugin_names: list[str]) -> list[PluginExecutionSpec]:
-    return [_plugin_execution_spec(plugin_name) for plugin_name in plugin_names]
+def _group_device_slots(cfg: Config, group: list[PluginExecutionSpec], workers: int) -> list[str | None]:
+    if not group or group[0].worker_pool != "gpu":
+        return [None] * max(1, workers)
+    normalized_devices = [
+        _normalize_gpu_device_label(value)
+        for value in list(cfg.gpu_devices)
+    ]
+    devices = [value for value in normalized_devices if value]
+    if not devices:
+        return [None] * max(1, workers)
+    return devices[: max(1, workers)]
 
 
-def _plan_plugin_execution(specs: list[PluginExecutionSpec]) -> list[list[PluginExecutionSpec]]:
-    """Return specs in topological order (one per group), respecting 'requires' dependencies."""
-    spec_by_name = {spec.name: spec for spec in specs}
-    configured = set(spec_by_name)
+# ---------------------------------------------------------------------------
+# Worker initialisation (runs inside subprocess/thread)
+# ---------------------------------------------------------------------------
 
-    for spec in specs:
-        missing = [r for r in getattr(spec.plugin, "requires", []) if r not in configured]
-        if missing:
-            raise ValueError(f"Plugin '{spec.name}' requires plugins not configured: {missing}")
-
-    order: list[PluginExecutionSpec] = []
-    visited: set[str] = set()
-
-    def _visit(name: str, visiting: frozenset[str]) -> None:
-        if name in visited:
-            return
-        if name in visiting:
-            raise ValueError(f"Circular dependency: {' -> '.join(sorted(visiting))} -> {name}")
-        visiting = visiting | {name}
-        spec = spec_by_name[name]
-        for req in getattr(spec.plugin, "requires", []):
-            if req in spec_by_name:
-                _visit(req, visiting)
-        visited.add(name)
-        order.append(spec)
-
-    for spec in specs:
-        _visit(spec.name, frozenset())
-
-    return [[spec] for spec in order]
+def _init_group_worker(config_data: dict[str, Any], device_override: str | None = None) -> None:
+    _WORKER_STATE.cfg = Config(**dict(config_data))
+    _WORKER_STATE.device_override = _normalize_gpu_device_label(device_override)
 
 
-def plugin_execution_metadata(plugin_names: list[str]) -> dict[str, Any]:
-    groups = _plan_plugin_execution(_resolve_plugin_specs(plugin_names))
-    return {"plugins": [spec.name for group in groups for spec in group]}
+def _worker_base_config() -> Config:
+    cfg = getattr(_WORKER_STATE, "cfg", None)
+    if cfg is None:
+        raise RuntimeError("plugin worker config was not initialized")
+    return cfg
 
 
-def _execute_plugin_group(
+def _worker_device_override() -> str | None:
+    return getattr(_WORKER_STATE, "device_override", None)
+
+
+def _worker_config_for_plugins(plugin_names: list[str]) -> Config:
+    cfg = _worker_base_config()
+    device_override = _worker_device_override()
+    if not device_override:
+        return cfg
+
+    plugin_params = {name: dict(params) for name, params in getattr(cfg, "plugin_params", {}).items()}
+    changed = False
+    for plugin_name in plugin_names:
+        if plugin_name not in PLUGIN_REGISTRY:
+            continue
+        plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
+        scheduling = plugin.scheduling(cfg) if hasattr(plugin, "scheduling") else {}
+        worker_pool = str(scheduling.get("worker_pool") or getattr(plugin, "worker_pool", "cpu")).strip().lower()
+        if worker_pool != "gpu":
+            continue
+        params = dict(plugin_params.get(plugin_name, {}))
+        requested_device = str(params.get("device", "auto") or "auto").strip().lower()
+        if requested_device in {"auto", "cuda"} or requested_device.isdigit():
+            params["device"] = device_override
+            plugin_params[plugin_name] = params
+            changed = True
+    if not changed:
+        return cfg
+    return cfg.model_copy(update={"plugin_params": plugin_params})
+
+
+# ---------------------------------------------------------------------------
+# Task execution (runs in worker)
+# ---------------------------------------------------------------------------
+
+def _execute_plugin_task(task: dict[str, Any]) -> dict[str, Any]:
+    plugin_names = [str(name) for name in task.get("plugin_names", [])]
+    source_path = Path(str(task["source_path"]))
+    prepared_path = Path(str(task["prepared_path"]))
+    cfg = _worker_config_for_plugins(plugin_names)
+    try:
+        ctx = _prepare_context(source_path, prepared_path, cfg)
+    except Exception as exc:
+        return {
+            "source_path": str(source_path),
+            "plugin_names": plugin_names,
+            "prepare_error": {
+                "type": type(exc).__name__,
+                "message": str(exc),
+            },
+        }
+
+    results: list[dict[str, Any]] = []
+    for plugin_name in plugin_names:
+        plugin = instantiate_unit(PLUGIN_REGISTRY[plugin_name])
+        local_rows: list[dict[str, Any]] = []
+        local_status: list[dict[str, Any]] = []
+        ok = _run_unit(ctx, plugin, local_rows, local_status)
+        results.append(
+            {
+                "plugin": plugin_name,
+                "pdb_rows": local_rows,
+                "status_rows": local_status,
+                "bad_rows": [],
+                "ok": bool(ok),
+            }
+        )
+    return {
+        "source_path": str(source_path),
+        "plugin_names": plugin_names,
+        "results": results,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dispatchers
+# ---------------------------------------------------------------------------
+
+def _submit_tasks_bounded(
+    executor: concurrent.futures.Executor,
+    task_records: list[dict[str, Any]],
+    *,
+    max_in_flight: int,
+):
+    pending: dict[concurrent.futures.Future, None] = {}
+    next_index = 0
+
+    while next_index < len(task_records) and len(pending) < max_in_flight:
+        future = executor.submit(_execute_plugin_task, task_records[next_index])
+        pending[future] = None
+        next_index += 1
+
+    while pending:
+        done, _ = concurrent.futures.wait(
+            set(pending),
+            return_when=concurrent.futures.FIRST_COMPLETED,
+        )
+        for future in done:
+            pending.pop(future, None)
+            yield future.result()
+            if next_index < len(task_records):
+                new_future = executor.submit(_execute_plugin_task, task_records[next_index])
+                pending[new_future] = None
+                next_index += 1
+
+
+def _run_group_tasks_shared_pool(
+    task_records: list[dict[str, Any]],
+    *,
+    max_workers: int,
+    config_data: dict[str, Any],
+):
+    with _process_or_thread_pool(
+        max_workers=max_workers,
+        initializer=_init_group_worker,
+        initargs=(config_data, None),
+    ) as executor:
+        yield from _submit_tasks_bounded(executor, task_records, max_in_flight=max_workers)
+
+
+def _run_group_tasks_device_slots(
+    task_records: list[dict[str, Any]],
+    *,
+    device_slots: list[str | None],
+    config_data: dict[str, Any],
+):
+    with ExitStack() as stack:
+        try:
+            executors = [
+                stack.enter_context(
+                    _process_or_thread_pool(
+                        max_workers=1,
+                        initializer=_init_group_worker,
+                        initargs=(config_data, device_override),
+                    )
+                )
+                for device_override in device_slots
+            ]
+        except PermissionError:
+            executors = [
+                stack.enter_context(
+                    concurrent.futures.ThreadPoolExecutor(
+                        max_workers=1,
+                        initializer=_init_group_worker,
+                        initargs=(config_data, device_override),
+                    )
+                )
+                for device_override in device_slots
+            ]
+        yield from _drain_device_slot_tasks(executors, task_records)
+
+
+def _drain_device_slot_tasks(
+    executors: list[concurrent.futures.Executor],
+    task_records: list[dict[str, Any]],
+):
+    pending: dict[concurrent.futures.Future, int] = {}
+    next_index = 0
+
+    for slot_index, executor in enumerate(executors):
+        if next_index >= len(task_records):
+            break
+        future = executor.submit(_execute_plugin_task, task_records[next_index])
+        pending[future] = slot_index
+        next_index += 1
+
+    while pending:
+        done, _ = concurrent.futures.wait(
+            set(pending),
+            return_when=concurrent.futures.FIRST_COMPLETED,
+        )
+        for future in done:
+            slot_index = pending.pop(future)
+            yield future.result()
+            if next_index < len(task_records):
+                new_future = executors[slot_index].submit(_execute_plugin_task, task_records[next_index])
+                pending[new_future] = slot_index
+                next_index += 1
+
+
+# ---------------------------------------------------------------------------
+# Result recording
+# ---------------------------------------------------------------------------
+
+def _record_prepare_failure(
+    source_path: Path,
+    pending_specs: list[PluginExecutionSpec],
+    *,
+    error_type: str,
+    message: str,
+    states: dict[str, PluginRunState],
+    group_progress: dict[str, int],
+    group_targets: dict[str, int],
+    group_status_counts: dict[str, dict[str, int]],
+    group_last_logged: dict[str, int],
+    progress_cadence: int,
+) -> None:
+    for spec in pending_specs:
+        states[spec.name].mark_bad_message(source_path, error_type=error_type, message=message)
+        group_progress[spec.name] += 1
+        counts = group_status_counts[spec.name]
+        counts["failed_prepare"] = int(counts.get("failed_prepare", 0)) + 1
+        if _should_log_progress(
+            done=group_progress[spec.name],
+            total=int(group_targets[spec.name]),
+            cadence=progress_cadence,
+            last_logged_done=group_last_logged[spec.name],
+            status_key="failed_prepare",
+        ):
+            _log(
+                _plugin_progress_line(
+                    spec,
+                    done=group_progress[spec.name],
+                    total=int(group_targets[spec.name]),
+                    rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                    status_counts=counts,
+                )
+            )
+            group_last_logged[spec.name] = group_progress[spec.name]
+
+
+def _record_plugin_result(
+    source_path: Path,
+    spec: PluginExecutionSpec,
+    result: dict[str, Any],
+    *,
+    states: dict[str, PluginRunState],
+    group_progress: dict[str, int],
+    group_targets: dict[str, int],
+    group_status_counts: dict[str, dict[str, int]],
+    group_last_logged: dict[str, int],
+    progress_cadence: int,
+) -> None:
+    local_rows = list(result.get("pdb_rows", []))
+    local_status = list(result.get("status_rows", []))
+    local_bad = list(result.get("bad_rows", []))
+    ok = bool(result.get("ok", False))
+    states[spec.name].record_result(local_rows, local_status, local_bad)
+    states[spec.name].processed.add(str(source_path))
+    group_progress[spec.name] += 1
+    counts = group_status_counts[spec.name]
+    status = "unknown"
+    if local_status:
+        status = str(local_status[-1].get("status", "unknown"))
+    counts[status] = int(counts.get(status, 0)) + 1
+    if _should_log_progress(
+        done=group_progress[spec.name],
+        total=int(group_targets[spec.name]),
+        cadence=progress_cadence,
+        last_logged_done=group_last_logged[spec.name],
+        status_key=status,
+    ):
+        _log(
+            _plugin_progress_line(
+                spec,
+                done=group_progress[spec.name],
+                total=int(group_targets[spec.name]),
+                rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
+                status_counts=counts,
+            )
+        )
+        group_last_logged[spec.name] = group_progress[spec.name]
+    if not ok and spec.failure_policy == "raise":
+        raise RuntimeError(f"Plugin {spec.name} failed for {source_path}")
+
+
+# ---------------------------------------------------------------------------
+# Group runners
+# ---------------------------------------------------------------------------
+
+def _log_group_summary(group: list[PluginExecutionSpec], states: dict[str, PluginRunState]) -> None:
+    for spec in group:
+        state = states[spec.name]
+        _log(
+            f"[plugin:{spec.name}] summary rows={state.counts.get(PDB_TABLE_NAME, 0)} "
+            f"status={state.counts.get('status', 0)} bad={state.counts.get('bad', 0)}"
+        )
+
+
+def _log_group_start(
     cfg: Config,
     manifest: pd.DataFrame,
     group: list[PluginExecutionSpec],
     states: dict[str, PluginRunState],
-    context_cache: _LoadedContextCache,
-) -> None:
+) -> tuple[dict[str, int], dict[str, int], dict[str, dict[str, int]], dict[str, int], int]:
     if not group:
-        return
+        return {}, {}, {}, {}, max(1, int(cfg.checkpoint_interval))
+
+    from ._schedule import plugin_group_metadata as _plugin_group_metadata
 
     total_structures = int(len(manifest))
     total_pending = sum(
@@ -291,7 +600,14 @@ def _execute_plugin_group(
         if any(str(getattr(row, "path")) not in states[spec.name].processed for spec in group)
     )
     plugins_label = ",".join(spec.name for spec in group)
-    _log(f"[execute] plugin={plugins_label} pending={total_pending}/{total_structures}")
+    group_meta = _plugin_group_metadata(group)
+    _log(
+        "[execute] "
+        f"pool={group_meta['worker_pool']} "
+        f"device={group_meta['device_kind']} "
+        f"mode={group_meta['execution_mode']} "
+        f"plugin={plugins_label} pending={total_pending}/{total_structures}"
+    )
 
     group_targets = {
         spec.name: sum(
@@ -305,6 +621,15 @@ def _execute_plugin_group(
     group_last_logged = {spec.name: 0 for spec in group}
     group_status_counts = {spec.name: {} for spec in group}
     progress_cadence = max(1, int(cfg.checkpoint_interval))
+    workers = _group_worker_budget(cfg, group)
+    if workers > 1:
+        _log(f"[execute] dispatch workers={workers}")
+        if group_meta["worker_pool"] == "gpu":
+            device_slots = _group_device_slots(cfg, group, workers)
+            if any(device_slots):
+                _log(f"[execute] gpu_slots={','.join(str(slot) for slot in device_slots if slot)}")
+            else:
+                _log("[execute] gpu_slots=unassigned")
 
     for spec in group:
         total = int(group_targets[spec.name])
@@ -318,6 +643,46 @@ def _execute_plugin_group(
                     status_counts={},
                 )
             )
+    return group_targets, group_progress, group_status_counts, group_last_logged, progress_cadence
+
+
+def _group_task_records(
+    manifest: pd.DataFrame,
+    group: list[PluginExecutionSpec],
+    states: dict[str, PluginRunState],
+) -> list[dict[str, Any]]:
+    tasks: list[dict[str, Any]] = []
+    for row in manifest.itertuples(index=False):
+        source_path = Path(row.path)
+        pending_specs = [spec for spec in group if str(source_path) not in states[spec.name].processed]
+        if not pending_specs:
+            continue
+        tasks.append(
+            {
+                "source_path": str(source_path),
+                "prepared_path": str(Path(row.prepared_path)),
+                "plugin_names": [spec.name for spec in pending_specs],
+            }
+        )
+    return tasks
+
+
+def _execute_plugin_group_serial(
+    cfg: Config,
+    manifest: pd.DataFrame,
+    group: list[PluginExecutionSpec],
+    states: dict[str, PluginRunState],
+    context_cache: _LoadedContextCache,
+) -> None:
+    if not group:
+        return
+    (
+        group_targets,
+        group_progress,
+        group_status_counts,
+        group_last_logged,
+        progress_cadence,
+    ) = _log_group_start(cfg, manifest, group, states)
 
     for row in manifest.itertuples(index=False):
         source_path = Path(row.path)
@@ -329,28 +694,18 @@ def _execute_plugin_group(
         try:
             ctx = context_cache.get(source_path, prepared_path, cfg)
         except Exception as exc:
-            for spec in pending_specs:
-                states[spec.name].mark_bad(source_path, exc)
-                group_progress[spec.name] += 1
-                counts = group_status_counts[spec.name]
-                counts["failed_prepare"] = int(counts.get("failed_prepare", 0)) + 1
-                if _should_log_progress(
-                    done=group_progress[spec.name],
-                    total=int(group_targets[spec.name]),
-                    cadence=progress_cadence,
-                    last_logged_done=group_last_logged[spec.name],
-                    status_key="failed_prepare",
-                ):
-                    _log(
-                        _plugin_progress_line(
-                            spec,
-                            done=group_progress[spec.name],
-                            total=int(group_targets[spec.name]),
-                            rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
-                            status_counts=counts,
-                        )
-                    )
-                    group_last_logged[spec.name] = group_progress[spec.name]
+            _record_prepare_failure(
+                source_path,
+                pending_specs,
+                error_type=type(exc).__name__,
+                message=str(exc),
+                states=states,
+                group_progress=group_progress,
+                group_targets=group_targets,
+                group_status_counts=group_status_counts,
+                group_last_logged=group_last_logged,
+                progress_cadence=progress_cadence,
+            )
             continue
 
         for spec in pending_specs:
@@ -358,41 +713,117 @@ def _execute_plugin_group(
             local_status: list[dict[str, Any]] = []
             local_bad: list[dict[str, Any]] = []
             ok = _run_unit(ctx, spec.plugin, local_rows, local_status)
-            states[spec.name].record_result(local_rows, local_status, local_bad)
-            states[spec.name].processed.add(str(source_path))
-            group_progress[spec.name] += 1
-            counts = group_status_counts[spec.name]
-            status = "unknown"
-            if local_status:
-                status = str(local_status[-1].get("status", "unknown"))
-            counts[status] = int(counts.get(status, 0)) + 1
-            if _should_log_progress(
-                done=group_progress[spec.name],
-                total=int(group_targets[spec.name]),
-                cadence=progress_cadence,
-                last_logged_done=group_last_logged[spec.name],
-                status_key=status,
-            ):
-                _log(
-                    _plugin_progress_line(
-                        spec,
-                        done=group_progress[spec.name],
-                        total=int(group_targets[spec.name]),
-                        rows=states[spec.name].counts.get(PDB_TABLE_NAME, 0),
-                        status_counts=counts,
-                    )
-                )
-                group_last_logged[spec.name] = group_progress[spec.name]
-            if not ok and getattr(spec.plugin, "failure_policy", "continue") == "raise":
-                raise RuntimeError(f"Plugin {spec.name} failed for {source_path}")
+            _record_plugin_result(
+                source_path,
+                spec,
+                {
+                    "pdb_rows": local_rows,
+                    "status_rows": local_status,
+                    "bad_rows": local_bad,
+                    "ok": ok,
+                },
+                states=states,
+                group_progress=group_progress,
+                group_targets=group_targets,
+                group_status_counts=group_status_counts,
+                group_last_logged=group_last_logged,
+                progress_cadence=progress_cadence,
+            )
 
-    for spec in group:
-        state = states[spec.name]
-        _log(
-            f"[plugin:{spec.name}] summary rows={state.counts.get(PDB_TABLE_NAME, 0)} "
-            f"status={state.counts.get('status', 0)} bad={state.counts.get('bad', 0)}"
+    _log_group_summary(group, states)
+
+
+def _execute_plugin_group_parallel(
+    cfg: Config,
+    manifest: pd.DataFrame,
+    group: list[PluginExecutionSpec],
+    states: dict[str, PluginRunState],
+) -> None:
+    if not group:
+        return
+    (
+        group_targets,
+        group_progress,
+        group_status_counts,
+        group_last_logged,
+        progress_cadence,
+    ) = _log_group_start(cfg, manifest, group, states)
+    task_records = _group_task_records(manifest, group, states)
+    if not task_records:
+        _log_group_summary(group, states)
+        return
+
+    spec_by_name = {spec.name: spec for spec in group}
+    workers = _group_worker_budget(cfg, group)
+    config_data = cfg.model_dump(mode="json")
+
+    if group[0].worker_pool == "gpu":
+        task_results = _run_group_tasks_device_slots(
+            task_records,
+            device_slots=_group_device_slots(cfg, group, workers),
+            config_data=config_data,
+        )
+    else:
+        task_results = _run_group_tasks_shared_pool(
+            task_records,
+            max_workers=workers,
+            config_data=config_data,
         )
 
+    for result in task_results:
+        source_path = Path(str(result["source_path"]))
+        if "prepare_error" in result:
+            error = dict(result["prepare_error"])
+            pending_specs = [spec_by_name[name] for name in result.get("plugin_names", []) if name in spec_by_name]
+            _record_prepare_failure(
+                source_path,
+                pending_specs,
+                error_type=str(error.get("type", "RuntimeError")),
+                message=str(error.get("message", "")),
+                states=states,
+                group_progress=group_progress,
+                group_targets=group_targets,
+                group_status_counts=group_status_counts,
+                group_last_logged=group_last_logged,
+                progress_cadence=progress_cadence,
+            )
+            continue
+
+        for plugin_result in result.get("results", []):
+            plugin_name = str(plugin_result.get("plugin", ""))
+            if plugin_name not in spec_by_name:
+                continue
+            _record_plugin_result(
+                source_path,
+                spec_by_name[plugin_name],
+                plugin_result,
+                states=states,
+                group_progress=group_progress,
+                group_targets=group_targets,
+                group_status_counts=group_status_counts,
+                group_last_logged=group_last_logged,
+                progress_cadence=progress_cadence,
+            )
+
+    _log_group_summary(group, states)
+
+
+def _execute_plugin_group(
+    cfg: Config,
+    manifest: pd.DataFrame,
+    group: list[PluginExecutionSpec],
+    states: dict[str, PluginRunState],
+    context_cache: _LoadedContextCache,
+) -> None:
+    if _group_worker_budget(cfg, group) <= 1:
+        _execute_plugin_group_serial(cfg, manifest, group, states, context_cache)
+        return
+    _execute_plugin_group_parallel(cfg, manifest, group, states)
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
 
 def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
     """Run a single plugin against prepared structures."""
@@ -401,11 +832,10 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
 
 def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
     """Run multiple plugins against prepared structures."""
-    specs = _resolve_plugin_specs(plugin_names)
+    specs = _resolve_plugin_specs(plugin_names, cfg)
 
     out_dir = Path(cfg.out_dir).resolve()
     manifest = _load_prepared_manifest(out_dir)
-    context_cache = _LoadedContextCache()
     states = {
         spec.name: PluginRunState.from_out_dir(
             out_dir,
@@ -415,10 +845,27 @@ def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
         )
         for spec in specs
     }
-    groups = _plan_plugin_execution(specs)
+    waves = _plan_plugin_waves(specs)
+    context_cache = _LoadedContextCache()
 
-    for group in groups:
-        _execute_plugin_group(cfg, manifest, group, states, context_cache)
+    for wave_index, wave in enumerate(waves):
+        if not wave:
+            continue
+        if len(wave) > 1:
+            wave_groups = ",".join(str(group.group_id) for group in wave)
+            wave_pools = ",".join(group.specs[0].worker_pool for group in wave)
+            _log(f"[execute] wave={wave_index} groups={wave_groups} pools={wave_pools}")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(wave)) as executor:
+                futures = [
+                    executor.submit(_execute_plugin_group, cfg, manifest, list(group.specs), states, context_cache)
+                    for group in wave
+                ]
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
+            continue
+
+        group = wave[0]
+        _execute_plugin_group(cfg, manifest, list(group.specs), states, context_cache)
 
     for state in states.values():
         state.finalize_outputs()
