@@ -60,27 +60,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "submit-slurm",
         help="Plan chunked work if needed, then submit mixed or staged chunk jobs to Slurm",
     )
-    submit_slurm_parser.add_argument("--plan-dir", required=True, help="Chunk plan directory to create or reuse")
+    submit_slurm_parser.add_argument("--plan-dir", help="Chunk plan directory to create or reuse; defaults to slurm.plan_dir or <out_dir>_plan")
     submit_slurm_parser.add_argument("--config", help="Path to YAML config; required unless --reuse-plan is set")
-    submit_slurm_parser.add_argument("--chunk-size", type=int, help="Maximum number of structures per chunk; required unless --reuse-plan is set")
+    submit_slurm_parser.add_argument("--chunk-size", type=int, help="Maximum number of structures per chunk; defaults to slurm.chunk_size")
     submit_slurm_parser.add_argument("--reuse-plan", action="store_true", help="Reuse an existing chunk_plan.json instead of replanning")
-    submit_slurm_parser.add_argument("--mode", choices=("auto", "mixed", "staged"), default="auto",
-                                     help="Submission style: one mixed job, staged CPU/GPU jobs, or planner-driven auto")
+    submit_slurm_parser.add_argument("--mode", choices=("auto", "mixed", "staged"),
+                                     help="Submission style override; defaults to slurm.mode or auto")
     submit_slurm_parser.add_argument("--out-dir", help="Optional override for merged final output directory")
     submit_slurm_parser.add_argument("--dry-run", action="store_true", help="Write scripts and submission metadata without calling sbatch")
-    submit_slurm_parser.add_argument("--array-limit", type=int, help="Optional Slurm array concurrency limit (N in 1-M%%N)")
-    submit_slurm_parser.add_argument("--workdir", default=str(Path.cwd().resolve()), help="Working directory for generated Slurm scripts")
-    submit_slurm_parser.add_argument("--python-bin", default=sys.executable, help="Python interpreter to invoke inside submitted jobs")
-    submit_slurm_parser.add_argument("--log-dir", help="Optional directory for Slurm stdout/stderr logs")
-    submit_slurm_parser.add_argument("--sbatch-common-arg", action="append", default=[],
+    submit_slurm_parser.add_argument("--array-limit", type=int, help="Optional Slurm array concurrency limit (N in 1-M%%N); defaults to slurm.array_limit")
+    submit_slurm_parser.add_argument("--workdir", help="Working directory override for generated Slurm scripts")
+    submit_slurm_parser.add_argument("--python-bin", help="Python interpreter override for submitted jobs")
+    submit_slurm_parser.add_argument("--log-dir", help="Optional directory override for Slurm stdout/stderr logs")
+    submit_slurm_parser.add_argument("--sbatch-common-arg", action="append",
                                      help="Extra sbatch argument applied to every submitted job; repeat as needed")
-    submit_slurm_parser.add_argument("--sbatch-mixed-arg", action="append", default=[],
+    submit_slurm_parser.add_argument("--sbatch-mixed-arg", action="append",
                                      help="Extra sbatch argument applied to mixed chunk jobs; repeat as needed")
-    submit_slurm_parser.add_argument("--sbatch-cpu-arg", action="append", default=[],
+    submit_slurm_parser.add_argument("--sbatch-cpu-arg", action="append",
                                      help="Extra sbatch argument applied to CPU-only array jobs; repeat as needed")
-    submit_slurm_parser.add_argument("--sbatch-gpu-arg", action="append", default=[],
+    submit_slurm_parser.add_argument("--sbatch-gpu-arg", action="append",
                                      help="Extra sbatch argument applied to GPU-enabled array jobs; repeat as needed")
-    submit_slurm_parser.add_argument("--sbatch-merge-arg", action="append", default=[],
+    submit_slurm_parser.add_argument("--sbatch-merge-arg", action="append",
                                      help="Extra sbatch argument applied to the final merge job; repeat as needed")
 
     prepare_parser = subparsers.add_parser("prepare", help="Apply manipulations once, cache prepared structures, and write base tables")
@@ -183,8 +183,8 @@ def main() -> None:
     if args.command == "submit-slurm":
         if not args.reuse_plan and not args.config:
             parser.error("--config is required unless --reuse-plan is set")
-        if not args.reuse_plan and args.chunk_size is None:
-            parser.error("--chunk-size is required unless --reuse-plan is set")
+        if args.reuse_plan and not args.config and not args.plan_dir:
+            parser.error("--plan-dir is required with --reuse-plan unless --config is also set")
 
         cfg = _load_config(args.config) if args.config else None
         submission = submit_slurm_chunked_pipeline(
@@ -199,11 +199,11 @@ def main() -> None:
             dry_run=bool(args.dry_run),
             array_limit=args.array_limit,
             log_dir=args.log_dir,
-            sbatch_common_args=list(args.sbatch_common_arg),
-            sbatch_mixed_args=list(args.sbatch_mixed_arg),
-            sbatch_cpu_args=list(args.sbatch_cpu_arg),
-            sbatch_gpu_args=list(args.sbatch_gpu_arg),
-            sbatch_merge_args=list(args.sbatch_merge_arg),
+            sbatch_common_args=list(args.sbatch_common_arg) if args.sbatch_common_arg is not None else None,
+            sbatch_mixed_args=list(args.sbatch_mixed_arg) if args.sbatch_mixed_arg is not None else None,
+            sbatch_cpu_args=list(args.sbatch_cpu_arg) if args.sbatch_cpu_arg is not None else None,
+            sbatch_gpu_args=list(args.sbatch_gpu_arg) if args.sbatch_gpu_arg is not None else None,
+            sbatch_merge_args=list(args.sbatch_merge_arg) if args.sbatch_merge_arg is not None else None,
         )
         _print_submission_summary("Slurm submission complete", submission)
         return

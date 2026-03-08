@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 from ...annotations import role_residue_entries
 from ...annotations import interface_contact_summary_for_roles
 from ..antibody_analysis.antibody_numbering import cdr_indices
@@ -35,7 +36,12 @@ def _cdr_interface_fields(
         if len(role_entries) != len(sequence):
             continue
 
-        cdr_map = cdr_indices(sequence, scheme=scheme, cdr_definition=cdr_definition)
+        try:
+            cdr_map = cdr_indices(sequence, scheme=scheme, cdr_definition=cdr_definition)
+        except RuntimeError:
+            # Interface contacts are still useful even when antibody numbering
+            # is unavailable or not applicable for this role/sequence.
+            continue
         for cdr_name, indices in cdr_map.items():
             index_set = set(indices)
             cdr_interface_residues = [
@@ -54,6 +60,8 @@ class InterfaceContactsPlugin(InterfacePlugin):
 
     def run(self, ctx: Context):
         cutoff = float(ctx.config.contact_distance)
+        params = self.plugin_params(ctx)
+        include_cdr_fields = bool(params.get("include_cdr_fields", True))
         for left_role, right_role, left, right in self.iter_role_pairs(ctx):
             summary = interface_contact_summary_for_roles(
                 ctx,
@@ -68,6 +76,24 @@ class InterfaceContactsPlugin(InterfacePlugin):
             right_contact_atoms = summary["right_contact_atoms"]
             left_res = summary["left_interface_residues"]
             right_res = summary["right_interface_residues"]
+            extra_fields: dict[str, object] = {}
+            if include_cdr_fields:
+                extra_fields.update(
+                    _cdr_interface_fields(
+                        ctx,
+                        side_prefix="left",
+                        side_arr=left,
+                        interface_residues=left_res,
+                    )
+                )
+                extra_fields.update(
+                    _cdr_interface_fields(
+                        ctx,
+                        side_prefix="right",
+                        side_arr=right,
+                        interface_residues=right_res,
+                    )
+                )
 
             yield {
                 **self.pair_identity_row(ctx, left_role=left_role, right_role=right_role),
@@ -79,6 +105,5 @@ class InterfaceContactsPlugin(InterfacePlugin):
                 "n_right_interface_residues": int(len(right_res)),
                 "left_interface_residues": residue_tokens(left_res),
                 "right_interface_residues": residue_tokens(right_res),
-                **_cdr_interface_fields(ctx, side_prefix="left", side_arr=left, interface_residues=left_res),
-                **_cdr_interface_fields(ctx, side_prefix="right", side_arr=right, interface_residues=right_res),
+                **extra_fields,
             }

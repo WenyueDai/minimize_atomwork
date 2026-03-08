@@ -24,6 +24,7 @@ class PluginExecutionSpec:
     cpu_threads_per_worker: int
     gpu_devices_per_worker: int
     failure_policy: str
+    blocks_concurrent_pool_overlap: bool
 
 
 @dataclass(frozen=True)
@@ -83,6 +84,12 @@ def _plugin_execution_spec(plugin_name: str, cfg: Config) -> PluginExecutionSpec
         cpu_threads_per_worker=cpu_threads_per_worker,
         gpu_devices_per_worker=gpu_devices_per_worker,
         failure_policy=str(getattr(plugin, "failure_policy", "continue") or "continue").strip().lower(),
+        blocks_concurrent_pool_overlap=bool(
+            scheduling.get(
+                "blocks_concurrent_pool_overlap",
+                getattr(plugin, "blocks_concurrent_pool_overlap", False),
+            )
+        ),
     )
 
 
@@ -153,6 +160,7 @@ def plan_plugin_groups(specs: list[PluginExecutionSpec]) -> list[PlannedPluginGr
     planned: list[PlannedPluginGroup] = []
     pools_by_wave: list[set[str]] = []
     waves_by_group: list[int] = []
+    barrier_by_wave: list[bool] = []
 
     for group_id, group in enumerate(grouped_specs):
         depends_on = sorted(
@@ -165,12 +173,24 @@ def plan_plugin_groups(specs: list[PluginExecutionSpec]) -> list[PlannedPluginGr
         )
         min_wave = 0 if not depends_on else max(waves_by_group[idx] for idx in depends_on) + 1
         worker_pool = group[0].worker_pool if group else "cpu"
+        blocks_overlap = any(spec.blocks_concurrent_pool_overlap for spec in group)
         wave = min_wave
-        while wave < len(pools_by_wave) and worker_pool in pools_by_wave[wave]:
-            wave += 1
+        while wave < len(pools_by_wave):
+            if worker_pool in pools_by_wave[wave]:
+                wave += 1
+                continue
+            if barrier_by_wave[wave]:
+                wave += 1
+                continue
+            if blocks_overlap and pools_by_wave[wave]:
+                wave += 1
+                continue
+            break
         while wave >= len(pools_by_wave):
             pools_by_wave.append(set())
+            barrier_by_wave.append(False)
         pools_by_wave[wave].add(worker_pool)
+        barrier_by_wave[wave] = barrier_by_wave[wave] or blocks_overlap
         planned.append(
             PlannedPluginGroup(
                 group_id=group_id,
@@ -445,13 +465,15 @@ def plugin_group_metadata(
             "gpu_devices_per_worker": group_gpu_devices_per_worker(specs),
         }
     )
+    if any(spec.blocks_concurrent_pool_overlap for spec in specs):
+        metadata["blocks_concurrent_pool_overlap"] = True
     if cfg is not None:
         metadata.update(group_resource_totals(cfg, specs))
     return metadata
 
 
 def plugin_metadata(spec: PluginExecutionSpec) -> dict[str, Any]:
-    return {
+    metadata = {
         "input_model": spec.input_model,
         "execution_mode": spec.execution_mode,
         "worker_pool": spec.worker_pool,
@@ -462,6 +484,9 @@ def plugin_metadata(spec: PluginExecutionSpec) -> dict[str, Any]:
         "requires": list(getattr(spec.plugin, "requires", [])),
         "failure_policy": spec.failure_policy,
     }
+    if spec.blocks_concurrent_pool_overlap:
+        metadata["blocks_concurrent_pool_overlap"] = True
+    return metadata
 
 
 # ---------------------------------------------------------------------------

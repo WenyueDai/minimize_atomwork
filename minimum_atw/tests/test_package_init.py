@@ -18,6 +18,23 @@ class PackageInitTests(unittest.TestCase):
         with self.assertRaises(AttributeError):
             minimum_atw.__getattr__("missing_name")
 
+    def test_cli_parser_imports_and_exposes_list_extensions(self) -> None:
+        from minimum_atw import cli
+
+        parser = cli._build_parser()
+        args = parser.parse_args(["list-extensions"])
+        self.assertEqual(args.command, "list-extensions")
+
+    def test_cli_parser_accepts_minimal_submit_slurm_invocation(self) -> None:
+        from minimum_atw import cli
+
+        parser = cli._build_parser()
+        args = parser.parse_args(["submit-slurm", "--config", "example.yaml"])
+        self.assertEqual(args.command, "submit-slurm")
+        self.assertEqual(args.config, "example.yaml")
+        self.assertIsNone(args.chunk_size)
+        self.assertIsNone(args.plan_dir)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -145,6 +145,22 @@ class TestWideCpuPlugin(BasePlugin):
         }
 
 
+class TestBarrierCpuPlugin(BasePlugin):
+    name = "test_barrier_cpu"
+    prefix = "barrier_cpu"
+    input_model = "atom_array"
+    execution_mode = "batched"
+    blocks_concurrent_pool_overlap = True
+    failure_policy = "continue"
+
+    def run(self, ctx):
+        yield {
+            "path": ctx.path,
+            "assembly_id": ctx.assembly_id,
+            "signal": 31,
+        }
+
+
 @unittest.skipIf(Config is None, "pipeline dependencies are not installed")
 class PluginExecutionModelTests(unittest.TestCase):
     def _write_complexes(self, input_dir: Path, *, count: int) -> None:
@@ -617,6 +633,73 @@ class PluginExecutionModelTests(unittest.TestCase):
                 {"wave": 1, "group_ids": [1], "worker_pools": ["gpu"], "cpu_threads": 1, "gpu_devices": 1},
             ],
         )
+
+    def test_plugin_execution_metadata_splits_barrier_cpu_and_gpu_groups_into_separate_waves(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            plugins=["test_barrier_cpu", "test_gpu_structure"],
+            cpu_workers=2,
+            gpu_workers=1,
+            gpu_devices=["0"],
+        )
+
+        with mock.patch.dict(
+            execute_module.PLUGIN_REGISTRY,
+            {
+                "test_barrier_cpu": TestBarrierCpuPlugin(),
+                "test_gpu_structure": TestGpuStructurePlugin(),
+            },
+            clear=True,
+        ):
+            metadata = execute_module.plugin_execution_metadata(cfg)
+
+        self.assertEqual(
+            metadata["groups"],
+            [
+                {
+                    "group_id": 0,
+                    "depends_on_groups": [],
+                    "wave": 0,
+                    "plugins": ["test_barrier_cpu"],
+                    "input_model": "atom_array",
+                    "execution_mode": "batched",
+                    "worker_pool": "cpu",
+                    "device_kind": "cpu",
+                    "max_workers": None,
+                    "cpu_threads_per_worker": 1,
+                    "gpu_devices_per_worker": 0,
+                    "blocks_concurrent_pool_overlap": True,
+                    "planned_workers": 2,
+                    "planned_cpu_threads": 2,
+                    "planned_gpu_devices": 0,
+                },
+                {
+                    "group_id": 1,
+                    "depends_on_groups": [],
+                    "wave": 1,
+                    "plugins": ["test_gpu_structure"],
+                    "input_model": "atom_array",
+                    "execution_mode": "batched",
+                    "worker_pool": "gpu",
+                    "device_kind": "cuda",
+                    "max_workers": None,
+                    "cpu_threads_per_worker": 1,
+                    "gpu_devices_per_worker": 1,
+                    "planned_workers": 1,
+                    "planned_cpu_threads": 1,
+                    "planned_gpu_devices": 1,
+                },
+            ],
+        )
+        self.assertEqual(
+            metadata["waves"],
+            [
+                {"wave": 0, "group_ids": [0], "worker_pools": ["cpu"], "cpu_threads": 2, "gpu_devices": 0},
+                {"wave": 1, "group_ids": [1], "worker_pools": ["gpu"], "cpu_threads": 1, "gpu_devices": 1},
+            ],
+        )
+        self.assertTrue(metadata["plugins"]["test_barrier_cpu"]["blocks_concurrent_pool_overlap"])
         self.assertEqual(
             metadata["scheduler_resources"]["submission_plan"],
             {
@@ -638,7 +721,7 @@ class PluginExecutionModelTests(unittest.TestCase):
                                 "cpu_threads": 2,
                                 "gpu_devices": 0,
                                 "group_ids": [0],
-                                "plugins": ["test_light_structure"],
+                                "plugins": ["test_barrier_cpu"],
                                 "recommended_job": {"cpu_threads": 2, "gpu_devices": 0},
                             }
                         ],
@@ -658,7 +741,7 @@ class PluginExecutionModelTests(unittest.TestCase):
                                 "cpu_threads": 1,
                                 "gpu_devices": 1,
                                 "group_ids": [1],
-                                "plugins": ["test_dependent_gpu"],
+                                "plugins": ["test_gpu_structure"],
                                 "recommended_job": {"cpu_threads": 1, "gpu_devices": 1},
                             }
                         ],

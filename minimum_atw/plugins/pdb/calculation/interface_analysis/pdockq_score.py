@@ -27,6 +27,8 @@ def _cb_ca_atoms(arr):
 
 def _residue_mean_bfactor(arr) -> dict[tuple[str, int], float]:
     """Mean B-factor per residue, keyed by (chain_id, res_id)."""
+    if arr is None or len(arr) == 0 or not hasattr(arr, "b_factor"):
+        return {}
     buckets: dict[tuple[str, int], list[float]] = {}
     for chain_id, res_id, b in zip(
         arr.chain_id.astype(str), arr.res_id.astype(int), arr.b_factor.astype(float)

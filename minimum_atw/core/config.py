@@ -17,6 +17,7 @@ DATASET_ANALYSIS_MODES = {"post_merge", "per_chunk", "both"}
 NUMBERING_SCHEMES = {"imgt", "chothia", "kabat", "aho"}
 CDR_DEFINITIONS = {"imgt", "north", "kabat"}
 CLASH_SCOPES = {"all", "inter_chain", "interface_only"}
+SLURM_MODES = {"auto", "mixed", "staged"}
 
 
 def _normalize_optional_str(value: Any) -> str | None:
@@ -36,6 +37,18 @@ def _normalize_unique_str_list(value: Any) -> list[str]:
         if normalized is None or normalized in seen:
             continue
         seen.add(normalized)
+        out.append(normalized)
+    return out
+
+
+def _normalize_str_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    out: list[str] = []
+    for item in value:
+        normalized = _normalize_optional_str(item)
+        if normalized is None:
+            continue
         out.append(normalized)
     return out
 
@@ -121,6 +134,67 @@ class RosettaTarget(BaseModel):
     right_chains: list[str] = Field(default_factory=list)
 
 
+class SlurmConfig(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    chunk_size: int | None = None
+    plan_dir: str | None = None
+    workdir: str | None = None
+    python_bin: str | None = None
+    mode: str = "auto"
+    array_limit: int | None = None
+    log_dir: str | None = None
+    sbatch_common_args: list[str] = Field(default_factory=list)
+    sbatch_mixed_args: list[str] = Field(default_factory=list)
+    sbatch_cpu_args: list[str] = Field(default_factory=list)
+    sbatch_gpu_args: list[str] = Field(default_factory=list)
+    sbatch_merge_args: list[str] = Field(default_factory=list)
+
+    @field_validator("chunk_size", "array_limit", mode="before")
+    @classmethod
+    def _normalize_optional_ints(cls, value: Any) -> int | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            value = value.strip()
+        return int(value)
+
+    @field_validator("mode", mode="before")
+    @classmethod
+    def _normalize_mode(cls, value: Any) -> str:
+        return (_normalize_optional_str(value) or "auto").lower()
+
+    @field_validator("plan_dir", "workdir", "python_bin", "log_dir", mode="before")
+    @classmethod
+    def _normalize_paths(cls, value: Any) -> str | None:
+        normalized = _normalize_optional_str(value)
+        if normalized is None:
+            return None
+        return str(Path(normalized).expanduser())
+
+    @field_validator(
+        "sbatch_common_args",
+        "sbatch_mixed_args",
+        "sbatch_cpu_args",
+        "sbatch_gpu_args",
+        "sbatch_merge_args",
+        mode="before",
+    )
+    @classmethod
+    def _normalize_sbatch_arg_lists(cls, value: Any) -> list[str]:
+        return _normalize_str_list(value)
+
+    @model_validator(mode="after")
+    def _validate_values(self) -> "SlurmConfig":
+        if self.mode not in SLURM_MODES:
+            raise ValueError(f"slurm.mode must be one of {sorted(SLURM_MODES)}")
+        if self.chunk_size is not None and self.chunk_size < 1:
+            raise ValueError("slurm.chunk_size must be at least 1")
+        if self.array_limit is not None and self.array_limit < 1:
+            raise ValueError("slurm.array_limit must be at least 1")
+        return self
+
+
 class Config(BaseModel):
     """Runtime configuration for prepare, plugin execution, and dataset analyses.
 
@@ -162,6 +236,7 @@ class Config(BaseModel):
     cpu_workers: int = 1
     gpu_workers: int = 0
     gpu_devices: list[str] = Field(default_factory=list)
+    slurm: SlurmConfig = Field(default_factory=SlurmConfig)
 
     superimpose_reference_path: str | None = None
     superimpose_on_chains: list[str] = Field(default_factory=list)
@@ -175,7 +250,9 @@ class Config(BaseModel):
     rosetta_executable: str | None = None
     rosetta_database: str | None = None
     rosetta_score_jd2_executable: str | None = None
+    rosetta_relax_executable: str | None = None
     rosetta_preprocess_with_score_jd2: bool = False
+    rosetta_preprocess: bool = True
     rosetta_interface_targets: list[RosettaTarget] = Field(default_factory=list)
     rosetta_pack_input: bool = True
     rosetta_pack_separated: bool = True
@@ -264,6 +341,7 @@ class Config(BaseModel):
         "rosetta_executable",
         "rosetta_database",
         "rosetta_score_jd2_executable",
+        "rosetta_relax_executable",
         mode="before",
     )
     @classmethod
@@ -382,13 +460,23 @@ class Config(BaseModel):
         if self.pdb_output_name == self.dataset_output_name:
             raise ValueError("pdb_output_name and dataset_output_name must be different")
         prepare_names = {item["name"] for item in self.manipulations}
-        if "superimpose_to_reference" in prepare_names:
+        if "superimpose_to_reference" in prepare_names or "rosetta_preprocess" in prepare_names:
             self.keep_prepared_structures = True
         if "superimpose_to_reference" in prepare_names and "superimpose_homology" in self.plugins:
             raise ValueError(
                 "superimpose_to_reference and superimpose_homology cannot be enabled together; "
                 "both write sup__* columns, so choose either prepare-stage coordinate rewriting "
                 "or plugin-stage superposition metrics"
+            )
+        if "rosetta_preprocess" in prepare_names and "superimpose_to_reference" in prepare_names:
+            raise ValueError(
+                "rosetta_preprocess and superimpose_to_reference cannot both be listed in manipulations; "
+                "rosetta_preprocess already performs superimposition as its final step"
+            )
+        if "rosetta_preprocess" in prepare_names and "superimpose_homology" in self.plugins:
+            raise ValueError(
+                "rosetta_preprocess and superimpose_homology cannot be enabled together; "
+                "rosetta_preprocess already performs superimposition as its final step"
             )
         return self
 
@@ -465,6 +553,7 @@ class Config(BaseModel):
             "cpu_workers",
             "gpu_workers",
             "gpu_devices",
+            "slurm",
             "pdb_output_name",
             "dataset_output_name",
         }

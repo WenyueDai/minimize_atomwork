@@ -142,10 +142,10 @@
   <text x="684" y="273" font-size="10" font-weight="bold" fill="#0369a1" text-anchor="middle">chunk_001</text>
 
   <rect x="566" y="278" width="236" height="22" fill="#dbeafe" stroke="#93c5fd" stroke-width="1" rx="2"/>
-  <text x="574" y="293" font-size="10" fill="#1e3a8a">prepare_outputs(chunk_cfg)</text>
+  <text x="574" y="293" font-size="10" fill="#1e3a8a">Core logic now in minimum_atw.core._prepare</text>
 
   <rect x="566" y="305" width="236" height="22" fill="#dcfce7" stroke="#86efac" stroke-width="1" rx="2"/>
-  <text x="574" y="320" font-size="10" fill="#14532d">run_plugins(chunk_cfg, …)</text>
+  <text x="574" y="320" font-size="10" fill="#14532d">Core orchestrator (minimum_atw.core._execute)</text>
 
   <rect x="566" y="332" width="236" height="22" fill="#ffedd5" stroke="#fed7aa" stroke-width="1" rx="2"/>
   <text x="574" y="347" font-size="10" fill="#9a3412">merge_outputs(chunk_cfg)</text>
@@ -263,7 +263,6 @@
   <text x="38" y="956" font-size="10" fill="#14532d">Crash during prepare?  Resume from last completed structure. Same for plugin execution.</text>
 
   <rect x="30" y="968" width="506" height="50" fill="#dcfce7" stroke="#86efac" stroke-width="1" rx="3"/>
-  <text x="38" y="983" font-size="10" fill="#14532d" font-weight="bold">Plugin wave scheduling</text>
   <text x="38" y="997" font-size="10" fill="#14532d">plan_plugin_waves() groups compatible plugins, assigns dependency-respecting waves.</text>
   <text x="38" y="1011" font-size="10" fill="#14532d">CPU and GPU groups in the same wave run concurrently. Each group writes to _plugins/&lt;name&gt;/pdb.parquet.</text>
 

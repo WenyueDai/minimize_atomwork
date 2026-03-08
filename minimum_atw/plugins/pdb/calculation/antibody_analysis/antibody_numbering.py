@@ -3,29 +3,29 @@ from __future__ import annotations
 from functools import lru_cache
 
 
+def _number_chain(sequence: str, scheme: str, cdr_definition: str | None):
+    try:
+        from abnumber import Chain
+    except ImportError as exc:
+        raise RuntimeError("abnumber is required for antibody CDR numbering") from exc
+    chain_kwargs: dict = {"scheme": scheme, "use_anarcii": True}
+    if cdr_definition is not None:
+        chain_kwargs["cdr_definition"] = cdr_definition
+    try:
+        return Chain(sequence, **chain_kwargs)
+    except Exception as exc:
+        raise RuntimeError(
+            f"abnumber failed to number sequence with scheme={scheme!r}, cdr_definition={cdr_definition!r}: {exc}"
+        ) from exc
+
+
 @lru_cache(maxsize=512)
 def _cached_cdr_sequences(
     sequence: str,
     scheme: str,
     cdr_definition: str | None,
 ) -> tuple[str, str, str]:
-    try:
-        from abnumber import Chain
-    except ImportError as exc:
-        raise RuntimeError("abnumber is required for antibody CDR numbering") from exc
-
-    chain_kwargs = {
-        "scheme": scheme,
-        "cdr_definition": cdr_definition,
-        "use_anarcii": True,
-    }
-    try:
-        numbered = Chain(sequence, **chain_kwargs)
-    except Exception as exc:
-        raise RuntimeError(
-            f"abnumber failed to number sequence with scheme={scheme!r}, cdr_definition={cdr_definition!r}: {exc}"
-        ) from exc
-
+    numbered = _number_chain(sequence, scheme, cdr_definition)
     return (
         str(getattr(numbered, "cdr1_seq", "") or ""),
         str(getattr(numbered, "cdr2_seq", "") or ""),
@@ -39,23 +39,7 @@ def _cached_cdr_region_labels(
     scheme: str,
     cdr_definition: str | None,
 ) -> tuple[str, ...]:
-    try:
-        from abnumber import Chain
-    except ImportError as exc:
-        raise RuntimeError("abnumber is required for antibody CDR numbering") from exc
-
-    chain_kwargs = {
-        "scheme": scheme,
-        "cdr_definition": cdr_definition,
-        "use_anarcii": True,
-    }
-    try:
-        numbered = Chain(sequence, **chain_kwargs)
-    except Exception as exc:
-        raise RuntimeError(
-            f"abnumber failed to number sequence with scheme={scheme!r}, cdr_definition={cdr_definition!r}: {exc}"
-        ) from exc
-
+    numbered = _number_chain(sequence, scheme, cdr_definition)
     labels: list[str] = []
     for pos, _aa in numbered:
         region = str(pos.get_region()).strip().lower()

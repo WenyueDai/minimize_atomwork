@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import BaseStructureManipulation
 from .center import CenterOnOriginManipulation
+from .rosetta_preprocess import RosettaPreprocessManipulation
 from .superimpose import SuperimposeToReferenceManipulation
 from ....core.registry import load_registry
 
@@ -10,6 +11,7 @@ def _builtin_structure_manipulations() -> dict[str, object]:
     return {
         "center_on_origin": CenterOnOriginManipulation(),
         "superimpose_to_reference": SuperimposeToReferenceManipulation(),
+        "rosetta_preprocess": RosettaPreprocessManipulation(),
     }
 
 
@@ -24,5 +26,6 @@ __all__ = [
     "BaseStructureManipulation",
     "CenterOnOriginManipulation",
     "PDB_MANIPULATION_REGISTRY",
+    "RosettaPreprocessManipulation",
     "SuperimposeToReferenceManipulation",
 ]

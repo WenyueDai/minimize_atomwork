@@ -27,7 +27,7 @@ python -m minimum_atw.cli run-chunked \
 
 ## Plan chunk configs for a scheduler
 
-Use `plan-chunks` to generate one config file per chunk, run them independently, then merge with `merge-planned-chunks`. If you are on Slurm, `submit-slurm` can now generate the chunk plan and submit the full mixed or staged CPU/GPU job graph for you.
+Use `plan-chunks` to generate one config file per chunk, run them independently, then merge with `merge-planned-chunks`. If you are on Slurm, the preferred path is now to put a small `slurm:` block in the YAML and run `submit-slurm --config ...`.
 
 **Step 1 — plan:**
 
@@ -51,13 +51,10 @@ Use the planner outputs like this:
 ```bash
 python -m minimum_atw.cli submit-slurm \
   --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
-  --chunk-size 10 \
-  --plan-dir /path/to/your/chunk_plan \
-  --mode auto \
   --dry-run
 ```
 
-Remove `--dry-run` to call `sbatch`. Use `--mode mixed` to force one mixed CPU+GPU chunk job per array task, or `--mode staged` to force separate CPU-node and GPU-node jobs driven by `resource_plan.submission_plan`.
+The command will read `slurm.chunk_size`, `slurm.plan_dir`, `slurm.mode`, and the grouped `sbatch_*` settings from the YAML. Remove `--dry-run` to call `sbatch`. Use `--mode mixed` or `--mode staged` only when you want to override the YAML or force a non-default submission style.
 If you use `submit-slurm`, it already handles the per-chunk run stage and the final `merge-planned-chunks` dependency chain for you.
 
 **Step 2 — run each chunk** (e.g. SLURM array job; see the scheduler pattern in [chunk_run/README.md](../chunk_run/README.md)):

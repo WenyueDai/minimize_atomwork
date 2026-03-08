@@ -161,57 +161,89 @@
   <text x="332" y="483" font-size="8.5" fill="white" text-anchor="middle">role</text>
   <text x="415" y="484" font-size="9.5" fill="#4c1d95">rolseq__sequence    [full amino-acid sequence string for the role]</text>
 
-  <!-- row: antibody_cdr_lengths -->
+  <!-- row: ablang2_score -->
   <rect x="10" y="492" width="1580" height="22" fill="#f5f3ff"/>
-  <text x="16"  y="506" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_lengths</text>
-  <text x="220" y="506" font-size="9.5" fill="#5b21b6" font-style="italic">abcdr</text>
+  <text x="16"  y="506" font-size="9.5" fill="#4c1d95" font-weight="bold">ablang2_score</text>
+  <text x="220" y="506" font-size="9.5" fill="#5b21b6" font-style="italic">ablang2</text>
   <rect x="314" y="495" width="36" height="13" rx="3" fill="#6d2e46"/>
   <text x="332" y="505" font-size="8.5" fill="white" text-anchor="middle">role</text>
-  <text x="415" y="506" font-size="9.5" fill="#4c1d95">abcdr__cdr1_length  ·  abcdr__cdr2_length  ·  abcdr__cdr3_length    [requires abnumber; skips non-antibody roles]</text>
+  <text x="415" y="506" font-size="9.5" fill="#4c1d95">ablang2__ll_mean  ·  ablang2__ll_chain_0  ·  ablang2__ll_chain_1  ·  ablang2__model  ·  ablang2__n_residues    [requires ablang2]</text>
 
-  <!-- row: antibody_cdr_sequences -->
+  <!-- row: esm_if1_score -->
   <rect x="10" y="514" width="1580" height="22" fill="white"/>
-  <text x="16"  y="528" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_sequences</text>
-  <text x="220" y="528" font-size="9.5" fill="#5b21b6" font-style="italic">abseq</text>
+  <text x="16"  y="528" font-size="9.5" fill="#4c1d95" font-weight="bold">esm_if1_score</text>
+  <text x="220" y="528" font-size="9.5" fill="#5b21b6" font-style="italic">esmif1</text>
   <rect x="314" y="517" width="36" height="13" rx="3" fill="#6d2e46"/>
   <text x="332" y="527" font-size="8.5" fill="white" text-anchor="middle">role</text>
-  <text x="415" y="528" font-size="9.5" fill="#4c1d95">abseq__cdr1_sequence  ·  abseq__cdr2_sequence  ·  abseq__cdr3_sequence    [full CDR loop sequences; scheme configurable]</text>
+  <text x="415" y="528" font-size="9.5" fill="#4c1d95">esmif1__ll_fullseq  ·  esmif1__ll_withcoord  ·  esmif1__n_residues    [requires torch, fair-esm]</text>
+
+  <!-- row: antibody_cdr_lengths -->
+  <rect x="10" y="536" width="1580" height="22" fill="#f5f3ff"/>
+  <text x="16"  y="550" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_lengths</text>
+  <text x="220" y="550" font-size="9.5" fill="#5b21b6" font-style="italic">abcdr</text>
+  <rect x="314" y="539" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="549" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="550" font-size="9.5" fill="#4c1d95">abcdr__cdr1_length  ·  abcdr__cdr2_length  ·  abcdr__cdr3_length    [requires abnumber; skips non-antibody roles]</text>
+
+  <!-- row: antibody_cdr_sequences -->
+  <rect x="10" y="558" width="1580" height="22" fill="white"/>
+  <text x="16"  y="572" font-size="9.5" fill="#4c1d95" font-weight="bold">antibody_cdr_sequences</text>
+  <text x="220" y="572" font-size="9.5" fill="#5b21b6" font-style="italic">abseq</text>
+  <rect x="314" y="561" width="36" height="13" rx="3" fill="#6d2e46"/>
+  <text x="332" y="571" font-size="8.5" fill="white" text-anchor="middle">role</text>
+  <text x="415" y="572" font-size="9.5" fill="#4c1d95">abseq__cdr1_sequence  ·  abseq__cdr2_sequence  ·  abseq__cdr3_sequence    [full CDR loop sequences; scheme configurable]</text>
 
   <!-- Subsection: interface grain -->
-  <rect x="10" y="540" width="1580" height="16" fill="#a5f3fc" rx="0"/>
-  <text x="16" y="552" font-size="9" font-weight="bold" fill="#134e4a">▸ grain = 'interface'  (one row per role-pair · identity keys: path, assembly_id, pair, role_left, role_right)</text>
+  <rect x="10" y="584" width="1580" height="16" fill="#a5f3fc" rx="0"/>
+  <text x="16" y="596" font-size="9" font-weight="bold" fill="#134e4a">▸ grain = 'interface'  (one row per role-pair · identity keys: path, assembly_id, pair, role_left, role_right)</text>
 
   <!-- row: interface_contacts -->
-  <rect x="10" y="556" width="1580" height="22" fill="#ecfeff"/>
-  <text x="16"  y="570" font-size="9.5" fill="#134e4a" font-weight="bold">interface_contacts</text>
-  <text x="220" y="570" font-size="9.5" fill="#155e75" font-style="italic">iface</text>
-  <rect x="310" y="559" width="52" height="13" rx="3" fill="#1d3557"/>
-  <text x="336" y="569" font-size="8.5" fill="white" text-anchor="middle">interface</text>
-  <text x="415" y="570" font-size="9.5" fill="#134e4a">iface__contact_distance  ·  iface__n_contact_atom_pairs  ·  iface__n_left_interface_residues  ·  iface__n_right_interface_residues  ·  iface__left_interface_residues  ·  iface__right_interface_residues  [+ per-CDR contact columns if antibody roles]</text>
-
-  <!-- row: interface_metrics -->
-  <rect x="10" y="578" width="1580" height="22" fill="white"/>
-  <text x="16"  y="592" font-size="9.5" fill="#134e4a" font-weight="bold">interface_metrics</text>
-  <text x="220" y="592" font-size="9.5" fill="#155e75" font-style="italic">ifm</text>
-  <rect x="310" y="581" width="52" height="13" rx="3" fill="#1d3557"/>
-  <text x="336" y="591" font-size="8.5" fill="white" text-anchor="middle">interface</text>
-  <text x="415" y="592" font-size="9.5" fill="#134e4a">ifm__contact_distance  ·  ifm__left_n_interface_residues  ·  ifm__right_n_interface_residues  ·  ifm__left_interface_residues  ·  ifm__right_interface_residues    [uses configurable cell_size for spatial binning]</text>
-
-  <!-- row: abepitope_score -->
   <rect x="10" y="600" width="1580" height="22" fill="#ecfeff"/>
-  <text x="16"  y="614" font-size="9.5" fill="#134e4a" font-weight="bold">abepitope_score</text>
-  <text x="220" y="614" font-size="9.5" fill="#155e75" font-style="italic">abepitope</text>
+  <text x="16"  y="614" font-size="9.5" fill="#134e4a" font-weight="bold">interface_contacts</text>
+  <text x="220" y="614" font-size="9.5" fill="#155e75" font-style="italic">iface</text>
   <rect x="310" y="603" width="52" height="13" rx="3" fill="#1d3557"/>
   <text x="336" y="613" font-size="8.5" fill="white" text-anchor="middle">interface</text>
-  <text x="415" y="614" font-size="9.5" fill="#134e4a">abepitope__score  ·  abepitope__n_epitope_residues  ·  (epitope residue detail columns)    [requires abEpiTope; skips if not installed; input_model configurable]</text>
+  <text x="415" y="614" font-size="9.5" fill="#134e4a">iface__contact_distance  ·  iface__n_contact_atom_pairs  ·  iface__n_left_interface_residues  ·  iface__n_right_interface_residues  ·  iface__left_interface_residues  ·  iface__right_interface_residues  [+ per-CDR contact columns if antibody roles]</text>
 
-  <!-- row: rosetta_interface_example -->
+  <!-- row: interface_metrics -->
   <rect x="10" y="622" width="1580" height="22" fill="white"/>
-  <text x="16"  y="636" font-size="9.5" fill="#134e4a" font-weight="bold">rosetta_interface_example</text>
-  <text x="220" y="636" font-size="9.5" fill="#155e75" font-style="italic">rosetta</text>
+  <text x="16"  y="636" font-size="9.5" fill="#134e4a" font-weight="bold">interface_metrics</text>
+  <text x="220" y="636" font-size="9.5" fill="#155e75" font-style="italic">ifm</text>
   <rect x="310" y="625" width="52" height="13" rx="3" fill="#1d3557"/>
   <text x="336" y="635" font-size="8.5" fill="white" text-anchor="middle">interface</text>
-  <text x="415" y="636" font-size="9.5" fill="#134e4a">rosetta__dG_separated  ·  rosetta__dSASA_int  ·  rosetta__hbonds_int  ·  (full Rosetta InterfaceAnalyzer metrics)    [requires Rosetta binary; available() returns False if missing]</text>
+  <text x="415" y="636" font-size="9.5" fill="#134e4a">ifm__contact_distance  ·  ifm__left_n_interface_residues  ·  ifm__right_n_interface_residues  ·  ifm__left_interface_residues  ·  ifm__right_interface_residues    [uses configurable cell_size for spatial binning]</text>
+
+  <!-- row: abepitope_score -->
+  <rect x="10" y="644" width="1580" height="22" fill="#ecfeff"/>
+  <text x="16"  y="658" font-size="9.5" fill="#134e4a" font-weight="bold">abepitope_score</text>
+  <text x="220" y="658" font-size="9.5" fill="#155e75" font-style="italic">abepitope</text>
+  <rect x="310" y="647" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="657" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="658" font-size="9.5" fill="#134e4a">abepitope__score  ·  abepitope__n_epitope_residues  ·  (epitope residue detail columns)    [requires abEpiTope; skips if not installed; input_model configurable]</text>
+
+  <!-- row: pdockq_score -->
+  <rect x="10" y="666" width="1580" height="22" fill="white"/>
+  <text x="16"  y="680" font-size="9.5" fill="#134e4a" font-weight="bold">pdockq_score</text>
+  <text x="220" y="680" font-size="9.5" fill="#155e75" font-style="italic">pdockq</text>
+  <rect x="310" y="669" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="679" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="680" font-size="9.5" fill="#134e4a">pdockq__pdockq  ·  pdockq__n_contacts  ·  pdockq__avg_interface_plddt    [reliable if > 0.23; uses B-factor for pLDDT]</text>
+
+  <!-- row: dockq_score -->
+  <rect x="10" y="688" width="1580" height="22" fill="#ecfeff"/>
+  <text x="16"  y="702" font-size="9.5" fill="#134e4a" font-weight="bold">dockq_score</text>
+  <text x="220" y="702" font-size="9.5" fill="#155e75" font-style="italic">dockq</text>
+  <rect x="310" y="691" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="701" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="702" font-size="9.5" fill="#134e4a">dockq__dockq  ·  dockq__fnat  ·  dockq__irms  ·  dockq__lrms    [requires reference_path matching roles; native vs model]</text>
+
+  <!-- row: rosetta_interface_example -->
+  <rect x="10" y="710" width="1580" height="22" fill="white"/>
+  <text x="16"  y="724" font-size="9.5" fill="#134e4a" font-weight="bold">rosetta_interface_example</text>
+  <text x="220" y="724" font-size="9.5" fill="#155e75" font-style="italic">rosetta</text>
+  <rect x="310" y="713" width="52" height="13" rx="3" fill="#1d3557"/>
+  <text x="336" y="723" font-size="8.5" fill="white" text-anchor="middle">interface</text>
+  <text x="415" y="724" font-size="9.5" fill="#134e4a">rosetta__dG_separated  ·  rosetta__dSASA_int  ·  rosetta__hbonds_int  ·  (full Rosetta InterfaceAnalyzer metrics)    [requires Rosetta binary; available() returns False if missing]</text>
 
   <!-- ═══════════════════════════════════════════════ -->
   <!-- SECTION 3: dataset_calculation  (dataset.parquet / pdb.parquet) -->

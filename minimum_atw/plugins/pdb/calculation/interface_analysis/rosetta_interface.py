@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import os
-import shutil
 import string
 import subprocess
 import tempfile
@@ -12,132 +10,14 @@ import numpy as np
 from biotite.structure.io import save_structure
 
 from ....base import Context, InterfacePlugin
+from ...rosetta_common import (
+    resolve_database as _resolve_database,
+    resolve_executable as _resolve_executable,
+    resolve_score_jd2_executable as _resolve_score_jd2_executable,
+)
 
 
 ROSETTA_CHAIN_IDS = tuple(string.ascii_uppercase + string.ascii_lowercase + string.digits)
-
-
-def _existing_path(path: str | os.PathLike[str] | None) -> str | None:
-    if not path:
-        return None
-    resolved = Path(path)
-    if resolved.exists():
-        return str(resolved)
-    return None
-
-
-def _candidate_bin_dirs(config: Any | None = None, executable: str | None = None) -> list[Path]:
-    dirs: list[Path] = []
-
-    configured_executable = _existing_path(getattr(config, "rosetta_executable", None))
-    if configured_executable:
-        dirs.append(Path(configured_executable).resolve().parent)
-    if executable:
-        dirs.append(Path(executable).resolve().parent)
-
-    env_bin = os.environ.get("ROSETTA_BIN") or os.environ.get("ROSETTA3_BIN")
-    if env_bin:
-        dirs.append(Path(env_bin))
-
-    unique: list[Path] = []
-    seen: set[Path] = set()
-    for directory in dirs:
-        resolved = directory.resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        unique.append(resolved)
-    return unique
-
-
-def _resolve_executable(config: Any | None = None) -> str | None:
-    # Search order:
-    # 1. explicit config path
-    # 2. explicit env var
-    # 3. Rosetta bin directories from config/env
-    # 4. PATH lookup for common executable names
-    configured = _existing_path(getattr(config, "rosetta_executable", None))
-    if configured:
-        return configured
-
-    env_explicit = _existing_path(os.environ.get("ROSETTA_INTERFACE_ANALYZER"))
-    if env_explicit:
-        return env_explicit
-
-    for bin_path in _candidate_bin_dirs(config):
-        candidates = (
-            bin_path / "InterfaceAnalyzer.static.linuxgccrelease",
-            bin_path / "InterfaceAnalyzer.linuxgccrelease",
-            bin_path / "InterfaceAnalyzer.default.linuxgccrelease",
-        )
-        for candidate in candidates:
-            if candidate.exists():
-                return str(candidate)
-
-    for name in (
-        "InterfaceAnalyzer.static.linuxgccrelease",
-        "InterfaceAnalyzer.linuxgccrelease",
-        "InterfaceAnalyzer.default.linuxgccrelease",
-    ):
-        resolved = shutil.which(name)
-        if resolved:
-            return resolved
-    return None
-
-
-def _resolve_score_jd2_executable(config: Any | None = None) -> str | None:
-    configured = _existing_path(getattr(config, "rosetta_score_jd2_executable", None))
-    if configured:
-        return configured
-
-    env_explicit = _existing_path(os.environ.get("ROSETTA_SCORE_JD2"))
-    if env_explicit:
-        return env_explicit
-
-    interface_executable = _resolve_executable(config)
-    for bin_path in _candidate_bin_dirs(config, executable=interface_executable):
-        candidates = (
-            bin_path / "score_jd2.static.linuxgccrelease",
-            bin_path / "score_jd2.linuxgccrelease",
-            bin_path / "score_jd2.default.linuxgccrelease",
-        )
-        for candidate in candidates:
-            if candidate.exists():
-                return str(candidate)
-
-    for name in (
-        "score_jd2.static.linuxgccrelease",
-        "score_jd2.linuxgccrelease",
-        "score_jd2.default.linuxgccrelease",
-    ):
-        resolved = shutil.which(name)
-        if resolved:
-            return resolved
-    return None
-
-
-def _resolve_database(executable: str | None, config: Any | None = None) -> str | None:
-    # Rosetta needs its database in addition to the executable. Try an explicit
-    # env var first, then infer a standard install layout from the binary path.
-    configured = _existing_path(getattr(config, "rosetta_database", None))
-    if configured:
-        return configured
-
-    env_db = _existing_path(os.environ.get("ROSETTA_DATABASE"))
-    if env_db:
-        return env_db
-    if not executable:
-        return None
-
-    exe_path = Path(executable).resolve()
-    candidates: list[Path] = []
-    for parent_index in (2, 3):
-        if len(exe_path.parents) > parent_index:
-            candidates.append(exe_path.parents[parent_index] / "database")
-    for candidate in candidates:
-        if candidate.exists():
-            return str(candidate)
-    return None
 
 
 def _bool_string(value: bool) -> str:

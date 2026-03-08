@@ -9,6 +9,12 @@ Use the same YAML for both CPU and GPU work. The planner decides whether the run
 
 The command is `submit-slurm`.
 
+Recommended usage:
+
+1. put `slurm.chunk_size` and your cluster-specific `sbatch_*` args into the YAML
+2. run `python -m minimum_atw.cli submit-slurm --config your.yaml`
+3. let the planner decide whether the job graph should stay mixed or split into CPU and GPU stages
+
 ## What `submit-slurm` does
 
 `submit-slurm` can either:
@@ -24,6 +30,7 @@ It writes these files under `plan_dir`:
 - `slurm_submission.json`: submitted job IDs, dependencies, and script paths
 
 Use `--dry-run` first if you want to inspect the generated scripts without calling `sbatch`.
+If `slurm.plan_dir` is omitted, `submit-slurm` derives `plan_dir` as `<out_dir>_plan`.
 
 ## 1. One mixed chunk job
 
@@ -32,28 +39,36 @@ Use this when:
 - you want the simplest operational path
 - or `chunk_plan.json -> resource_plan.submission_plan.recommended_mode` is `single_job`
 
-Example:
+Example YAML block:
+
+```yaml
+slurm:
+  chunk_size: 50
+  # plan_dir: "/path/to/your/out_antibody_antigen_chunked_plan"
+  sbatch_common_args:
+    - "--account=my_lab"
+  sbatch_mixed_args:
+    - "--partition=gpu"
+    - "--mem=48G"
+    - "--time=08:00:00"
+  sbatch_merge_args:
+    - "--partition=cpu"
+    - "--mem=32G"
+    - "--time=02:00:00"
+```
+
+Command:
 
 ```bash
 PYTHON=/home/eva/miniconda3/envs/atw_pp/bin/python
 WORKDIR=/home/eva/minimum_atomworks
 CONFIG=$WORKDIR/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml
-PLAN_DIR=/path/to/your/chunk_plan
 
 cd "$WORKDIR"
 
 $PYTHON -m minimum_atw.cli submit-slurm \
   --config "$CONFIG" \
-  --chunk-size 50 \
-  --plan-dir "$PLAN_DIR" \
-  --mode mixed \
-  --sbatch-common-arg=--account=my_lab \
-  --sbatch-mixed-arg=--partition=gpu \
-  --sbatch-mixed-arg=--mem=48G \
-  --sbatch-mixed-arg=--time=08:00:00 \
-  --sbatch-merge-arg=--partition=cpu \
-  --sbatch-merge-arg=--mem=32G \
-  --sbatch-merge-arg=--time=02:00:00
+  --dry-run
 ```
 
 This submits:
@@ -68,31 +83,41 @@ Use this when:
 - `recommended_mode` is `split_by_stage`
 - you do not want GPU nodes held during CPU-only phases
 
-Example:
+Example YAML block:
+
+```yaml
+slurm:
+  chunk_size: 50
+  # plan_dir: "/path/to/your/out_antibody_antigen_chunked_plan"
+  mode: "staged"
+  sbatch_common_args:
+    - "--account=my_lab"
+  sbatch_cpu_args:
+    - "--partition=cpu"
+    - "--mem=32G"
+    - "--time=04:00:00"
+  sbatch_gpu_args:
+    - "--partition=gpu"
+    - "--mem=32G"
+    - "--time=04:00:00"
+  sbatch_merge_args:
+    - "--partition=cpu"
+    - "--mem=32G"
+    - "--time=02:00:00"
+```
+
+Command:
 
 ```bash
 PYTHON=/home/eva/miniconda3/envs/atw_pp/bin/python
 WORKDIR=/home/eva/minimum_atomworks
 CONFIG=$WORKDIR/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml
-PLAN_DIR=/path/to/your/chunk_plan
 
 cd "$WORKDIR"
 
 $PYTHON -m minimum_atw.cli submit-slurm \
   --config "$CONFIG" \
-  --chunk-size 50 \
-  --plan-dir "$PLAN_DIR" \
-  --mode staged \
-  --sbatch-common-arg=--account=my_lab \
-  --sbatch-cpu-arg=--partition=cpu \
-  --sbatch-cpu-arg=--mem=32G \
-  --sbatch-cpu-arg=--time=04:00:00 \
-  --sbatch-gpu-arg=--partition=gpu \
-  --sbatch-gpu-arg=--mem=32G \
-  --sbatch-gpu-arg=--time=04:00:00 \
-  --sbatch-merge-arg=--partition=cpu \
-  --sbatch-merge-arg=--mem=32G \
-  --sbatch-merge-arg=--time=02:00:00
+  --dry-run
 ```
 
 This submits, in order:
@@ -114,13 +139,7 @@ Example:
 ```bash
 $PYTHON -m minimum_atw.cli submit-slurm \
   --config "$CONFIG" \
-  --chunk-size 50 \
-  --plan-dir "$PLAN_DIR" \
-  --mode auto \
-  --sbatch-common-arg=--account=my_lab \
-  --sbatch-cpu-arg=--partition=cpu \
-  --sbatch-gpu-arg=--partition=gpu \
-  --sbatch-merge-arg=--partition=cpu
+  --dry-run
 ```
 
 In `auto` mode:
@@ -130,17 +149,13 @@ In `auto` mode:
 
 ## 4. Reuse an existing plan
 
-If you already ran `plan-chunks`, reuse it:
+If you already ran `plan-chunks`, or already called `submit-slurm --dry-run`, reuse that plan directory:
 
 ```bash
 $PYTHON -m minimum_atw.cli submit-slurm \
   --plan-dir "$PLAN_DIR" \
   --reuse-plan \
-  --mode auto \
-  --sbatch-common-arg=--account=my_lab \
-  --sbatch-cpu-arg=--partition=cpu \
-  --sbatch-gpu-arg=--partition=gpu \
-  --sbatch-merge-arg=--partition=cpu
+  --dry-run
 ```
 
 ## 5. Dry-run first
@@ -150,9 +165,6 @@ Use this to generate the scripts and dependency graph without submitting anythin
 ```bash
 $PYTHON -m minimum_atw.cli submit-slurm \
   --config "$CONFIG" \
-  --chunk-size 50 \
-  --plan-dir "$PLAN_DIR" \
-  --mode auto \
   --dry-run
 ```
 
@@ -164,6 +176,7 @@ Then inspect:
 ## Notes
 
 - Slurm still decides placement. `minimum_atw` does not allocate resources beyond what your `sbatch` arguments request.
+- CLI flags such as `--mode`, `--chunk-size`, `--plan-dir`, and `--sbatch-*` remain available as expert overrides, but they are no longer required for the normal workflow.
 - GPU stages still need CPU threads. The planner already records both.
 - The staged submission graph follows `chunk_plan.json -> resource_plan.submission_plan.stages` exactly.
 - Manual Slurm submission is still possible if you want to customize the job graph beyond what the built-in backend does.

@@ -1,0 +1,171 @@
+# Local ready-to-run antibody-antigen example using the bundled example data.
+# Full non-Rosetta stack: all CPU and GPU plugins enabled.
+#
+# One-line run on a personal workstation with one GPU:
+#   /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+#     --config /home/eva/minimum_atomworks/minimum_atw/examples/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml
+#
+# What this enables:
+#   - real structures from minimum_atw/examples/data/antibody_antigen
+#   - bundled-data role mapping: antigen=A-E, vh=F, vl=G
+#   - the full non-Rosetta mixed CPU/GPU calculation stack
+#   - ESM-IF1 and AbLang2 scored on antibody roles only (on_roles)
+#   - plugin-stage superposition (superimpose_homology) for DockQ + RMSD metrics
+#
+# Intentional omissions:
+#   - rosetta_interface_example is off (Rosetta binaries not required)
+#   - superimpose_to_reference is off: it conflicts with superimpose_homology;
+#     this config uses plugin-stage superposition to include DockQ together
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "/home/eva/minimum_atomworks/minimum_atw/examples/data/antibody_antigen"
+out_dir: "/tmp/minimum_atw_realdata_all_non_rosetta_v5"
+assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A", "B", "C", "D", "E"]
+  vh: ["F"]
+  vl: ["G"]
+  antibody: ["F", "G"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+  # - name: "superimpose_to_reference"   # conflicts with superimpose_homology; choose one path
+  #   grain: "pdb"
+
+clash_distance: 2.0
+clash_scope: "all"             # all | inter_chain | interface_only
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  # — structure grain —
+  - "identity"
+  - "superimpose_homology"
+
+  # — chain grain —
+  - "chain_stats"
+
+  # — role grain —
+  - "role_sequences"
+  - "role_stats"
+  - "antibody_cdr_lengths"
+  - "antibody_cdr_sequences"
+  - "esm_if1_score"            # GPU-preferred; requires torch and fair-esm
+  - "ablang2_score"            # GPU-preferred; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "abepitope_score"          # GPU-preferred; requires abepitope package
+  - "pdockq_score"
+  - "dockq_score"
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
+
+contact_distance: 5.0          # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
+abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+plugin_params:
+  superimpose_homology:
+    reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+    on_chains: ["A", "B", "C", "D", "E"]
+    persist_transformed_structures: true
+    # anchor_atoms: "CA"         # CA | backbone (default: CA)
+
+  # superimpose_to_reference:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A", "B", "C", "D", "E"]
+  #   # anchor_atoms: "CA"
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
+
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  dockq_score:
+    reference_path: "/home/eva/minimum_atomworks/minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+    receptor_role: "antigen"
+    contact_distance: 5.0       # Å cutoff for Fnat contacts (default: 5.0)
+
+  abepitope_score:
+    device: "auto"              # auto | cpu | cuda | 0 (default: auto)
+
+  ablang2_score:
+    device: "auto"              # auto | cpu | cuda (default: auto)
+
+  esm_if1_score:
+    device: "auto"              # auto | cpu | cuda (default: auto)
+    on_roles: ["vh", "vl", "antibody"]  # restrict scoring to specific roles; [] or omit = all roles
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vh", "vl"]
+numbering_scheme: "imgt"       # imgt | chothia | kabat | aho
+cdr_definition: "imgt"         # imgt | north | kabat
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  - "cdr_entropy"
+dataset_analysis_mode: "post_merge"   # post_merge | per_chunk | both
+
+dataset_analysis_params:
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: false
+
+dataset_annotations:
+  dataset_id: "realdata_all_non_rosetta"
+  dataset_name: "realdata_all_non_rosetta"
+  project: "atomworks_example"
+  modality: "antibody_antigen"
+  profile: "all_non_rosetta"
+# reference_dataset_dir: "/path/to/reference_dataset_out_dir"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: true
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25      # resume prepare/plugin runs after interruptions (default: 100)
+cpu_workers: 1
+gpu_workers: 1
+gpu_devices: ["0"]
+# slurm:
+#   chunk_size: 50             # minimum needed for `submit-slurm --config <this_file>`

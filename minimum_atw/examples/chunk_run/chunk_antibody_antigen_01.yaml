@@ -45,6 +45,9 @@ manipulations:
     grain: "pdb"
   - name: "superimpose_to_reference"
     grain: "pdb"
+  # Alternative: Rosetta score/repack/relax then superimpose (choose one or the other).
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
 
 # clash_distance: 2.0
 # clash_scope: "all"
@@ -84,11 +87,22 @@ plugin_params:
     reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
     # anchor_atoms: "CA"          # CA | backbone (default: CA)
+  # rosetta_preprocess:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+  #   repack: true                  # sidechain-only optimisation (backbone fixed)
+  #   relax: false                  # full fast-relax including backbone (expensive)
+  # anchor_atoms: "CA"              # CA | backbone (default: CA)
+
 
   # superimpose_homology:
   #   reference_path: "/path/to/your/reference.pdb"
   #   on_chains: ["A"]              # anchor chains for RMSD alignment
+  #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
 
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
   # pdockq_score:
   #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
 
@@ -101,10 +115,12 @@ plugin_params:
   #   device: auto               # auto | cpu | cuda | 0 (default: auto)
 
   # ablang2_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
   # esm_if1_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vh", "vl"]
@@ -115,6 +131,8 @@ cdr_definition: "imgt"     # imgt | north | kabat
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
 # rosetta_database: "/path/to/rosetta/database"
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
 # rosetta_preprocess_with_score_jd2: false
 # rosetta_interface_targets:
 #   - pair: ["antibody", "antigen"]
@@ -144,7 +162,7 @@ keep_intermediate_outputs: false
 keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25
-# cpu_workers: 4            # per-chunk CPU pool for geometry/QC/cluster-friendly work
-# gpu_workers: 1            # per-chunk GPU pool for abepitope_score / ablang2_score / esm_if1_score
-# gpu_devices: ["0"]        # visible GPU IDs for scheduler-aware device assignment
-# run_metadata.json will then include both single_job and submission_plan hints.
+# cpu_workers: 4            # optional override for per-chunk CPU parallelism
+# gpu_workers: 1            # optional override for GPU-capable plugins
+# gpu_devices: ["0"]        # optional visible GPU IDs for one chunk job
+# run_metadata.json will still record the inferred mixed-job and staged-job plans.

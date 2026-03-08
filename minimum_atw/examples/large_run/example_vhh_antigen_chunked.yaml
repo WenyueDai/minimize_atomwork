@@ -8,9 +8,6 @@
 # One-command Slurm submission:
 #   python -m minimum_atw.cli submit-slurm \
 #     --config minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml \
-#     --chunk-size 50 \
-#     --plan-dir /path/to/your/chunk_plan \
-#     --mode auto \
 #     --dry-run
 #
 # Offline plan -> scheduler -> merge:
@@ -54,6 +51,9 @@ manipulations:
     grain: "pdb"
   - name: "superimpose_to_reference"
     grain: "pdb"
+  # Alternative: Rosetta score/repack/relax then superimpose (choose one or the other).
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
 
 # clash_distance: 2.0
 # clash_scope: "all"
@@ -93,11 +93,22 @@ plugin_params:
     reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
     # anchor_atoms: "CA"          # CA | backbone (default: CA)
+  # rosetta_preprocess:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+  #   repack: true                  # sidechain-only optimisation (backbone fixed)
+  #   relax: false                  # full fast-relax including backbone (expensive)
+  # anchor_atoms: "CA"              # CA | backbone (default: CA)
+
 
   # superimpose_homology:
   #   reference_path: "/path/to/your/reference.pdb"
   #   on_chains: ["A"]              # anchor chains for RMSD alignment
+  #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
 
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
   # pdockq_score:
   #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
 
@@ -110,10 +121,12 @@ plugin_params:
   #   device: auto               # auto | cpu | cuda | 0 (default: auto)
 
   # ablang2_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
   # esm_if1_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vhh"]
@@ -124,6 +137,8 @@ cdr_definition: "imgt"     # imgt | north | kabat
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
 # rosetta_database: "/path/to/rosetta/database"
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
 # rosetta_preprocess_with_score_jd2: false
 # rosetta_interface_targets:
 #   - pair: ["vhh", "antigen"]
@@ -159,7 +174,29 @@ keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25
 # chunk_cpu_capacity: 32     # node-level CPU budget for run-chunked / plan-chunks
-# cpu_workers: 4             # per-chunk CPU plugin pool
-# gpu_workers: 1             # per-chunk GPU plugin pool for abepitope_score / ablang2_score / esm_if1_score
-# gpu_devices: ["0"]         # visible GPU IDs for one chunk job
-# chunk_plan.json will then include both recommended_chunk_job and submission_plan hints.
+# cpu_workers: 4             # optional override for per-chunk CPU parallelism
+# gpu_workers: 1             # optional override when GPU-capable plugins are enabled
+# gpu_devices: ["0"]         # optional visible GPU IDs for one chunk job
+# chunk_plan.json will still record the inferred mixed-job and staged-job plans.
+
+# ── Slurm submission defaults ──────────────────────────────────────────────────
+slurm:
+  chunk_size: 50
+  # plan_dir: "/path/to/your/out_vhh_antigen_chunked_plan"
+  # mode: "auto"             # auto | mixed | staged
+  # array_limit: 8
+  # log_dir: "/path/to/your/slurm_logs"
+  # sbatch_common_args:
+  #   - "--account=my_lab"
+  # sbatch_cpu_args:
+  #   - "--partition=cpu"
+  #   - "--mem=32G"
+  #   - "--time=04:00:00"
+  # sbatch_gpu_args:
+  #   - "--partition=gpu"
+  #   - "--mem=32G"
+  #   - "--time=04:00:00"
+  # sbatch_merge_args:
+  #   - "--partition=cpu"
+  #   - "--mem=32G"
+  #   - "--time=02:00:00"

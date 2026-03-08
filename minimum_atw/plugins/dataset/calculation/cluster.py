@@ -65,7 +65,9 @@ def _job_column_name(value: str) -> str:
 
 
 def _parse_residue_tokens(value: str) -> list[tuple[str, int]]:
-    tokens = [token.strip() for token in str(value or "").split(";") if token.strip()]
+    if _is_missing_scalar(value):
+        return []
+    tokens = [token.strip() for token in str(value).split(";") if token.strip()]
     out: list[tuple[str, int]] = []
     for token in tokens:
         parts = token.split(":")
@@ -151,7 +153,9 @@ def _medoid_index(distance_matrix: np.ndarray, members: list[int]) -> int:
 
 
 def _resolve_load_path(value: object, *, out_dir: Path) -> str | None:
-    normalized = str(value or "").strip()
+    if _is_missing_scalar(value):
+        return None
+    normalized = str(value).strip()
     if not normalized:
         return None
     candidate = Path(normalized)
@@ -162,6 +166,28 @@ def _resolve_load_path(value: object, *, out_dir: Path) -> str | None:
     if not candidate.exists():
         return None
     return str(candidate)
+
+
+def _is_missing_scalar(value: object) -> bool:
+    try:
+        missing = pd.isna(value)
+    except Exception:
+        return False
+    return isinstance(missing, (bool, np.bool_)) and bool(missing)
+
+
+def _row_str(row: object, column: str) -> str:
+    value = getattr(row, column, "")
+    if _is_missing_scalar(value):
+        return ""
+    return str(value or "")
+
+
+def _row_bool(row: object, column: str) -> bool:
+    value = getattr(row, column, False)
+    if _is_missing_scalar(value):
+        return False
+    return bool(value)
 
 
 def _prepared_path_map(out_dir: Path, structures: pd.DataFrame | None = None) -> dict[str, str]:
@@ -197,7 +223,7 @@ def _superimposed_path_map(out_dir: Path, structures: pd.DataFrame | None = None
     has_prepare_superimpose = "sup__coordinates_applied" in structures.columns
     has_prepared_path = "prepared__path" in structures.columns
     for row in structures.itertuples(index=False):
-        source_path = str(getattr(row, "path", "") or "")
+        source_path = _row_str(row, "path")
         if not source_path:
             continue
         if has_transformed:
@@ -207,7 +233,7 @@ def _superimposed_path_map(out_dir: Path, structures: pd.DataFrame | None = None
                 continue
         if has_prepare_superimpose and has_prepared_path:
             prepared = _resolve_load_path(getattr(row, "prepared__path", ""), out_dir=out_dir)
-            if prepared and bool(getattr(row, "sup__coordinates_applied", False)):
+            if prepared and _row_bool(row, "sup__coordinates_applied"):
                 out[source_path] = prepared
     return out
 
@@ -434,10 +460,10 @@ class ClusterPlugin(BaseDatasetPlugin):
 
             records_by_group: dict[str, list[_PointCloudRecord]] = {}
             for row in job_df.itertuples(index=False):
-                path = str(getattr(row, "path", "") or "")
-                assembly_id = str(getattr(row, "assembly_id", "") or "")
-                pair = str(getattr(row, "pair", "") or "")
-                residue_tokens = str(getattr(row, residue_column, "") or "")
+                path = _row_str(row, "path")
+                assembly_id = _row_str(row, "assembly_id")
+                pair = _row_str(row, "pair")
+                residue_tokens = _row_str(row, residue_column)
                 residues = residue_cache.setdefault(residue_tokens, _parse_residue_tokens(residue_tokens))
                 if job.mode == "superimposed_interface_ca":
                     load_path = superimposed_map.get(path)
@@ -466,8 +492,8 @@ class ClusterPlugin(BaseDatasetPlugin):
                             "pair": pair,
                             "path": path,
                             "assembly_id": assembly_id,
-                            "role_left": str(getattr(row, "role_left", "") or ""),
-                            "role_right": str(getattr(row, "role_right", "") or ""),
+                            "role_left": _row_str(row, "role_left"),
+                            "role_right": _row_str(row, "role_right"),
                             "interface_side": job.interface_side,
                             "n_points": int(len(point_cloud)),
                         },

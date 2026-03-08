@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import shlex
 import subprocess
+import sys
 from typing import Any
 
 from ..core.config import Config
@@ -14,6 +15,29 @@ SLURM_SCRIPT_DIRNAME = "slurm_scripts"
 SLURM_LOG_DIRNAME = "slurm_logs"
 SLURM_SUBMISSION_NAME = "slurm_submission.json"
 SLURM_MANIFEST_NAME = "chunk_config_manifest.txt"
+
+
+def _slurm_cfg(source_cfg: Config) -> Any:
+    return getattr(source_cfg, "slurm", None)
+
+
+def _resolve_scalar(override: Any, configured: Any, default: Any) -> Any:
+    if override is not None:
+        return override
+    if configured is not None:
+        return configured
+    return default
+
+
+def _resolve_list(override: list[str] | None, configured: list[str] | None) -> list[str]:
+    if override is not None:
+        return list(override)
+    return list(configured or [])
+
+
+def _default_plan_dir(source_cfg: Config) -> Path:
+    out_dir = Path(source_cfg.out_dir).resolve()
+    return out_dir.parent / f"{out_dir.name}_plan"
 
 
 def _read_chunk_plan(plan_dir: Path) -> dict[str, Any]:
@@ -240,9 +264,9 @@ def _resolved_mode(requested_mode: str, submission_plan: dict[str, Any]) -> str:
 def submit_slurm_plan(
     plan_dir: str | Path,
     *,
-    workdir: str | Path,
-    python_bin: str | Path,
-    mode: str = "auto",
+    workdir: str | Path | None = None,
+    python_bin: str | Path | None = None,
+    mode: str | None = None,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     array_limit: int | None = None,
@@ -260,22 +284,30 @@ def submit_slurm_plan(
         raise ValueError(f"Chunk plan contains no chunks: {resolved_plan_dir / CHUNK_PLAN_NAME}")
 
     source_cfg = Config(**dict(plan["source_config"]))
+    slurm_cfg = _slurm_cfg(source_cfg)
     resource_plan = dict(plan.get("resource_plan") or {})
     submission_plan = dict(resource_plan.get("submission_plan") or {})
-    resolved_mode = _resolved_mode(mode, submission_plan)
+    requested_mode = str(_resolve_scalar(mode, getattr(slurm_cfg, "mode", None), "auto"))
+    resolved_mode = _resolved_mode(requested_mode, submission_plan)
 
-    resolved_workdir = Path(workdir).resolve()
-    resolved_python = Path(python_bin).resolve()
+    resolved_workdir = Path(_resolve_scalar(workdir, getattr(slurm_cfg, "workdir", None), Path.cwd().resolve())).resolve()
+    resolved_python = Path(_resolve_scalar(python_bin, getattr(slurm_cfg, "python_bin", None), sys.executable)).resolve()
     manifest_path = _write_chunk_manifest(resolved_plan_dir, plan)
     script_dir = _script_dir(resolved_plan_dir)
-    resolved_log_dir = _log_dir(resolved_plan_dir, log_dir)
-    array_spec = _array_spec(len(chunks), array_limit)
+    resolved_log_dir = _log_dir(
+        resolved_plan_dir,
+        _resolve_scalar(log_dir, getattr(slurm_cfg, "log_dir", None), None),
+    )
+    array_spec = _array_spec(
+        len(chunks),
+        _resolve_scalar(array_limit, getattr(slurm_cfg, "array_limit", None), None),
+    )
 
-    common_args = list(sbatch_common_args or [])
-    mixed_args = list(sbatch_mixed_args or [])
-    cpu_args = list(sbatch_cpu_args or [])
-    gpu_args = list(sbatch_gpu_args or [])
-    merge_args = list(sbatch_merge_args or [])
+    common_args = _resolve_list(sbatch_common_args, getattr(slurm_cfg, "sbatch_common_args", None))
+    mixed_args = _resolve_list(sbatch_mixed_args, getattr(slurm_cfg, "sbatch_mixed_args", None))
+    cpu_args = _resolve_list(sbatch_cpu_args, getattr(slurm_cfg, "sbatch_cpu_args", None))
+    gpu_args = _resolve_list(sbatch_gpu_args, getattr(slurm_cfg, "sbatch_gpu_args", None))
+    merge_args = _resolve_list(sbatch_merge_args, getattr(slurm_cfg, "sbatch_merge_args", None))
 
     cpu_job_args = list(cpu_args)
     submission_jobs: list[dict[str, Any]] = []
@@ -484,7 +516,7 @@ def submit_slurm_plan(
         "manifest_path": str(manifest_path.resolve()),
         "script_dir": str(script_dir.resolve()),
         "log_dir": str(resolved_log_dir.resolve()),
-        "mode_requested": str(mode),
+        "mode_requested": requested_mode,
         "mode_submitted": resolved_mode,
         "dry_run": bool(dry_run),
         "n_chunks": len(chunks),
@@ -498,11 +530,11 @@ def submit_slurm_chunked_pipeline(
     cfg: Config | None,
     *,
     chunk_size: int | None,
-    plan_dir: str | Path,
+    plan_dir: str | Path | None = None,
     reuse_plan: bool = False,
-    workdir: str | Path,
-    python_bin: str | Path,
-    mode: str = "auto",
+    workdir: str | Path | None = None,
+    python_bin: str | Path | None = None,
+    mode: str | None = None,
     out_dir: str | Path | None = None,
     dry_run: bool = False,
     array_limit: int | None = None,
@@ -513,16 +545,26 @@ def submit_slurm_chunked_pipeline(
     sbatch_gpu_args: list[str] | None = None,
     sbatch_merge_args: list[str] | None = None,
 ) -> dict[str, Any]:
-    resolved_plan_dir = Path(plan_dir).resolve()
+    if cfg is not None:
+        slurm_cfg = _slurm_cfg(cfg)
+        resolved_plan_dir = Path(
+            _resolve_scalar(plan_dir, getattr(slurm_cfg, "plan_dir", None), _default_plan_dir(cfg))
+        ).resolve()
+    else:
+        if plan_dir is None:
+            raise ValueError("plan_dir is required when cfg is not provided")
+        resolved_plan_dir = Path(plan_dir).resolve()
+
     if reuse_plan:
         if not (resolved_plan_dir / CHUNK_PLAN_NAME).exists():
             raise FileNotFoundError(f"Chunk plan not found: {resolved_plan_dir / CHUNK_PLAN_NAME}")
     else:
         if cfg is None:
             raise ValueError("cfg is required unless reuse_plan=True")
-        if chunk_size is None:
-            raise ValueError("chunk_size is required unless reuse_plan=True")
-        plan_chunked_pipeline(cfg, chunk_size=int(chunk_size), plan_dir=resolved_plan_dir)
+        resolved_chunk_size = _resolve_scalar(chunk_size, getattr(slurm_cfg, "chunk_size", None), None)
+        if resolved_chunk_size is None:
+            raise ValueError("chunk_size is required unless reuse_plan=True; set --chunk-size or slurm.chunk_size")
+        plan_chunked_pipeline(cfg, chunk_size=int(resolved_chunk_size), plan_dir=resolved_plan_dir)
 
     return submit_slurm_plan(
         resolved_plan_dir,

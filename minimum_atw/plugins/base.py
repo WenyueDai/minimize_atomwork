@@ -55,6 +55,7 @@ class BasePlugin:
     max_workers: int | None = None
     cpu_threads_per_worker: int | None = None
     gpu_devices_per_worker: int | None = None
+    blocks_concurrent_pool_overlap: bool = False
 
     def run(self, ctx: Context) -> Iterable[dict]:
         raise NotImplementedError
@@ -87,6 +88,11 @@ class BasePlugin:
             "max_workers": max_workers,
             "cpu_threads_per_worker": cpu_threads_per_worker,
             "gpu_devices_per_worker": gpu_devices_per_worker,
+            "blocks_concurrent_pool_overlap": bool(
+                scheduling_flag
+                if (scheduling_flag := getattr(self, "blocks_concurrent_pool_overlap", False)) is not None
+                else False
+            ),
         }
 
 

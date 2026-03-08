@@ -18,20 +18,49 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
-  "biotite",
-  "numpy",
-  "pandas",
-  "pydantic>=2.0",
-  "pyarrow",
-  "pyyaml",
+  "biotite>=1.4,<2",
+  "numpy>=2.4,<3",
+  "pandas>=2.3,<3",
+  "pydantic>=2.12,<3",
+  "pyarrow>=17,<18",
+  "pyyaml>=6,<7",
 ]
 
 [project.optional-dependencies]
-antibody = ["abnumber"]
-abepitope = ["abepitope"]
-ablang2 = ["ablang2"]
-esm = ["torch", "fair-esm"]
-all = ["abnumber", "abepitope", "ablang2", "torch", "fair-esm"]
+# Antibody numbering support relies on both abnumber and its ANARCII backend.
+antibody = [
+  "abnumber>=0.4.4,<0.5",
+  "anarcii>=2.0.5,<3",
+]
+
+# AbEpiTope's published package metadata does not currently pull in the full
+# model stack, so declare the runtime pieces explicitly here.
+# Note: the external `hmmsearch` binary from HMMER is still required on PATH.
+abepitope = [
+  "abepitope>=0.1,<0.2",
+  "torch>=2.7,<3",
+  "fair-esm>=2.0,<3",
+]
+
+# AbLang2 is optional but needs Torch in practice.
+ablang2 = [
+  "ablang2",
+  "torch>=2.7,<3",
+]
+
+esm = [
+  "torch>=2.7,<3",
+  "fair-esm>=2.0,<3",
+]
+
+all = [
+  "abnumber>=0.4.4,<0.5",
+  "anarcii>=2.0.5,<3",
+  "abepitope>=0.1,<0.2",
+  "ablang2",
+  "torch>=2.7,<3",
+  "fair-esm>=2.0,<3",
+]
 
 [project.scripts]
 minimum-atomworks = "minimum_atw.cli:main"

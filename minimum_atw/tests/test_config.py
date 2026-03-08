@@ -143,6 +143,40 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Config(input_dir="/tmp/in", out_dir="/tmp/out", gpu_workers=-1)
 
+    def test_slurm_options_are_normalized_and_excluded_from_merge_compatibility(self) -> None:
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            slurm={
+                "chunk_size": " 50 ",
+                "plan_dir": " ~/plans/example ",
+                "workdir": " ~/minimum_atomworks ",
+                "python_bin": " ~/miniconda3/envs/atw_pp/bin/python ",
+                "mode": " AUTO ",
+                "array_limit": " 3 ",
+                "log_dir": " ~/logs/minimum_atw ",
+                "sbatch_common_args": [" --account=my_lab ", "", "--qos=normal"],
+                "sbatch_gpu_args": [" --partition=gpu "],
+            },
+        )
+
+        self.assertEqual(cfg.slurm.chunk_size, 50)
+        self.assertEqual(cfg.slurm.mode, "auto")
+        self.assertEqual(cfg.slurm.array_limit, 3)
+        self.assertTrue(cfg.slurm.plan_dir.endswith("/plans/example"))
+        self.assertTrue(cfg.slurm.workdir.endswith("/minimum_atomworks"))
+        self.assertTrue(cfg.slurm.python_bin.endswith("/miniconda3/envs/atw_pp/bin/python"))
+        self.assertTrue(cfg.slurm.log_dir.endswith("/logs/minimum_atw"))
+        self.assertEqual(cfg.slurm.sbatch_common_args, ["--account=my_lab", "--qos=normal"])
+        self.assertEqual(cfg.slurm.sbatch_gpu_args, ["--partition=gpu"])
+        self.assertNotIn("slurm", cfg.merge_compatibility())
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", slurm={"chunk_size": 0})
+
+        with self.assertRaises(ValueError):
+            Config(input_dir="/tmp/in", out_dir="/tmp/out", slurm={"mode": "parallel"})
+
     def test_aho_requires_cdr_definition(self) -> None:
         with self.assertRaises(ValueError):
             Config(

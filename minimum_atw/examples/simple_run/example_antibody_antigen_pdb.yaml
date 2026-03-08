@@ -4,6 +4,11 @@
 #   python -m minimum_atw.cli run \
 #     --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
 #
+# Optional HPC path with the same YAML:
+#   1. add `slurm.chunk_size`
+#   2. python -m minimum_atw.cli submit-slurm \
+#        --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+#
 # Useful staged commands:
 #   python -m minimum_atw.cli prepare          --config <this_file>
 #   python -m minimum_atw.cli run-plugin       --config <this_file> --plugin abepitope_score
@@ -12,9 +17,9 @@
 #   python -m minimum_atw.cli analyze-dataset  --config <this_file>
 #
 # Scheduler note:
-#   this profile enables AbEpiTope by default. Set `gpu_workers` and usually
-#   `gpu_devices` when you want scheduler-aware GPU placement rather than a
-#   purely CPU-shaped run_metadata.json.
+#   this profile enables AbEpiTope by default. Keep the model plugins on
+#   `device: auto`; `submit-slurm` will infer whether the run should stay mixed
+#   or split CPU and GPU stages.
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "/path/to/your/pdb_files"
@@ -43,6 +48,9 @@ manipulations:
     grain: "pdb"
   - name: "superimpose_to_reference"
     grain: "pdb"
+  # Alternative: Rosetta score/repack/relax then superimpose (choose one or the other).
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
 
 # clash_distance: 2.0
 # clash_scope: "all"
@@ -82,11 +90,22 @@ plugin_params:
     reference_path: "/path/to/your/reference.pdb"
     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
     # anchor_atoms: "CA"          # CA | backbone (default: CA)
+  # rosetta_preprocess:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+  #   repack: true                  # sidechain-only optimisation (backbone fixed)
+  #   relax: false                  # full fast-relax including backbone (expensive)
+  # anchor_atoms: "CA"              # CA | backbone (default: CA)
+
 
   # superimpose_homology:
   #   reference_path: "/path/to/your/reference.pdb"
   #   on_chains: ["A"]              # anchor chains for RMSD alignment
+  #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
 
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
   # pdockq_score:
   #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
 
@@ -99,10 +118,12 @@ plugin_params:
   #   device: auto               # auto | cpu | cuda | 0 (default: auto)
 
   # ablang2_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
   # esm_if1_score:
-  #   device: auto               # auto | cpu | cuda (default: auto); pair with gpu_workers/gpu_devices for scheduler-aware GPU planning
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
 
 # ── Antibody numbering ─────────────────────────────────────────────────────────
 numbering_roles: ["vh", "vl"]
@@ -113,6 +134,8 @@ cdr_definition: "imgt"     # imgt | north | kabat
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
 # rosetta_database: "/path/to/rosetta/database"
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
 # rosetta_preprocess_with_score_jd2: false
 # rosetta_interface_targets:
 #   - pair: ["antibody", "antigen"]
@@ -156,7 +179,8 @@ keep_intermediate_outputs: false
 keep_prepared_structures: true
 checkpoint_enabled: false
 # checkpoint_interval: 25
-# cpu_workers: 4            # CPU pool for geometry/QC/cluster/merge-friendly plugins
-# gpu_workers: 1            # GPU pool for abepitope_score / ablang2_score / esm_if1_score
-# gpu_devices: ["0"]        # visible GPU IDs for scheduler-aware device assignment
-# run_metadata.json will then include both single_job and submission_plan hints.
+# cpu_workers: 4            # optional local override for CPU parallelism
+# gpu_workers: 1            # optional local override for GPU-capable plugins
+# gpu_devices: ["0"]        # optional visible GPU IDs for local or scheduled GPU runs
+# slurm:
+#   chunk_size: 50          # minimum needed for `submit-slurm --config <this_file>`

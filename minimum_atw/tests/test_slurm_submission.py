@@ -77,6 +77,77 @@ def _write_plan(
 
 @unittest.skipIf(slurm_module is None, "slurm submission dependencies are not installed")
 class SlurmSubmissionTests(unittest.TestCase):
+    def test_submit_slurm_chunked_pipeline_uses_yaml_slurm_defaults(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_slurm_") as tmp_dir:
+            root = Path(tmp_dir)
+            plan_dir = root / "yaml_plan"
+            source_cfg = Config(
+                input_dir=str(root / "input"),
+                out_dir=str(root / "final_out"),
+                roles={"binder": ["A"], "target": ["B"]},
+                interface_pairs=[("binder", "target")],
+                plugins=["identity"],
+                slurm={
+                    "chunk_size": 7,
+                    "plan_dir": str(plan_dir),
+                    "workdir": str(root / "workdir"),
+                    "python_bin": sys.executable,
+                    "mode": "auto",
+                    "array_limit": 2,
+                    "log_dir": str(root / "logs"),
+                    "sbatch_common_args": ["--account=proj"],
+                    "sbatch_cpu_args": ["--partition=cpu"],
+                    "sbatch_merge_args": ["--partition=merge"],
+                },
+            )
+
+            with mock.patch("minimum_atw.runtime.slurm.plan_chunked_pipeline") as plan_mock:
+                def _fake_plan(cfg: Config, *, chunk_size: int, plan_dir: Path) -> dict[str, int]:
+                    _write_plan(
+                        Path(plan_dir),
+                        source_cfg=cfg,
+                        resource_plan={
+                            "recommended_chunk_job": {"cpu_threads": 2, "gpu_devices": 0},
+                            "submission_plan": {
+                                "recommended_mode": "cpu_only",
+                                "reason": "CPU-only plan.",
+                            },
+                        },
+                        n_chunks=2,
+                    )
+                    return {"chunks": 2, "chunk_size": chunk_size, "planned_structures": 2}
+
+                plan_mock.side_effect = _fake_plan
+                submission = slurm_module.submit_slurm_chunked_pipeline(
+                    source_cfg,
+                    chunk_size=None,
+                    plan_dir=None,
+                    reuse_plan=False,
+                    workdir=None,
+                    python_bin=None,
+                    mode=None,
+                    dry_run=True,
+                    array_limit=None,
+                    log_dir=None,
+                    sbatch_common_args=None,
+                    sbatch_mixed_args=None,
+                    sbatch_cpu_args=None,
+                    sbatch_gpu_args=None,
+                    sbatch_merge_args=None,
+                )
+
+            plan_mock.assert_called_once()
+            _, kwargs = plan_mock.call_args
+            self.assertEqual(kwargs["chunk_size"], 7)
+            self.assertEqual(Path(kwargs["plan_dir"]).resolve(), plan_dir.resolve())
+            self.assertEqual(submission["plan_dir"], str(plan_dir.resolve()))
+            self.assertEqual(submission["mode_requested"], "auto")
+            self.assertEqual(submission["mode_submitted"], "mixed")
+            self.assertEqual(Path(submission["log_dir"]).resolve(), (root / "logs").resolve())
+            self.assertIn("--account=proj", submission["jobs"][0]["sbatch_args"])
+            self.assertIn("--array=1-2%2", submission["jobs"][0]["sbatch_args"])
+            self.assertIn("--partition=merge", submission["jobs"][-1]["sbatch_args"])
+
     def test_submit_slurm_plan_auto_uses_mixed_mode_for_single_job_plan(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_slurm_") as tmp_dir:
             root = Path(tmp_dir)
@@ -281,6 +352,62 @@ class SlurmSubmissionTests(unittest.TestCase):
             self.assertIn("--dependency=afterok:1004", submitted_commands[5])
             self.assertIn("--dependency=afterok:1005", submitted_commands[6])
             self.assertIn("--partition=bigmem", submitted_commands[6])
+
+    def test_submit_slurm_plan_uses_source_config_slurm_defaults_when_reusing_plan(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_slurm_") as tmp_dir:
+            root = Path(tmp_dir)
+            source_cfg = Config(
+                input_dir=str(root / "input"),
+                out_dir=str(root / "final_out"),
+                roles={"binder": ["A"], "target": ["B"]},
+                interface_pairs=[("binder", "target")],
+                plugins=["identity"],
+                slurm={
+                    "workdir": str(root / "workdir"),
+                    "python_bin": sys.executable,
+                    "mode": "auto",
+                    "array_limit": 3,
+                    "log_dir": str(root / "logs"),
+                    "sbatch_common_args": ["--account=proj"],
+                    "sbatch_mixed_args": ["--partition=mixed"],
+                    "sbatch_merge_args": ["--partition=merge"],
+                },
+            )
+            plan_dir = root / "plan"
+            _write_plan(
+                plan_dir,
+                source_cfg=source_cfg,
+                resource_plan={
+                    "recommended_chunk_job": {"cpu_threads": 4, "gpu_devices": 0},
+                    "submission_plan": {
+                        "recommended_mode": "single_job",
+                        "reason": "Mixed submission is simplest for this plan.",
+                    },
+                },
+                n_chunks=4,
+            )
+
+            submission = slurm_module.submit_slurm_plan(
+                plan_dir,
+                workdir=None,
+                python_bin=None,
+                mode=None,
+                dry_run=True,
+                array_limit=None,
+                log_dir=None,
+                sbatch_common_args=None,
+                sbatch_mixed_args=None,
+                sbatch_cpu_args=None,
+                sbatch_gpu_args=None,
+                sbatch_merge_args=None,
+            )
+
+            self.assertEqual(submission["mode_requested"], "auto")
+            self.assertEqual(Path(submission["log_dir"]).resolve(), (root / "logs").resolve())
+            self.assertIn("--array=1-4%3", submission["jobs"][0]["sbatch_args"])
+            self.assertIn("--account=proj", submission["jobs"][0]["sbatch_args"])
+            self.assertIn("--partition=mixed", submission["jobs"][0]["sbatch_args"])
+            self.assertIn("--partition=merge", submission["jobs"][-1]["sbatch_args"])
 
 
 if __name__ == "__main__":

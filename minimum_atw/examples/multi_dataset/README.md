@@ -36,10 +36,24 @@ Dataset A:
   --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
 ```
 
+Large dataset A on Slurm:
+
+```bash
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli submit-slurm \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+```
+
 Dataset B:
 
 ```bash
 /home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli run \
+  --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+```
+
+Large dataset B on Slurm:
+
+```bash
+/home/eva/miniconda3/envs/atw_pp/bin/python -m minimum_atw.cli submit-slurm \
   --config /home/eva/minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
 ```
 
@@ -69,7 +83,7 @@ Using [dataset_a_antibody_antigen.yaml](/home/eva/minimum_atomworks/minimum_atw/
 
 During **PREPARE**, each structure is loaded into a biotite `AtomArray`, QC units run (`chain_continuity`, `structure_clashes`), then structure manipulation units run (`center_on_origin`, `superimpose_to_reference`). `superimpose_to_reference` mutates `ctx.aa` in place — all downstream plugins for this run will see the aligned coordinates. The transformed structure is saved to `_prepared/structures/<name>.bcif` and `prepared__path` is recorded in `_prepared/pdb.parquet`.
 
-During **EXECUTE**, each `pdb_calculation` plugin reads the prepared aligned structure, calls `available(ctx)` to decide whether to run, and yields prefixed column rows accumulated in a `TableBuffer`. Each plugin writes its output to `_plugins/<name>/pdb.parquet`. The same run also records `plugin_execution.scheduler_resources` in `run_metadata.json`, so dataset A and dataset B can be sized independently for HPC submission.
+During **EXECUTE**, each `pdb_calculation` plugin reads the prepared aligned structure, calls `available(ctx)` to decide whether to run, and yields prefixed column rows accumulated in a `TableBuffer`. Each plugin writes its output to `_plugins/<name>/pdb.parquet`. When you use `submit-slurm`, the same config is chunk-planned and the framework decides whether the built-in plugin mix should stay in one mixed job or split into CPU and GPU stages.
 
 During **MERGE**, `merge_outputs(cfg_a)` LEFT JOINs each plugin's output onto the prepare-stage base rows. The result is `out_dataset_a/pdb.parquet` — a single wide table with every QC, manipulation, and plugin column side-by-side. All base rows are preserved; plugins that skipped a structure contribute `NaN`.
 
@@ -156,8 +170,8 @@ Use either the prepare-stage manipulation or the plugin-stage superposition in a
 
 Scheduler note:
 
-- Size dataset A and dataset B from their own `run_metadata.json -> plugin_execution.scheduler_resources`.
-- Size the final merged `analyze-dataset` job as CPU-only.
+- For large source datasets, add `slurm.chunk_size` to dataset A and dataset B and run `submit-slurm --config ...`. The planner will infer CPU-only, mixed, or split CPU/GPU submission from the enabled plugins.
+- The final merged `analyze-dataset` job in this example remains CPU-only.
 
 The source-dataset and merged-dataset cluster jobs intentionally use different names so both sets of cluster labels can coexist in the final merged `pdb.parquet`.
 
