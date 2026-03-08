@@ -1,7 +1,8 @@
 # simple_run — local development and plugin testing
 
-Use this folder when you want to run end-to-end on a single dataset and iterate quickly.
-All four configs are runnable templates — set `input_dir` and `out_dir` and go.
+Use this folder when you want to run end-to-end on one dataset and iterate quickly.
+Every file listed below is a runnable template. In most cases you only need to
+change `input_dir`, `out_dir`, and any reference/Rosetta paths the profile uses.
 
 ## Which config?
 
@@ -9,6 +10,8 @@ All four configs are runnable templates — set `input_dir` and `out_dir` and go
 |---|---|
 | [`example_antibody_antigen_light.yaml`](example_antibody_antigen_light.yaml) | **Start here.** Minimal antibody–antigen: identity + interface metrics only |
 | [`example_antibody_antigen_pdb.yaml`](example_antibody_antigen_pdb.yaml) | Full antibody–antigen: CDR sequences, AbEpiTope, superimposition |
+| [`example_antibody_antigen_rosetta.yaml`](example_antibody_antigen_rosetta.yaml) | Antibody–antigen with Rosetta preprocess + InterfaceAnalyzer |
+| [`example_antibody_antigen_realdata_all_non_rosetta.yaml`](example_antibody_antigen_realdata_all_non_rosetta.yaml) | Ready-to-run bundled antibody–antigen data on one workstation |
 | [`example_vhh_antigen.yaml`](example_vhh_antigen.yaml) | VHH / nanobody single-domain binder |
 | [`example_protein_protein_complex.yaml`](example_protein_protein_complex.yaml) | Generic protein–protein complex |
 

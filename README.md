@@ -20,6 +20,32 @@ The package is built around a simple idea:
 3. merge into the final PDB parquet
 4. optionally run dataset-level analyses
 
+## Common Use Cases
+
+You would typically use `minimum_atomworks` in one of these situations:
+
+- You have one antibody-antigen design set and want a ranked structural table with QC, interface metrics, and optional model scores.
+- You have a VHH / nanobody binder campaign and need the same interface analysis with single-chain antibody numbering.
+- You have generic protein-protein complexes and want non-antibody interface metrics without the antibody-specific stack.
+- You want to run Rosetta preprocessing or Rosetta InterfaceAnalyzer alongside the native metrics.
+- You have a large dataset that no longer fits comfortably in one local run and need chunking or Slurm submission.
+- You have multiple completed datasets and want to merge them for pooled clustering or cross-dataset comparison.
+
+If you just want to start from the right YAML, use this map:
+
+| Situation | Start from |
+|---|---|
+| Minimal antibody-antigen QC / ranking on one dataset | `minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml` |
+| Full antibody-antigen analysis without Rosetta | `minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml` |
+| Full antibody-antigen analysis with Rosetta preprocess + InterfaceAnalyzer | `minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml` |
+| Ready local smoke run on bundled example structures | `minimum_atw/examples/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` |
+| VHH / nanobody against antigen | `minimum_atw/examples/simple_run/example_vhh_antigen.yaml` |
+| Generic protein-protein complexes | `minimum_atw/examples/simple_run/example_protein_protein_complex.yaml` |
+| Large antibody-antigen dataset on one node or Slurm | `minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml` |
+| Large VHH-antigen dataset on one node or Slurm | `minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml` |
+| Large protein-protein dataset on one node or Slurm | `minimum_atw/examples/large_run/example_protein_protein_chunked.yaml` |
+| Merge and compare two completed datasets | `minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml`, `minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml`, then `minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml` |
+
 ## Runtime Overview
 
 Main pipeline:
@@ -49,6 +75,79 @@ Independent groups may run in different execution waves so CPU and GPU resources
 
 ---
 
+## Run Shapes From Start to Finish
+
+Every YAML goes through the same high-level lifecycle:
+
+1. validate the YAML into `Config`
+2. discover structures from `input_dir`
+3. run the prepare stage and write `_prepared/`
+4. run PDB plugins, using CPU and GPU pools when configured
+5. merge plugin outputs into `out_dir/pdb.parquet`
+6. optionally run dataset analyses and write `out_dir/dataset.parquet`
+
+What changes between local and HPC runs is not the science logic. What changes is:
+
+- whether everything happens in one process or in chunks
+- whether chunk execution is local or submitted to Slurm
+- whether CPU and GPU work happen inside one job or in separate staged jobs
+- whether intermediate `_prepared/` and `_plugins/` artifacts are kept for reuse
+
+You normally do **not** need separate CPU and GPU YAML files. One YAML can describe the full analysis. The package decides which built-in plugins belong in the CPU pool or GPU pool, and you only choose how much hardware to expose to the run.
+
+### Choose a Run Shape
+
+| Run shape | Command | How to enable it | What happens from start to end | Best for |
+|---|---|---|---|---|
+| One-shot local run | `python -m minimum_atw.cli run --config my.yaml` | No extra config required | One process runs prepare → execute → merge → dataset analysis | Small or medium runs on one workstation |
+| Staged local run | `prepare`, then `run-plugin` or `run-plugins`, then `merge`, then `analyze-dataset` | Set `keep_intermediate_outputs: true` if you want to reuse `_plugins/` | Prepare is done once, then you can rerun selected plugins or analyses without repeating the whole pipeline | Debugging, plugin tuning, rerunning clustering |
+| Local chunked run | `python -m minimum_atw.cli run-chunked --config my.yaml --chunk-size 50 --workers 4` | Choose `--chunk-size`; set `cpu_workers`, `gpu_workers`, `gpu_devices` in YAML if needed | Inputs are split into chunks; each chunk runs a full mini-pipeline locally; then all chunk outputs are stacked and analyzed once | One big workstation or one HPC node without a scheduler workflow |
+| Planned chunks, manual submission | `plan-chunks`, external chunk execution, then `merge-planned-chunks` | Choose `--chunk-size` and `--plan-dir` | The package writes one YAML per chunk plus a resource plan; you submit chunks yourself; final merge happens after all chunk runs finish | Custom schedulers, full control, persistent `_prepared/` paths |
+| One-command Slurm submission | `python -m minimum_atw.cli submit-slurm --config my.yaml` | Add a `slurm:` block to the YAML | The package plans chunks, chooses mixed vs staged CPU/GPU submission, submits the job graph, then runs the final merge job | Normal HPC usage where you want one command and automatic scheduling |
+
+### Main Options and When to Turn Them On
+
+| Option | Where to set it | What it changes | Turn it on when |
+|---|---|---|---|
+| `cpu_workers` | YAML | CPU plugin concurrency per run or per chunk | CPU plugins dominate runtime and you have spare cores |
+| `gpu_workers` | YAML | Number of GPU worker slots | You want built-in GPU plugins to use CUDA workers instead of CPU fallback |
+| `gpu_devices` | YAML | Which CUDA devices the run may use | Your machine or node has multiple GPUs and you want to pin the run |
+| `keep_intermediate_outputs` | YAML | Preserves `_prepared/` and `_plugins/` outputs | You want to rerun plugins or analyses without starting from scratch |
+| `checkpoint_enabled` and `checkpoint_interval` | YAML | Periodic progress flush during plugin execution | Runs are long or may be preempted |
+| `dataset_analysis_mode` | YAML | Whether dataset analyses run per chunk, post-merge, or both | Use `post_merge` for clustering and entropy; use `per_chunk` only for early feedback |
+| `slurm.chunk_size` | `slurm:` block in YAML | Size of each submitted chunk | A dataset is too large for one job and should be distributed |
+| `slurm.mode` | `slurm:` block in YAML | `auto`, `mixed`, or `staged` submission policy | Use `auto` by default; force `staged` when GPU nodes are scarce; force `mixed` when one job per chunk is simpler |
+| `slurm.sbatch_*_args` | `slurm:` block in YAML | Cluster-specific account, partition, memory, walltime, and GPU requests | You are submitting on Slurm and need scheduler policy attached to the run |
+
+### What Local vs HPC Actually Means
+
+#### Local
+
+- `run` is the simplest path: one command, one output directory, one end-to-end pipeline.
+- `run-chunked` is still local, but the package internally splits the input and runs multiple chunk pipelines at once.
+- CPU and GPU plugin pools can both be active on the same machine when `gpu_workers > 0`.
+
+#### HPC
+
+- `plan-chunks` is the manual HPC path: the package tells you what to run, but you submit the jobs yourself.
+- `submit-slurm` is the automatic HPC path: the package creates the plan and submits the dependent Slurm jobs for you.
+- In `slurm.mode: mixed`, each chunk job gets both CPU and GPU resources and runs the full chunk pipeline.
+- In `slurm.mode: staged`, CPU-node jobs prepare structures and run CPU plugins first, then GPU-node jobs load `_prepared/` and run only GPU plugins, then a final CPU merge job writes the merged outputs.
+
+### Default Recommendation
+
+Use this rule of thumb:
+
+- local workstation, small or medium dataset: `run`
+- local workstation, dataset too large for one process: `run-chunked`
+- HPC cluster, standard use: `submit-slurm` with `slurm.mode: auto`
+- HPC cluster, custom scheduler or special job policy: `plan-chunks` + manual submission
+- plugin debugging or iterative tuning: staged local commands with `keep_intermediate_outputs: true`
+
+The detailed stage-by-stage explanation starts below, and the CPU/GPU scheduling details are covered again later in [CPU vs GPU Execution — What Happens Behind the Scenes](#cpu-vs-gpu-execution--what-happens-behind-the-scenes).
+
+---
+
 ## Running a YAML — Full Walkthrough
 
 This section follows one run from the moment you type the command to the moment the parquet files land in `out_dir`. It covers every configurable decision point, what each option does, and which case it is best suited for.
@@ -63,9 +162,14 @@ Every run starts from a YAML config. Pick the closest template from `examples/`:
 |---|---|
 | `simple_run/example_antibody_antigen_light.yaml` | Quick start, no reference structure, CPU only |
 | `simple_run/example_antibody_antigen_pdb.yaml` | Full antibody-antigen, superimpose, GPU plugins |
+| `simple_run/example_antibody_antigen_rosetta.yaml` | Antibody-antigen with Rosetta preprocess and InterfaceAnalyzer |
+| `simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` | Ready local run using the bundled antibody-antigen example structures |
 | `simple_run/example_vhh_antigen.yaml` | VHH / nanobody binders |
 | `simple_run/example_protein_protein_complex.yaml` | Generic protein-protein, no CDR analysis |
 | `large_run/example_antibody_antigen_chunked.yaml` | Large dataset, Slurm submission |
+
+For the full example catalog, including manual chunking and multi-dataset
+comparison, see `minimum_atw/examples/README.md`.
 
 At minimum, set two paths in the YAML:
 
@@ -675,41 +779,29 @@ Most dataset analyses write a second parquet, usually `dataset.parquet`, with an
 
 ## Installation
 
-Recommended reproducible setup for a fresh machine:
+Simplest path on another machine:
 
 ```bash
 git clone <your-repo-url> minimum_atomworks
 cd minimum_atomworks
-python3.11 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e '.[all]'
+python -m pip install -e .
 ```
 
-That installs:
+That default install now includes the built-in non-Rosetta Python stack:
 
 - core runtime dependencies
 - antibody numbering support: `abnumber`, `anarcii`
 - GPU/model plugins: `torch`, `fair-esm`, `ablang2`
-- AbEpiTope Python package
+- AbEpiTope Python package plus its undeclared runtime dependencies
 
-External dependency still required for `abepitope_score`:
-
-```bash
-conda install -c bioconda hmmer
-```
-
-`hmmsearch` must be on `PATH` for AbEpiTope when chain hints cannot be derived from roles.
-
-If you do not want the full stack, install one of these instead:
+The only important non-pip caveat is `hmmsearch`:
 
 ```bash
-python -m pip install -e .              # core only
-python -m pip install -e '.[antibody]'  # abnumber + anarcii
-python -m pip install -e '.[esm]'       # torch + fair-esm for esm_if1_score
-python -m pip install -e '.[ablang2]'   # ablang2 + torch
-python -m pip install -e '.[abepitope]' # abepitope + torch + fair-esm
+which hmmsearch || echo "hmmsearch not found"
 ```
+
+`abepitope_score` can often run without it when the antibody/antigen chains are
+clear from your YAML roles, but `hmmsearch` is still the safe supported setup.
 
 Verify the environment:
 
@@ -726,6 +818,7 @@ which hmmsearch || echo "hmmsearch not found"
 
 Notes:
 
+- `pip install -e .` is now the intended simple install path for the built-in non-Rosetta plugins
 - `abepitope_score` needs both the Python package and the external `hmmsearch` binary
 - `esm_if1_score` needs `torch` and `fair-esm`
 - `ablang2_score` needs `ablang2`

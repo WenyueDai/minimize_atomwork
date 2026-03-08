@@ -37,6 +37,28 @@ python -m minimum_atw.cli submit-slurm --config example_antibody_antigen_light.y
 
 > *For most users: start at `simple_run`, move to `large_run` when you need scale.*
 
+## Practical use cases
+
+These are the main situations where you are likely to use `minimum_atw`, and
+the example YAML that matches each one most directly.
+
+| Use case | Start from this YAML |
+|---|---|
+| Minimal antibody-antigen ranking / QC on one dataset | [`simple_run/example_antibody_antigen_light.yaml`](simple_run/example_antibody_antigen_light.yaml) |
+| Full antibody-antigen analysis without Rosetta | [`simple_run/example_antibody_antigen_pdb.yaml`](simple_run/example_antibody_antigen_pdb.yaml) |
+| Full antibody-antigen analysis with Rosetta preprocess and InterfaceAnalyzer | [`simple_run/example_antibody_antigen_rosetta.yaml`](simple_run/example_antibody_antigen_rosetta.yaml) |
+| Ready local smoke run on the bundled antibody-antigen example data | [`simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml`](simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml) |
+| VHH / nanobody against antigen | [`simple_run/example_vhh_antigen.yaml`](simple_run/example_vhh_antigen.yaml) |
+| Generic protein-protein complexes | [`simple_run/example_protein_protein_complex.yaml`](simple_run/example_protein_protein_complex.yaml) |
+| Large antibody-antigen dataset on one node or Slurm | [`large_run/example_antibody_antigen_chunked.yaml`](large_run/example_antibody_antigen_chunked.yaml) |
+| Large VHH-antigen dataset on one node or Slurm | [`large_run/example_vhh_antigen_chunked.yaml`](large_run/example_vhh_antigen_chunked.yaml) |
+| Large protein-protein dataset on one node or Slurm | [`large_run/example_protein_protein_chunked.yaml`](large_run/example_protein_protein_chunked.yaml) |
+| Manual fixed chunk boundaries | [`chunk_run/chunk_antibody_antigen_01.yaml`](chunk_run/chunk_antibody_antigen_01.yaml) and [`chunk_run/chunk_antibody_antigen_02.yaml`](chunk_run/chunk_antibody_antigen_02.yaml) |
+| Compare two completed antibody-antigen datasets after merge | [`multi_dataset/dataset_a_antibody_antigen.yaml`](multi_dataset/dataset_a_antibody_antigen.yaml), [`multi_dataset/dataset_b_antibody_antigen.yaml`](multi_dataset/dataset_b_antibody_antigen.yaml), then [`multi_dataset/compare_merged_datasets.yaml`](multi_dataset/compare_merged_datasets.yaml) |
+
+All of those are intended to be copy-and-edit YAMLs rather than internal-only
+fixtures.
+
 ---
 
 ## Staged workflow

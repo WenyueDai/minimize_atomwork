@@ -1,0 +1,148 @@
+# Antibody-antigen Rosetta profile: Rosetta preprocess + InterfaceAnalyzer.
+#
+# Use this when you have Rosetta installed and want a CPU-oriented workflow that:
+#   - repacks / relaxes each structure before analysis
+#   - superimposes the Rosetta-processed structure to a reference
+#   - adds Rosetta InterfaceAnalyzer metrics alongside the native plugins
+#
+# Run:
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#
+# Optional HPC path with the same YAML:
+#   1. add `slurm.chunk_size`
+#   2. python -m minimum_atw.cli submit-slurm \
+#        --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#
+# This profile is CPU-oriented by default. Rosetta, DockQ, and the standard
+# interface geometry plugins all run on CPU. You can still enable GPU model
+# plugins later if needed, but they are intentionally off here.
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "/path/to/your/pdb_files"
+out_dir: "/path/to/your/out_antibody_antigen_rosetta"
+assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
+  antibody: ["B", "C"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+  - name: "rosetta_preprocess"
+    grain: "pdb"
+
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  # — structure grain —
+  - "identity"
+
+  # — chain grain —
+  - "chain_stats"
+
+  # — role grain —
+  - "role_sequences"
+  - "role_stats"
+  - "antibody_cdr_lengths"    # requires numbering_roles; abnumber package
+  - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "pdockq_score"
+  - "dockq_score"             # requires reference_path below
+  - "rosetta_interface_example"
+
+contact_distance: 5.0
+# interface_cell_size: 5.0
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+plugin_params:
+  rosetta_preprocess:
+    reference_path: "/path/to/your/reference.pdb"
+    on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+    repack: true                 # sidechain-only optimisation
+    relax: false                 # set true for full fast-relax (more expensive)
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
+
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  dockq_score:
+    reference_path: "/path/to/your/reference.pdb"
+    receptor_role: "antigen"     # role used as the LRMS anchor
+    contact_distance: 5.0
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vh", "vl"]
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
+
+# ── Rosetta configuration ──────────────────────────────────────────────────────
+rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+rosetta_database: "/path/to/rosetta/database"
+rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+rosetta_preprocess: true
+rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "post_merge"
+
+dataset_analysis_params: {}
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+
+dataset_annotations:
+  dataset_id: "antibody_antigen_rosetta"
+  project: "atomworks_example"
+  dataset_name: "antibody_antigen_rosetta"
+  modality: "antibody_antigen"
+  profile: "rosetta_cpu"
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25
+# cpu_workers: 4
+# gpu_workers: 0
+# slurm:
+#   chunk_size: 50
