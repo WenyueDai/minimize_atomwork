@@ -35,16 +35,16 @@ If you just want to start from the right YAML, use this map:
 
 | Situation | Start from |
 |---|---|
-| Minimal antibody-antigen QC / ranking on one dataset | `minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml` |
-| Full antibody-antigen analysis without Rosetta | `minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml` |
-| Full antibody-antigen analysis with Rosetta preprocess + InterfaceAnalyzer | `minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml` |
-| Ready local smoke run on bundled example structures | `minimum_atw/examples/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` |
-| VHH / nanobody against antigen | `minimum_atw/examples/simple_run/example_vhh_antigen.yaml` |
-| Generic protein-protein complexes | `minimum_atw/examples/simple_run/example_protein_protein_complex.yaml` |
-| Large antibody-antigen dataset on one node or Slurm | `minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml` |
-| Large VHH-antigen dataset on one node or Slurm | `minimum_atw/examples/large_run/example_vhh_antigen_chunked.yaml` |
-| Large protein-protein dataset on one node or Slurm | `minimum_atw/examples/large_run/example_protein_protein_chunked.yaml` |
-| Merge and compare two completed datasets | `minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml`, `minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml`, then `minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml` |
+| Minimal antibody-antigen QC / ranking on one dataset | `minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml` |
+| Full antibody-antigen analysis without Rosetta | `minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml` |
+| Full antibody-antigen analysis with Rosetta preprocess + InterfaceAnalyzer | `minimum_atw/examples/input/simple_run/example_antibody_antigen_rosetta.yaml` |
+| Ready local smoke run on bundled example structures | `minimum_atw/examples/input/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` |
+| VHH / nanobody against antigen | `minimum_atw/examples/input/simple_run/example_vhh_antigen.yaml` |
+| Generic protein-protein complexes | `minimum_atw/examples/input/simple_run/example_protein_protein_complex.yaml` |
+| Large antibody-antigen dataset on one node or Slurm | `minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml` |
+| Large VHH-antigen dataset on one node or Slurm | `minimum_atw/examples/input/large_run/example_vhh_antigen_chunked.yaml` |
+| Large protein-protein dataset on one node or Slurm | `minimum_atw/examples/input/large_run/example_protein_protein_chunked.yaml` |
+| Merge and compare two completed datasets | `minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml`, `minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml`, then `minimum_atw/examples/input/multi_dataset/compare_merged_datasets.yaml` |
 
 ## Runtime Overview
 
@@ -160,13 +160,13 @@ Every run starts from a YAML config. Pick the closest template from `examples/`:
 
 | Template | Best for |
 |---|---|
-| `simple_run/example_antibody_antigen_light.yaml` | Quick start, no reference structure, CPU only |
-| `simple_run/example_antibody_antigen_pdb.yaml` | Full antibody-antigen, superimpose, GPU plugins |
-| `simple_run/example_antibody_antigen_rosetta.yaml` | Antibody-antigen with Rosetta preprocess and InterfaceAnalyzer |
-| `simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` | Ready local run using the bundled antibody-antigen example structures |
-| `simple_run/example_vhh_antigen.yaml` | VHH / nanobody binders |
-| `simple_run/example_protein_protein_complex.yaml` | Generic protein-protein, no CDR analysis |
-| `large_run/example_antibody_antigen_chunked.yaml` | Large dataset, Slurm submission |
+| `examples/input/simple_run/example_antibody_antigen_light.yaml` | Quick start, no reference structure, CPU only |
+| `examples/input/simple_run/example_antibody_antigen_pdb.yaml` | Full antibody-antigen, superimpose, GPU plugins |
+| `examples/input/simple_run/example_antibody_antigen_rosetta.yaml` | Antibody-antigen with Rosetta preprocess and InterfaceAnalyzer |
+| `examples/input/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml` | Ready local run using the bundled antibody-antigen example structures |
+| `examples/input/simple_run/example_vhh_antigen.yaml` | VHH / nanobody binders |
+| `examples/input/simple_run/example_protein_protein_complex.yaml` | Generic protein-protein, no CDR analysis |
+| `examples/input/large_run/example_antibody_antigen_chunked.yaml` | Large dataset, Slurm submission |
 
 For the full example catalog, including manual chunking and multi-dataset
 comparison, see `minimum_atw/examples/README.md`.
@@ -220,8 +220,10 @@ clash_scope: "all"           # all | inter_chain | interface_only
 | `rosetta_preprocess` | Runs Rosetta score → repack/relax → score again → then (by default) superimposes the relaxed structure to the reference; writes `rosprep__pre_*` (pre-relax scores), `rosprep__post_*` (post-relax scores), and superimpose metrics when superimpose is on; set `rosetta_preprocess: false` to skip Rosetta and use as a plain superimpose; set `plugin_params.rosetta_preprocess.superimpose: false` to run only Rosetta relax/repack without superimposing | When you need Rosetta-relaxed structures before any analysis |
 
 Key rules:
-- `superimpose_to_reference` and `rosetta_preprocess` are **mutually exclusive by default** — both would superimpose, so only list one.
-- **Exception**: list both if you set `plugin_params.rosetta_preprocess.superimpose: false`. This runs Rosetta relax/repack first (updating `ctx.aa`), then `superimpose_to_reference` aligns the relaxed structure onto the reference. Use this when you need energy-minimised coordinates before structural alignment.
+- `superimpose_to_reference` and `rosetta_preprocess` can be combined, but only **one** should superimpose. Two patterns:
+  - **Superimpose → Rosetta relax**: list `superimpose_to_reference` first, then `rosetta_preprocess` with `superimpose: false`. Relaxes structures that are already in the reference frame.
+  - **Rosetta relax → superimpose**: list `rosetta_preprocess` first with `superimpose: false`, then `superimpose_to_reference`. Aligns the relaxed coordinates to the reference.
+- Never list both without `plugin_params.rosetta_preprocess.superimpose: false` — that would superimpose twice.
 - Either superimpose manipulation sets `keep_prepared_structures: true` automatically so the transformed `_prepared/structures/` files persist.
 - If no `reference_path` is given, the first structure in the run becomes the reference automatically (only applies when superimposing).
 
@@ -315,6 +317,7 @@ Enable only the plugins you need. Each plugin appends prefixed columns to the ou
 | `ablang2_score` | role | `ablang2__` | antibody log-likelihood per role | `ablang2`, `torch` |
 | `esm_if1_score` | role | `esm__` | ESM-IF1 log-likelihood per role | `fair-esm`, `torch` |
 | `rosetta_interface_example` | interface | `rosetta__` | dG, dSASA, packstat, hbonds | Rosetta binaries |
+| `structure_rmsd` | structure + chain | `rmsd__` | All-atom RMSD vs reference after Kabsch fit; per-chain breakdown | — |
 
 For `dockq_score`, the reference path must be set:
 
@@ -332,6 +335,84 @@ For antibody CDR plugins, numbering must be configured:
 numbering_roles: ["vh", "vl"]    # which roles to number
 numbering_scheme: "imgt"         # imgt | chothia | kabat | aho
 cdr_definition: "imgt"           # imgt | north | kabat
+```
+
+#### `structure_rmsd` — how RMSD is calculated
+
+`structure_rmsd` measures how similar a structure is to a reference, in Å. It does **not** modify any coordinates (unlike `superimpose_to_reference` in the prepare stage). It only computes numbers and writes `rmsd__*` columns.
+
+**Worked example — two antibodies on different epitopes**
+
+Suppose you have a reference complex where Ab1 binds epitope 1 on the left face of the antigen, and a query complex where Ab2 binds epitope 2 on the right face. Chain layout: antigen = `A`, VH = `C`, VL = `B`. Config:
+
+```yaml
+plugins:
+  - "structure_rmsd"
+
+plugin_params:
+  structure_rmsd:
+    reference_path: "/path/to/complex_ref.pdb"
+    on_chains: ["A"]   # align on antigen only
+```
+
+What happens internally:
+
+1. **Select anchor chains.** Only antigen atoms (chain A) are passed to the Kabsch solver. Ab1/Ab2 chains are excluded from the fit.
+
+2. **Sequence-aligned Kabsch rotation.** `superimpose_homologs` (biotite) aligns the anchor chain sequences, identifies paired Cα positions, and finds the rotation + translation that minimises RMSD over those Cα atoms. `rmsd__anchor_atoms` records how many Cα pairs were used.
+
+3. **Apply transform to the whole complex.** The rotation computed on chain A is applied to every atom in the query structure — chains B and C (Ab2) move rigidly with the antigen.
+
+4. **Match all atoms across both structures.** Every atom is matched by `(chain_id, res_id, insertion_code, atom_name)`. Atoms that exist in only one structure are excluded.
+
+5. **Global RMSD** — `rmsd__shared_atoms_rmsd`:
+   ```
+   RMSD = sqrt( (1/N) Σᵢ |rᵢ_reference − rᵢ_query|² )
+   ```
+   computed over all N matched heavy atoms in the full complex.
+
+6. **Per-chain breakdown** — one `grain=chain` row per chain:
+
+The resulting output looks like:
+
+| grain | chain_id | rmsd | matched_atoms | meaning |
+|---|---|---|---|---|
+| structure | — | **28.4 Å** | 16 900 | Ab2 is far from Ab1 after antigen alignment |
+| chain | A | 0.3 Å | 15 000 | Antigen fits well (Kabsch minimised this) |
+| chain | C | 35.0 Å | 1 000 | Ab2's VH is on the opposite side of the antigen |
+| chain | B | 33.5 Å | 900 | Ab2's VL is similarly displaced |
+
+The large per-chain antibody RMSD is the signal. It tells you the antibody landed in a completely different location after the antigen was aligned. You do not need to look at the global RMSD to detect this — per-chain RMSD is the informative number.
+
+**Same epitope, different sequence:**
+
+If Ab2 binds the same epitope as Ab1 (just a different CDR sequence), the result is:
+
+| grain | chain_id | rmsd |
+|---|---|---|
+| structure | — | 2.1 Å |
+| chain | A | 0.3 Å |
+| chain | C | 3.5 Å |
+| chain | B | 2.8 Å |
+
+Per-chain antibody RMSD is now small — the antibody sits in roughly the same location after antigen alignment.
+
+**Key design rules:**
+
+- The alignment anchor (`on_chains`) and the RMSD measurement are separate. You can align on antigen only and still get per-chain RMSD for the antibody chains.
+- Kabsch minimises RMSD on `on_chains` Cα atoms. The reported `rmsd__shared_atoms_rmsd` is then measured over all matched heavy atoms of the whole complex — not just Cα, not just the anchor.
+- `structure_rmsd` and `superimpose_to_reference` can be used in the same run. They write different prefix columns (`rmsd__` vs `sup__`) and serve different purposes: `superimpose_to_reference` moves coordinates into a shared frame for clustering and visualisation; `structure_rmsd` measures how different each model is from the reference as a quality metric.
+- If no `reference_path` is given, the first structure processed becomes the reference. It gets a row with `rmsd__note: "reference_structure"` and no RMSD value.
+- Set `persist_transformed_structures: true` to also save the superimposed structure to disk (useful for visualisation).
+
+Config for `structure_rmsd`:
+
+```yaml
+plugin_params:
+  structure_rmsd:
+    reference_path: "/path/to/reference.pdb"   # omit → first structure becomes reference
+    on_chains: ["A"]                            # anchor chains for Kabsch fit
+    # persist_transformed_structures: false     # set true to save superimposed .bcif to out_dir
 ```
 
 #### Worker pool configuration
@@ -926,23 +1007,23 @@ Notes:
 One-shot run:
 
 ```bash
-python -m minimum_atw.cli run --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+python -m minimum_atw.cli run --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
 Staged run:
 
 ```bash
-python -m minimum_atw.cli prepare --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
-python -m minimum_atw.cli run-plugin --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml --plugin identity
-python -m minimum_atw.cli merge --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
-python -m minimum_atw.cli analyze-dataset --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+python -m minimum_atw.cli prepare --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
+python -m minimum_atw.cli run-plugin --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml --plugin identity
+python -m minimum_atw.cli merge --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
+python -m minimum_atw.cli analyze-dataset --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
 ```
 
 Automatic chunked run:
 
 ```bash
 python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --config minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 100 \
   --workers 4
 ```
@@ -951,7 +1032,7 @@ Scheduler-ready chunk planning:
 
 ```bash
 python -m minimum_atw.cli plan-chunks \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --config minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 100 \
   --plan-dir /path/to/chunk_plan
 ```
@@ -1023,9 +1104,9 @@ Start here:
 
 Detailed guides:
 
-- [simple_run/README.md](minimum_atw/examples/simple_run/README.md)
-- [chunk_run/README.md](minimum_atw/examples/chunk_run/README.md)
-- [large_run/README.md](minimum_atw/examples/large_run/README.md)
+- [simple_run/README.md](minimum_atw/examples/input/simple_run/README.md)
+- [chunk_run/README.md](minimum_atw/examples/input/chunk_run/README.md)
+- [large_run/README.md](minimum_atw/examples/input/large_run/README.md)
 
 YAML config field meanings:
 

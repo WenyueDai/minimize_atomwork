@@ -3,12 +3,12 @@
 # Run:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#     --config minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml
 #
 # Large-dataset Slurm path with the same YAML:
 #   1. add `slurm.chunk_size`
 #   2. python -m minimum_atw.cli submit-slurm \
-#        --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#        --config minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml
 #
 # Typical workflow for cross-dataset comparison:
 #   1. Run this config for dataset A.
@@ -61,7 +61,7 @@ clash_scope: "all"
 plugins:
   # — structure grain —
   - "identity"
-  # - "superimpose_homology"    # legacy metrics-only path; leave off when superimpose_to_reference is enabled
+  # - "structure_rmsd"    # RMSD metrics only (no coordinate rewrite); can be used with or without superimpose_to_reference
 
   # — chain grain —
   - "chain_stats"
@@ -99,7 +99,7 @@ plugin_params:
   # anchor_atoms: "CA"              # CA | backbone (default: CA)
 
 
-  # superimpose_homology:
+  # structure_rmsd:
   #   reference_path: "/path/to/your/reference.pdb"
   #   on_chains: ["A"]              # anchor chains for RMSD alignment
   #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)

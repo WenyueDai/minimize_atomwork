@@ -273,7 +273,7 @@ def _rewrite_embedded_output_paths(target_out_dir: Path, source_out_dir: Path) -
     pdb_path = pdb_output_path(target_out_dir, metadata=metadata)
     if pdb_path.exists():
         frame = read_pdb_table(pdb_path)
-        for column in ("prepared__path", "sup__transformed_path"):
+        for column in ("prepared__path", "rmsd__transformed_path"):
             if column not in frame.columns:
                 continue
             updated: list[object] = []

@@ -14,12 +14,12 @@
 # Run:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#     --config minimum_atw/examples/input/simple_run/example_antibody_antigen_rosetta.yaml
 #
 # Optional HPC path with the same YAML:
 #   1. add `slurm.chunk_size`
 #   2. python -m minimum_atw.cli submit-slurm \
-#        --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#        --config minimum_atw/examples/input/simple_run/example_antibody_antigen_rosetta.yaml
 #
 # This profile is CPU-oriented by default. Rosetta, DockQ, and the standard
 # interface geometry plugins all run on CPU. You can still enable GPU model
@@ -54,13 +54,16 @@ manipulations:
     grain: "pdb"
 
   # — Pipeline 1: superimpose → Rosetta relax —
+  # superimpose_to_reference aligns first; rosetta_preprocess must have
+  # superimpose: false so it does not try to superimpose a second time.
   - name: "superimpose_to_reference"
     grain: "pdb"
   - name: "rosetta_preprocess"
     grain: "pdb"
 
   # — Pipeline 2: Rosetta relax → superimpose —
-  # (swap the two blocks above: put rosetta_preprocess before superimpose_to_reference)
+  # rosetta_preprocess runs with superimpose: false; superimpose_to_reference
+  # then aligns the relaxed coordinates to the reference.
   # - name: "rosetta_preprocess"
   #   grain: "pdb"
   # - name: "superimpose_to_reference"
@@ -100,6 +103,7 @@ plugin_params:
     # anchor_atoms: "CA"          # CA | backbone (default: CA)
 
   rosetta_preprocess:
+    superimpose: false           # superimpose_to_reference already ran (Pipeline 1); remove for Pipeline 2
     repack: true                 # sidechain-only optimisation (backbone fixed)
     relax: false                 # full fast-relax including backbone (expensive)
 

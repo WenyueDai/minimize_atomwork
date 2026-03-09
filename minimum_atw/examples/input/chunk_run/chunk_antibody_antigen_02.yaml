@@ -1,12 +1,12 @@
 # Chunk 02 — antibody-antigen manual chunk workflow.
 #
 # If you do not need fixed hand-written chunk boundaries, prefer
-# `minimum_atw/examples/large_run/*.yaml` plus `minimum_atw.cli submit-slurm`.
+# `minimum_atw/examples/input/large_run/*.yaml` plus `minimum_atw.cli submit-slurm`.
 #
 # Run this chunk:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+#     --config minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_02.yaml
 #
 # Scheduler note:
 #   each chunk writes `run_metadata.json -> plugin_execution.scheduler_resources`,
@@ -51,7 +51,7 @@ manipulations:
 plugins:
   # — structure grain —
   - "identity"
-  # - "superimpose_homology"    # legacy metrics-only path; leave off when superimpose_to_reference is enabled
+  # - "structure_rmsd"    # RMSD metrics only (no coordinate rewrite); can be used with or without superimpose_to_reference
 
   # — chain grain —
   - "chain_stats"
@@ -89,7 +89,7 @@ plugin_params:
   # anchor_atoms: "CA"              # CA | backbone (default: CA)
 
 
-  # superimpose_homology:
+  # structure_rmsd:
   #   reference_path: "/path/to/your/reference.pdb"
   #   on_chains: ["A"]              # anchor chains for RMSD alignment
   #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)

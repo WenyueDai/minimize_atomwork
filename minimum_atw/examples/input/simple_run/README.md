@@ -25,20 +25,20 @@ conda activate atw_pp
 **One-shot run (all stages):**
 ```bash
 python -m minimum_atw.cli run \
-  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+  --config minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml
 ```
 
 **Scale the same analysis on Slurm later:**
 ```bash
 python -m minimum_atw.cli submit-slurm \
-  --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+  --config minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml
 ```
 
 Add a small `slurm:` block with `chunk_size` when you are ready to move from one-node testing to chunked HPC submission. The framework will classify built-in plugins into CPU and GPU stages automatically.
 
 **Iterate on a single plugin without re-running prepare:**
 ```bash
-CONFIG=minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+CONFIG=minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml
 
 # Run prepare once (builds the _prepared/ cache):
 python -m minimum_atw.cli prepare --config "$CONFIG"

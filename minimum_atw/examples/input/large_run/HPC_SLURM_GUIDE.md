@@ -62,7 +62,7 @@ Command:
 ```bash
 PYTHON=$(which python)  # activate atw_pp env first: conda activate atw_pp
 WORKDIR=/path/to/repo
-CONFIG=$WORKDIR/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml
+CONFIG=$WORKDIR/minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml
 
 cd "$WORKDIR"
 
@@ -111,7 +111,7 @@ Command:
 ```bash
 PYTHON=$(which python)  # activate atw_pp env first: conda activate atw_pp
 WORKDIR=/path/to/repo
-CONFIG=$WORKDIR/minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml
+CONFIG=$WORKDIR/minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml
 
 cd "$WORKDIR"
 

@@ -38,7 +38,7 @@ class ExtensionCatalogTests(unittest.TestCase):
                 "role_sequences",
                 "role_stats",
                 "rosetta_interface_example",
-                "superimpose_homology",
+                "structure_rmsd",
             ],
         )
         self.assertEqual(

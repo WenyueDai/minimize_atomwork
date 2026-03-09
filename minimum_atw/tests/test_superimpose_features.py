@@ -124,10 +124,10 @@ class SuperimposeFeatureTests(unittest.TestCase):
                 out_dir=str(out_dir),
                 roles={},
                 interface_pairs=[],
-                plugins=["identity", "superimpose_homology"],
+                plugins=["identity", "structure_rmsd"],
                 keep_prepared_structures=True,
                 plugin_params={
-                    "superimpose_homology": {
+                    "structure_rmsd": {
                         "reference_path": str(reference),
                         "on_chains": ["A"],
                         "persist_transformed_structures": True,
@@ -140,7 +140,7 @@ class SuperimposeFeatureTests(unittest.TestCase):
             self.assertTrue((out_dir / "_prepared" / "prepared_manifest.parquet").exists())
             structures = read_pdb_grain(out_dir, "structure")
             mobile_row = structures[structures["path"].astype(str) == str(mobile.resolve())].iloc[0]
-            transformed_path = Path(str(mobile_row["sup__transformed_path"]))
+            transformed_path = Path(str(mobile_row["rmsd__transformed_path"]))
             prepared_path = Path(str(mobile_row["prepared__path"]))
 
             self.assertTrue(transformed_path.exists())

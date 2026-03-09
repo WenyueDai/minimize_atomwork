@@ -11,8 +11,8 @@ from .....runtime.workspace import prepared_filename, superimposed_structures_di
 
 
 class SuperimposePlugin(BasePlugin):
-    name = "superimpose_homology"
-    prefix = "sup"
+    name = "structure_rmsd"
+    prefix = "rmsd"
     grain = "structure"
     analysis_category = "structure_analysis"
 

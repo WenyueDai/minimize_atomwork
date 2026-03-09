@@ -3,10 +3,10 @@
 # Workflow (activate conda env first: conda activate atw_pp):
 #   1. Run dataset A:
 #      python -m minimum_atw.cli run \
-#        --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#        --config minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml
 #   2. Run dataset B:
 #      python -m minimum_atw.cli run \
-#        --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+#        --config minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml
 #   3. Merge those finished out_dirs:
 #      python -m minimum_atw.cli merge-datasets \
 #        --out-dir /path/to/your/out_compare_ab \
@@ -14,7 +14,7 @@
 #        --source-out-dir /path/to/your/out_dataset_b
 #   4. Analyze the merged output:
 #      python -m minimum_atw.cli analyze-dataset \
-#        --config minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
+#        --config minimum_atw/examples/input/multi_dataset/compare_merged_datasets.yaml
 #
 # Note:
 #   `analyze-dataset` only reads `out_dir` plus dataset-analysis settings below.

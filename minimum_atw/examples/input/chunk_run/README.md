@@ -6,9 +6,9 @@ If you want automatic chunk planning and one-command Slurm submission, use the [
 
 ## Files
 
-- [chunk_antibody_antigen_01.yaml](minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml)
-- [chunk_antibody_antigen_02.yaml](minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml)
-- [chunk_config_manifest_example.txt](minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt)
+- [chunk_antibody_antigen_01.yaml](minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_01.yaml)
+- [chunk_antibody_antigen_02.yaml](minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_02.yaml)
+- [chunk_config_manifest_example.txt](minimum_atw/examples/input/chunk_run/chunk_config_manifest_example.txt)
 
 ## Run the chunks
 
@@ -22,10 +22,10 @@ Then run each chunk from the repo root:
 
 ```bash
 python -m minimum_atw.cli run \
-  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+  --config minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_01.yaml
 
 python -m minimum_atw.cli run \
-  --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml
+  --config minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_02.yaml
 ```
 
 ## Merge the finished chunks
@@ -39,7 +39,7 @@ python -m minimum_atw.cli merge-datasets \
 
 ## Step By Step: What This Manual Chunk Workflow Does
 
-Using [chunk_antibody_antigen_01.yaml](minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml) and [chunk_antibody_antigen_02.yaml](minimum_atw/examples/chunk_run/chunk_antibody_antigen_02.yaml):
+Using [chunk_antibody_antigen_01.yaml](minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_01.yaml) and [chunk_antibody_antigen_02.yaml](minimum_atw/examples/input/chunk_run/chunk_antibody_antigen_02.yaml):
 
 ### Step 1 — You define the chunk boundaries
 
@@ -214,7 +214,7 @@ This produces `cluster__epitope_site_cluster_id` and `cluster__epitope_shape_clu
 This section is for the manual chunk workflow in this folder. If you want the framework to generate Slurm scripts and dependencies for you, use `minimum_atw.cli submit-slurm` from [large_run/HPC_SLURM_GUIDE.md](../large_run/HPC_SLURM_GUIDE.md).
 
 ```bash
-MANIFEST=minimum_atw/examples/chunk_run/chunk_config_manifest_example.txt
+MANIFEST=minimum_atw/examples/input/chunk_run/chunk_config_manifest_example.txt
 ```
 
 Generic array-job pattern:

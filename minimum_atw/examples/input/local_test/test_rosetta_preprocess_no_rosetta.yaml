@@ -10,7 +10,7 @@
 # Run from the repo root:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/test/test_rosetta_preprocess_no_rosetta.yaml
+#     --config minimum_atw/examples/input/local_test/test_rosetta_preprocess_no_rosetta.yaml
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "minimum_atw/examples/data/antibody_antigen"
@@ -69,7 +69,8 @@ plugin_params:
     on_chains: ["A", "B", "C", "D", "E"]
 
   rosetta_preprocess:
-    repack: false   # no effect when rosetta_preprocess: false at top level
+    superimpose: false  # superimpose_to_reference already handled alignment
+    repack: false       # no effect when rosetta_preprocess: false at top level
     relax: false
 
   dockq_score:

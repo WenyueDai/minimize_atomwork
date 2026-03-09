@@ -4,7 +4,7 @@
 # One-line run on a personal workstation with one GPU:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml
+#     --config minimum_atw/examples/input/simple_run/example_antibody_antigen_realdata_all_non_rosetta.yaml
 #
 # What this enables:
 #   - real structures from minimum_atw/examples/data/antibody_antigen
@@ -18,7 +18,7 @@
 
 # ── Input / output ─────────────────────────────────────────────────────────────
 input_dir: "minimum_atw/examples/data/antibody_antigen"
-out_dir: "/home/eva/20260308_minimum_atomworks/minimum_atw_realdata_all_non_rosetta"
+out_dir: "minimum_atw/examples/output/simple_run/minimum_atw_realdata_all_non_rosetta"
 assembly_id: "1"
 # pdb_output_name: "pdb.parquet"
 # dataset_output_name: "dataset.parquet"

@@ -462,12 +462,7 @@ class Config(BaseModel):
         prepare_names = {item["name"] for item in self.manipulations}
         if "superimpose_to_reference" in prepare_names or "rosetta_preprocess" in prepare_names:
             self.keep_prepared_structures = True
-        if "superimpose_to_reference" in prepare_names and "superimpose_homology" in self.plugins:
-            raise ValueError(
-                "superimpose_to_reference and superimpose_homology cannot be enabled together; "
-                "both write sup__* columns, so choose either prepare-stage coordinate rewriting "
-                "or plugin-stage superposition metrics"
-            )
+
         return self
 
     def prepare_names_by_grain(self) -> dict[str, list[str]]:

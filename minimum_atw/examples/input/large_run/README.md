@@ -23,7 +23,7 @@ conda activate atw_pp
 
 ```bash
 python -m minimum_atw.cli run-chunked \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --config minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --workers 2
 ```
@@ -38,7 +38,7 @@ Use `plan-chunks` to generate one config file per chunk, run them independently,
 
 ```bash
 python -m minimum_atw.cli plan-chunks \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --config minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml \
   --chunk-size 10 \
   --plan-dir /path/to/your/chunk_plan
 ```
@@ -55,7 +55,7 @@ Use the planner outputs like this:
 
 ```bash
 python -m minimum_atw.cli submit-slurm \
-  --config minimum_atw/examples/large_run/example_antibody_antigen_chunked.yaml \
+  --config minimum_atw/examples/input/large_run/example_antibody_antigen_chunked.yaml \
   --dry-run
 ```
 

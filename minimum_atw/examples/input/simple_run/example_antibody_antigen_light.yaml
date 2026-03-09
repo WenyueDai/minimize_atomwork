@@ -8,12 +8,12 @@
 # One-shot run:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+#     --config minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml
 #
 # Optional HPC path with the same YAML:
 #   1. add `slurm.chunk_size`
 #   2. python -m minimum_atw.cli submit-slurm \
-#        --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+#        --config minimum_atw/examples/input/simple_run/example_antibody_antigen_light.yaml
 #
 # Staged workflow:
 #   conda activate atw_pp
@@ -69,7 +69,7 @@ manipulations:
 plugins:
   # — structure grain —
   - "identity"
-  # - "superimpose_homology"    # requires reference_path in plugin_params
+  # - "structure_rmsd"    # RMSD metrics only; requires reference_path in plugin_params
 
   # — chain grain —
   # - "chain_stats"
@@ -106,7 +106,7 @@ contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_sco
 #     repack: true                  # sidechain-only optimisation (backbone fixed)
 #     relax: false                  # full fast-relax including backbone (expensive)
 #
-#   superimpose_homology:
+#   structure_rmsd:
 #     reference_path: "/path/to/your/reference.pdb"
 #     on_chains: ["A"]              # anchor chains for RMSD alignment
 #     # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)

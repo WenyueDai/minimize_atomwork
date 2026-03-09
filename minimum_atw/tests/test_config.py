@@ -227,14 +227,16 @@ class ConfigTests(unittest.TestCase):
             [("binder", "target"), ("binder", "chains_A_B")],
         )
 
-    def test_prepare_and_plugin_superimpose_are_mutually_exclusive(self) -> None:
-        with self.assertRaises(ValueError):
-            Config(
-                input_dir="/tmp/in",
-                out_dir="/tmp/out",
-                manipulations=[{"name": "superimpose_to_reference", "grain": "pdb"}],
-                plugins=["superimpose_homology"],
-            )
+    def test_prepare_superimpose_and_structure_rmsd_plugin_can_coexist(self) -> None:
+        # superimpose_to_reference (sup__ prefix) and structure_rmsd (rmsd__ prefix)
+        # write different columns and can be used together.
+        cfg = Config(
+            input_dir="/tmp/in",
+            out_dir="/tmp/out",
+            manipulations=[{"name": "superimpose_to_reference", "grain": "pdb"}],
+            plugins=["structure_rmsd"],
+        )
+        self.assertIn("structure_rmsd", cfg.plugins)
 
     def test_prepare_superimpose_forces_prepared_structure_persistence(self) -> None:
         cfg = Config(

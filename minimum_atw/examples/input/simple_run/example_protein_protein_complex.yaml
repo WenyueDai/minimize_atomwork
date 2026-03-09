@@ -4,12 +4,12 @@
 # Run:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
+#     --config minimum_atw/examples/input/simple_run/example_protein_protein_complex.yaml
 #
 # Optional HPC path with the same YAML:
 #   1. add `slurm.chunk_size`
 #   2. python -m minimum_atw.cli submit-slurm \
-#        --config minimum_atw/examples/simple_run/example_protein_protein_complex.yaml
+#        --config minimum_atw/examples/input/simple_run/example_protein_protein_complex.yaml
 #
 # Stage-by-stage:
 #   conda activate atw_pp
@@ -62,7 +62,7 @@ manipulations:
 plugins:
   # — structure grain —
   - "identity"
-  # - "superimpose_homology"    # requires reference_path in plugin_params
+  # - "structure_rmsd"    # RMSD metrics only; requires reference_path in plugin_params
 
   # — chain grain —
   - "chain_stats"
@@ -93,7 +93,7 @@ contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_sco
 #     on_chains: ["A", "B", "C"]
 #     # anchor_atoms: "CA"       # CA | backbone (default: CA)
 #
-#   superimpose_homology:
+#   structure_rmsd:
 #     reference_path: "/path/to/reference.pdb"
 #     on_chains: ["A"]
 #     # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)

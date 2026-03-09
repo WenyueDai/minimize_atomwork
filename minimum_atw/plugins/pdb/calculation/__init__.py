@@ -26,7 +26,7 @@ def _builtin_pdb_calculations() -> dict[str, object]:
         "role_sequences": RoleSequencesPlugin(),
         "role_stats": RoleStatsPlugin(),
         "rosetta_interface_example": RosettaInterfaceExamplePlugin(),
-        "superimpose_homology": SuperimposePlugin(),
+        "structure_rmsd": SuperimposePlugin(),
     }
 
 

@@ -41,28 +41,28 @@ Dataset A:
 
 ```bash
 python -m minimum_atw.cli run \
-  --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+  --config minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml
 ```
 
 Large dataset A on Slurm:
 
 ```bash
 python -m minimum_atw.cli submit-slurm \
-  --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+  --config minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml
 ```
 
 Dataset B:
 
 ```bash
 python -m minimum_atw.cli run \
-  --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+  --config minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml
 ```
 
 Large dataset B on Slurm:
 
 ```bash
 python -m minimum_atw.cli submit-slurm \
-  --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+  --config minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml
 ```
 
 Merge them:
@@ -78,12 +78,12 @@ Analyze the merged output:
 
 ```bash
 python -m minimum_atw.cli analyze-dataset \
-  --config minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
+  --config minimum_atw/examples/input/multi_dataset/compare_merged_datasets.yaml
 ```
 
 ## Step By Step: What This Multi-Dataset Workflow Does
 
-Using [dataset_a_antibody_antigen.yaml](minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml), [dataset_b_antibody_antigen.yaml](minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml), and [compare_merged_datasets.yaml](minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml).
+Using [dataset_a_antibody_antigen.yaml](minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml), [dataset_b_antibody_antigen.yaml](minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml), and [compare_merged_datasets.yaml](minimum_atw/examples/input/multi_dataset/compare_merged_datasets.yaml).
 
 ### Step 1 — Run dataset A end-to-end
 
@@ -185,6 +185,6 @@ The source-dataset and merged-dataset cluster jobs intentionally use different n
 
 ## Files
 
-- [dataset_a_antibody_antigen.yaml](minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml)
-- [dataset_b_antibody_antigen.yaml](minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml)
-- [compare_merged_datasets.yaml](minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml)
+- [dataset_a_antibody_antigen.yaml](minimum_atw/examples/input/multi_dataset/dataset_a_antibody_antigen.yaml)
+- [dataset_b_antibody_antigen.yaml](minimum_atw/examples/input/multi_dataset/dataset_b_antibody_antigen.yaml)
+- [compare_merged_datasets.yaml](minimum_atw/examples/input/multi_dataset/compare_merged_datasets.yaml)

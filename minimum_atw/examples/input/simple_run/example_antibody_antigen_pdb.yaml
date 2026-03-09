@@ -3,12 +3,12 @@
 # One-shot run:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run \
-#     --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+#     --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
 #
 # Optional HPC path with the same YAML:
 #   1. add `slurm.chunk_size`
 #   2. python -m minimum_atw.cli submit-slurm \
-#        --config minimum_atw/examples/simple_run/example_antibody_antigen_pdb.yaml
+#        --config minimum_atw/examples/input/simple_run/example_antibody_antigen_pdb.yaml
 #
 # Useful staged commands:
 #   conda activate atw_pp

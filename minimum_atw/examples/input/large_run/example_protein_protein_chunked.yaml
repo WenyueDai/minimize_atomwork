@@ -3,19 +3,19 @@
 # Internal chunk workers:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli run-chunked \
-#     --config minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
+#     --config minimum_atw/examples/input/large_run/example_protein_protein_chunked.yaml \
 #     --chunk-size 50 --workers 4
 #
 # One-command Slurm submission:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli submit-slurm \
-#     --config minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
+#     --config minimum_atw/examples/input/large_run/example_protein_protein_chunked.yaml \
 #     --dry-run
 #
 # Offline plan -> scheduler -> merge:
 #   conda activate atw_pp
 #   python -m minimum_atw.cli plan-chunks \
-#     --config minimum_atw/examples/large_run/example_protein_protein_chunked.yaml \
+#     --config minimum_atw/examples/input/large_run/example_protein_protein_chunked.yaml \
 #     --chunk-size 50 --plan-dir /path/to/your/chunk_plan
 #   # (run each planned chunk config yourself, or inspect chunk_plan.json)
 #   conda activate atw_pp
@@ -61,7 +61,7 @@ manipulations:
 plugins:
   # — structure grain —
   - "identity"
-  # - "superimpose_homology"    # requires reference_path in plugin_params
+  # - "structure_rmsd"    # RMSD metrics only; requires reference_path in plugin_params
 
   # — chain grain —
   - "chain_stats"
@@ -92,7 +92,7 @@ contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_sco
 #     on_chains: ["A", "B", "C"]
 #     # anchor_atoms: "CA"       # CA | backbone (default: CA)
 #
-#   superimpose_homology:
+#   structure_rmsd:
 #     reference_path: "/path/to/reference.pdb"
 #     on_chains: ["A"]
 #     # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
