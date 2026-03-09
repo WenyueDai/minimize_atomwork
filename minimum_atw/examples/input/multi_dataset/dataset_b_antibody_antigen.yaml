@@ -58,7 +58,6 @@ clash_scope: "all"
 plugins:
   # — structure grain —
   - "identity"
-  # - "structure_rmsd"    # RMSD metrics only (no coordinate rewrite); can be used with or without superimpose_to_reference
 
   # — chain grain —
   - "chain_stats"
@@ -94,13 +93,6 @@ plugin_params:
   #   repack: true                  # sidechain-only optimisation (backbone fixed)
   #   relax: false                  # full fast-relax including backbone (expensive)
   # anchor_atoms: "CA"              # CA | backbone (default: CA)
-
-
-  # structure_rmsd:
-  #   reference_path: "/path/to/your/reference.pdb"
-  #   on_chains: ["A"]              # anchor chains for RMSD alignment
-  #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
-
 
   # interface_contacts:
   #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)

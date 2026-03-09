@@ -61,7 +61,6 @@ manipulations:
 plugins:
   # — structure grain —
   - "identity"
-  # - "structure_rmsd"    # RMSD metrics only; requires reference_path in plugin_params
 
   # — chain grain —
   - "chain_stats"

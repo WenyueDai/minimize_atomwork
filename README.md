@@ -401,7 +401,7 @@ Per-chain antibody RMSD is now small — the antibody sits in roughly the same l
 
 - The alignment anchor (`on_chains`) and the RMSD measurement are separate. You can align on antigen only and still get per-chain RMSD for the antibody chains.
 - Kabsch minimises RMSD on `on_chains` Cα atoms. The reported `rmsd__shared_atoms_rmsd` is then measured over all matched heavy atoms of the whole complex — not just Cα, not just the anchor.
-- `structure_rmsd` and `superimpose_to_reference` can be used in the same run. They write different prefix columns (`rmsd__` vs `sup__`) and serve different purposes: `superimpose_to_reference` moves coordinates into a shared frame for clustering and visualisation; `structure_rmsd` measures how different each model is from the reference as a quality metric.
+- `superimpose_to_reference` (prepare stage) already writes `sup__shared_atoms_rmsd` and per-chain `sup__rmsd` as part of the fit — RMSD is free. Use `structure_rmsd` only when you need RMSD against a different reference than what you superimposed on, or in runs that have no prepare-stage superimposition.
 - If no `reference_path` is given, the first structure processed becomes the reference. It gets a row with `rmsd__note: "reference_structure"` and no RMSD value.
 - Set `persist_transformed_structures: true` to also save the superimposed structure to disk (useful for visualisation).
 

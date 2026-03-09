@@ -397,7 +397,7 @@ Per-chain antibody RMSD is now small — the antibody lands in roughly the same 
 
 - **Alignment and RMSD use different atom sets.** The Kabsch fit minimises RMSD over Cα atoms on `on_chains` only. The reported `rmsd__shared_atoms_rmsd` is then computed over all matched heavy atoms across the whole complex (backbone + sidechains).
 - **Anchor chains ≠ RMSD scope.** You can align on antigen only (`on_chains: ["A"]`) and still get per-chain RMSD for the antibody chains B and C.
-- **Does not modify coordinates.** `superimpose_to_reference` (prepare stage) rewrites `ctx.aa` in place for clustering and visualisation. `structure_rmsd` reads the same coordinates and reports a number without touching them. Both write different prefix columns (`sup__` vs `rmsd__`) and can be enabled in the same run.
+- **Does not modify coordinates.** `superimpose_to_reference` (prepare stage) rewrites coordinates and already writes `sup__shared_atoms_rmsd` + per-chain `sup__rmsd` as part of the fit. Use `structure_rmsd` only when you need RMSD against a different reference than the one you superimposed on, or when running without superimposition in prepare.
 - **First-structure fallback.** If `reference_path` is omitted, the first structure processed becomes the reference. It gets a `rmsd__note: "reference_structure"` row with no RMSD value; all subsequent structures are measured against it.
 
 Config:
@@ -416,7 +416,7 @@ plugin_params:
 
 - Set `dataset_annotations.dataset_id` on every run you plan to merge later — `dataset__id` is copied onto every `pdb.parquet` row.
 - For chunked workflows, `dataset_analysis_mode: post_merge` is the right default for clustering.
-- `superimpose_to_reference` (prepare stage) rewrites coordinates and writes `sup__*` columns. `structure_rmsd` (plugin stage) only computes RMSD metrics without touching coordinates and writes `rmsd__*` columns — they serve different purposes and can be used together in the same run.
+- `superimpose_to_reference` (prepare stage) rewrites coordinates and writes `sup__shared_atoms_rmsd` and per-chain `sup__rmsd` columns as part of the fit — you get RMSD for free. The `structure_rmsd` plugin is a separate option for cases where you want RMSD against a different reference than you superimposed on, or without any superimposition in the prepare stage.
 - `rosetta_preprocess` with `superimpose: false` does Rosetta relax/repack without a built-in superimpose step. Set this when `superimpose_to_reference` is also listed in `manipulations`.
 - `cluster` writes labels back onto `grain == "interface"` rows in `pdb.parquet`, not into `dataset.parquet`.
 - `device: auto` is always safe. GPU-capable plugins resolve CUDA at startup if available and silently fall back to CPU otherwise — no YAML edits needed between environments.
