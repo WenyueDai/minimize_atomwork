@@ -1,0 +1,178 @@
+# Antibody-antigen Rosetta profile: Rosetta preprocess + InterfaceAnalyzer.
+#
+# Use this when you have Rosetta installed and want a CPU-oriented workflow.
+# Two prepare orderings are supported — uncomment the one that fits your use case:
+#
+#   Pipeline 1 — superimpose → Rosetta relax:
+#     Relax in the reference coordinate frame. Good when the reference is
+#     already a relaxed structure and you want a consistent starting geometry.
+#
+#   Pipeline 2 — Rosetta relax → superimpose:
+#     Relax each structure first, then align the relaxed coordinates to the
+#     reference. Good when you want to compare relaxed structures to each other.
+#
+# Run:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#
+# Optional HPC path with the same YAML:
+#   1. add `slurm.chunk_size`
+#   2. python -m minimum_atw.cli submit-slurm \
+#        --config minimum_atw/examples/simple_run/example_antibody_antigen_rosetta.yaml
+#
+# This profile is CPU-oriented by default. Rosetta, DockQ, and the standard
+# interface geometry plugins all run on CPU. You can still enable GPU model
+# plugins later if needed, but they are intentionally off here.
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "/path/to/your/pdb_files"
+out_dir: "/path/to/your/out_antibody_antigen_rosetta"
+assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
+  antibody: ["B", "C"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+# QC steps run first in both pipelines. Then choose ONE ordering below.
+manipulations:
+  # — QC —
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+
+  # — Pipeline 1: superimpose → Rosetta relax —
+  - name: "superimpose_to_reference"
+    grain: "pdb"
+  - name: "rosetta_preprocess"
+    grain: "pdb"
+
+  # — Pipeline 2: Rosetta relax → superimpose —
+  # (swap the two blocks above: put rosetta_preprocess before superimpose_to_reference)
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
+  # - name: "superimpose_to_reference"
+  #   grain: "pdb"
+
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  # — structure grain —
+  - "identity"
+
+  # — chain grain —
+  - "chain_stats"
+
+  # — role grain —
+  - "role_sequences"
+  - "role_stats"
+  - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "pdockq_score"
+  - "dockq_score"             # requires reference_path below
+  - "rosetta_interface_example"
+
+contact_distance: 5.0
+# interface_cell_size: 5.0
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+plugin_params:
+  superimpose_to_reference:
+    reference_path: "/path/to/your/reference.pdb"
+    on_chains: ["A", "B", "C"]   # chains to anchor alignment; whole complex is transformed
+    # anchor_atoms: "CA"          # CA | backbone (default: CA)
+
+  rosetta_preprocess:
+    repack: true                 # sidechain-only optimisation (backbone fixed)
+    relax: false                 # full fast-relax including backbone (expensive)
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
+
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  dockq_score:
+    reference_path: "/path/to/your/reference.pdb"
+    receptor_role: "antigen"     # role used as the LRMS anchor
+    contact_distance: 5.0
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vh", "vl"]
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
+
+# ── Rosetta configuration ──────────────────────────────────────────────────────
+rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+rosetta_database: "/path/to/rosetta/database"
+rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+rosetta_preprocess: true
+rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+# rosetta_pack_input: true
+# rosetta_pack_separated: true
+# rosetta_compute_packstat: true
+# rosetta_add_regular_scores_to_scorefile: true
+# rosetta_packstat_oversample: 100
+# rosetta_atomic_burial_cutoff: 0.01
+# rosetta_sasa_calculator_probe_radius: 1.4
+# rosetta_interface_cutoff: 8.0
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "post_merge"
+
+dataset_analysis_params:
+  cluster:
+    # Two clustering modes (set mode explicitly to enable clustering):
+    #   absolute_interface_ca — "where does it bind?" uses absolute Cα positions from globally
+    #     superimposed structures (superimpose_to_reference in prepare); distinguishes binding sites.
+    #   shape_interface_ca   — "how does it bind?" locally superimposes interface Cα (Kabsch on
+    #     common residues) then computes Chamfer; distinguishes binding geometry.
+    mode: "absolute_interface_ca"    # or "shape_interface_ca"
+    distance_threshold: 2.0           # Å; increase if structures cluster as singletons
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+
+dataset_annotations:
+  dataset_id: "antibody_antigen_rosetta"
+  project: "atomworks_example"
+  dataset_name: "antibody_antigen_rosetta"
+  modality: "antibody_antigen"
+  profile: "rosetta_cpu"
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25
+# cpu_workers: 4
+# gpu_workers: 0
+# slurm:
+#   chunk_size: 50

@@ -217,12 +217,13 @@ clash_scope: "all"           # all | inter_chain | interface_only
 |---|---|---|
 | `center_on_origin` | Translates the whole complex so its centroid is at (0,0,0); writes `center__centroid_x/y/z` | Useful before superimposition or as a simple normalisation step |
 | `superimpose_to_reference` | Aligns every structure's coordinates onto a reference PDB using `superimpose_homologs`; writes `sup__shared_atoms_rmsd`, per-chain `sup__rmsd`; **replaces coordinates in `_prepared/`** | When you have a crystal reference and want all models in the same structural frame |
-| `rosetta_preprocess` | Runs Rosetta score → repack/relax → score again → then superimposes the relaxed structure to the reference; writes `rosprep__pre_*` (pre-relax scores), `rosprep__post_*` (post-relax scores), and the same superimpose metrics; set `rosetta_preprocess: false` to skip Rosetta and use as a plain superimpose | When you need Rosetta-relaxed structures before any analysis |
+| `rosetta_preprocess` | Runs Rosetta score → repack/relax → score again → then (by default) superimposes the relaxed structure to the reference; writes `rosprep__pre_*` (pre-relax scores), `rosprep__post_*` (post-relax scores), and superimpose metrics when superimpose is on; set `rosetta_preprocess: false` to skip Rosetta and use as a plain superimpose; set `plugin_params.rosetta_preprocess.superimpose: false` to run only Rosetta relax/repack without superimposing | When you need Rosetta-relaxed structures before any analysis |
 
 Key rules:
-- `superimpose_to_reference` and `rosetta_preprocess` are **mutually exclusive** — both rewrite coordinates and superimpose, so only list one.
-- Either superimpose manipulation sets `keep_prepared_structures: true` automatically so the aligned `_prepared/structures/` files persist.
-- If no `reference_path` is given, the first structure in the run becomes the reference automatically.
+- `superimpose_to_reference` and `rosetta_preprocess` are **mutually exclusive by default** — both would superimpose, so only list one.
+- **Exception**: list both if you set `plugin_params.rosetta_preprocess.superimpose: false`. This runs Rosetta relax/repack first (updating `ctx.aa`), then `superimpose_to_reference` aligns the relaxed structure onto the reference. Use this when you need energy-minimised coordinates before structural alignment.
+- Either superimpose manipulation sets `keep_prepared_structures: true` automatically so the transformed `_prepared/structures/` files persist.
+- If no `reference_path` is given, the first structure in the run becomes the reference automatically (only applies when superimposing).
 
 Config for superimpose manipulations:
 
@@ -246,8 +247,29 @@ plugin_params:
   # rosetta_preprocess:
   #   reference_path: "/path/to/reference.pdb"
   #   on_chains: ["A", "B", "C"]
-  #   repack: true    # sidechain-only fast optimisation (backbone fixed)
-  #   relax: false    # full fast-relax including backbone (expensive)
+  #   repack: true      # sidechain-only fast optimisation (backbone fixed)
+  #   relax: false      # full fast-relax including backbone (expensive)
+  #   superimpose: true # set false to relax only, then superimpose separately
+```
+
+Rosetta relax/repack then superimpose as separate steps:
+
+```yaml
+manipulations:
+  - name: "rosetta_preprocess"
+    grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
+
+plugin_params:
+  rosetta_preprocess:
+    repack: true
+    relax: false
+    superimpose: false   # skip built-in superimpose; superimpose_to_reference runs next
+
+  superimpose_to_reference:
+    reference_path: "/path/to/reference.pdb"
+    on_chains: ["A", "B", "C"]
 ```
 
 Config for `rosetta_preprocess`:
@@ -284,8 +306,7 @@ Enable only the plugins you need. Each plugin appends prefixed columns to the ou
 | `chain_stats` | chain | `chstat__` | length, centroid, radius of gyration | — |
 | `role_sequences` | role | `rolseq__` | per-role sequence strings | — |
 | `role_stats` | role | `rolstat__` | atom/residue counts per role | — |
-| `antibody_cdr_lengths` | role | `abcdr__` | CDR1/2/3 lengths | `abnumber` |
-| `antibody_cdr_sequences` | role | `abseq__` | CDR1/2/3 sequences | `abnumber` |
+| `antibody_cdr_sequences` | role | `abseq__` | CDR1/2/3 sequences + lengths | `abnumber` |
 | `interface_contacts` | interface | `iface__` | contact atom pairs, CDR contact flags | — |
 | `interface_metrics` | interface | `ifm__` | polar/apolar counts, H-bonds, physicochemistry | — |
 | `pdockq_score` | interface | `pdockq__` | pDockQ confidence score | — |
@@ -377,8 +398,8 @@ Runs once on the merged `pdb.parquet`. Enable what you need:
 |---|---|---|
 | `dataset_annotations` | Provenance metadata rows to `dataset.parquet` | Always enable — records dataset_id, project, modality |
 | `interface_summary` | Aggregate interface stats (mean dG, contact counts, etc.) to `dataset.parquet` | When you want a dataset-level summary table |
-| `cluster` | RMSD-based cluster labels written back onto `pdb.parquet` interface rows | When comparing many models in a structural ensemble |
-| `cdr_entropy` | Shannon entropy per CDR position to `dataset.parquet` | When analysing sequence diversity across a panel |
+| `cluster` | Chamfer distance-based cluster labels (average-linkage) written back onto `pdb.parquet` interface rows. Two modes: **`absolute_interface_ca`** (binding-site clustering — absolute Cα positions after global superimposition) and **`shape_interface_ca`** (binding-shape clustering — local Kabsch superimposition of interface Cα then Chamfer). Clustering runs only when `cluster.mode` is set explicitly; omitting `interface_side` still produces both `cluster__left_*` and `cluster__right_*` columns. | When comparing many models in a structural ensemble; see cluster config below |
+| `cdr_entropy` | Position-wise Shannon entropy for numbered CDR residues, plus sequence-level summary rows when `regions: ["sequence"]` is selected | When analysing sequence diversity across a panel |
 
 When to run it:
 
@@ -387,6 +408,43 @@ dataset_analysis_mode: "post_merge"   # run once after all chunks are merged (re
 # dataset_analysis_mode: "per_chunk"  # run on each chunk independently (faster feedback, less meaningful for cluster)
 # dataset_analysis_mode: "both"       # run per chunk AND after merge
 ```
+
+Cluster config:
+
+```yaml
+dataset_analysis_params:
+  cluster:
+    # Set mode explicitly to enable clustering.
+    #
+    # absolute_interface_ca — binding-site clustering
+    #   Uses absolute Cα positions from globally superimposed structures.
+    #   Requires superimpose_to_reference in prepare.
+    #   Two antibodies binding different epitopes → different clusters
+    #   even if their binding shapes look similar.
+    #
+    # shape_interface_ca — binding-shape clustering
+    #   Locally superimposes interface Cα (Kabsch on common residues),
+    #   then computes Chamfer distance.
+    #   Two antibodies with the same binding geometry → same cluster
+    #   regardless of where on the antigen they bind.
+    mode: "absolute_interface_ca"   # or "shape_interface_ca"
+    distance_threshold: 2.0        # Å (increase if every structure ends up in its own cluster)
+
+    # Default (no interface_side): produces cluster__left_* AND cluster__right_* columns.
+    # To cluster one side only: add `interface_side: "right"` → cluster__default_* columns.
+    # To run multiple named jobs (e.g. site + shape on the epitope side):
+    # jobs:
+    #   - name: "epitope_site"
+    #     interface_side: "right"
+    #     mode: "absolute_interface_ca"
+    #     distance_threshold: 5.0
+    #   - name: "epitope_shape"
+    #     interface_side: "right"
+    #     mode: "shape_interface_ca"
+    #     distance_threshold: 3.0
+```
+
+If `cluster.mode` is omitted, the `cluster` analysis is skipped even when `"cluster"` is listed in `dataset_analyses`.
 
 Provenance:
 
@@ -403,6 +461,12 @@ dataset_annotations:
 ### Step 5 — Choosing a run command
 
 This is where local and HPC paths diverge.
+
+> **Activate the conda environment before running** to see real-time progress output:
+> ```bash
+> conda activate atw_pp
+> ```
+> All `python` commands below assume the environment is active.
 
 #### Option A — One-shot local run (≤ a few hundred structures)
 
@@ -586,7 +650,7 @@ In practice with the default built-in plugins:
 
 ```
 Wave 0 — CPU pool: identity, chain_stats, role_sequences, role_stats,
-          antibody_cdr_lengths, antibody_cdr_sequences,
+          antibody_cdr_sequences,
           interface_contacts, interface_metrics, pdockq_score, dockq_score
 
 Wave 1 — GPU pool: abepitope_score, esm_if1_score, ablang2_score
@@ -708,17 +772,17 @@ The planner (`mode: auto`) picks staged automatically when the GPU plugin fracti
 
 The package has three internal layers:
 
-- [minimum_atw/core](/home/eva/minimum_atomworks/minimum_atw/core)
+- [minimum_atw/core](minimum_atw/core)
   config, row-identity rules, registries, orchestration
-- [minimum_atw/runtime](/home/eva/minimum_atomworks/minimum_atw/runtime)
+- [minimum_atw/runtime](minimum_atw/runtime)
   execution mechanics, chunk planning, workspace layout, spill buffers
-- [minimum_atw/plugins](/home/eva/minimum_atomworks/minimum_atw/plugins)
+- [minimum_atw/plugins](minimum_atw/plugins)
   PDB and dataset extension implementations
 
 Public entrypoints:
 
-- [minimum_atw/__init__.py](/home/eva/minimum_atomworks/minimum_atw/__init__.py)
-- [minimum_atw/cli.py](/home/eva/minimum_atomworks/minimum_atw/cli.py)
+- [minimum_atw/__init__.py](minimum_atw/__init__.py)
+- [minimum_atw/cli.py](minimum_atw/cli.py)
 
 ![High-Level Architecture](minimum_atw/analysis/architecture.svg)
 
@@ -773,37 +837,49 @@ Examples:
 - `abseq__cdr3_sequence`
 - `abepitope__score`
 
-Internal helper modules such as [interface_metrics.py](/home/eva/minimum_atomworks/minimum_atw/plugins/pdb/calculation/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
+Internal helper modules such as [interface_metrics.py](minimum_atw/plugins/pdb/calculation/interface_analysis/interface_metrics.py) support plugins but are not themselves YAML-selectable extensions.
 
 Most dataset analyses write a second parquet, usually `dataset.parquet`, with an `analysis` column instead of `grain`. Dataset-level clustering is the main exception: it is computed at dataset scope but writes its assignments back onto `pdb.parquet` interface rows.
 
 ## Installation
 
-Simplest path on another machine:
+### Environment setup
+
+The recommended way to reproduce the environment is with conda. The project was developed using the `atw_pp` conda environment with Python 3.12.
 
 ```bash
+# 1. Create a fresh conda environment (Python 3.12 required)
+conda create -n atw_pp python=3.12 -y
+conda activate atw_pp
+
+# 2. Clone the repo
 git clone <your-repo-url> minimum_atomworks
 cd minimum_atomworks
-python -m pip install -e .
+
+# 3. Install in editable mode with dev dependencies (includes pytest)
+pip install -e ".[dev]"
 ```
 
-That default install now includes the built-in non-Rosetta Python stack:
+That installs the full non-Rosetta Python stack declared in `pyproject.toml`:
 
-- core runtime dependencies
-- antibody numbering support: `abnumber`, `anarcii`
+- core runtime dependencies: `biotite`, `numpy`, `pandas`, `pydantic`, `pyarrow`, `pyyaml`
+- antibody numbering: `abnumber`, `anarcii`
 - GPU/model plugins: `torch`, `fair-esm`, `ablang2`
-- AbEpiTope Python package plus its undeclared runtime dependencies
+- AbEpiTope: `abepitope`
 
-The only important non-pip caveat is `hmmsearch`:
+### External binary dependency
+
+The only non-pip dependency is `hmmsearch` (from HMMER):
 
 ```bash
 which hmmsearch || echo "hmmsearch not found"
 ```
 
-`abepitope_score` can often run without it when the antibody/antigen chains are
-clear from your YAML roles, but `hmmsearch` is still the safe supported setup.
+`abepitope_score` can often run without it when antibody/antigen chains are
+clear from your YAML roles, but `hmmsearch` is the supported setup.
+Install via conda: `conda install -c bioconda hmmer`
 
-Verify the environment:
+### Verify the environment
 
 ```bash
 python -m minimum_atw.cli list-extensions
@@ -816,15 +892,20 @@ PY
 which hmmsearch || echo "hmmsearch not found"
 ```
 
+On a GPU machine, also confirm CUDA is visible:
+
+```bash
+python -c "import torch; print(torch.cuda.is_available())"
+```
+
 Notes:
 
-- `pip install -e .` is now the intended simple install path for the built-in non-Rosetta plugins
+- `pip install -e .` is the intended install path for the built-in non-Rosetta plugins
 - `abepitope_score` needs both the Python package and the external `hmmsearch` binary
 - `esm_if1_score` needs `torch` and `fair-esm`
 - `ablang2_score` needs `ablang2`
-- on a GPU machine, also confirm `python -c "import torch; print(torch.cuda.is_available())"` returns `True` if you expect CUDA execution
 - Rosetta is not installed by this package
-- example YAMLs usually need path edits before reuse on another machine
+- example YAMLs usually need path edits (`input_dir`, `out_dir`) before reuse on another machine
 
 ## Common Commands
 
@@ -924,31 +1005,31 @@ Output filenames do not affect merge compatibility. Different runs can still mer
 
 Start here:
 
-- [examples/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md)
+- [examples/README.md](minimum_atw/examples/README.md)
 
 Detailed guides:
 
-- [simple_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/simple_run/README.md)
-- [chunk_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/chunk_run/README.md)
-- [large_run/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/large_run/README.md)
+- [simple_run/README.md](minimum_atw/examples/simple_run/README.md)
+- [chunk_run/README.md](minimum_atw/examples/chunk_run/README.md)
+- [large_run/README.md](minimum_atw/examples/large_run/README.md)
 
 YAML config field meanings:
 
-- [examples/README.md](/home/eva/minimum_atomworks/minimum_atw/examples/README.md)
+- [examples/README.md](minimum_atw/examples/README.md)
 
 ## Tests
 
-Tests live under:
+Tests live under `minimum_atw/tests/`.
 
-- [minimum_atw/tests](/home/eva/minimum_atomworks/minimum_atw/tests)
-
-Run them with:
+Run them with pytest (from the repo root):
 
 ```bash
-cd /home/eva/minimum_atomworks
-/home/eva/miniconda3/envs/atw_pp/bin/python -m unittest discover -s minimum_atw/tests -v
+conda activate atw_pp
+python -m pytest -v
 ```
 
-Detailed test instructions:
+Or target a specific file:
 
-- [minimum_atw/tests/README.md](/home/eva/minimum_atomworks/minimum_atw/tests/README.md)
+```bash
+python -m pytest minimum_atw/tests/test_prepare_sections.py -v
+```

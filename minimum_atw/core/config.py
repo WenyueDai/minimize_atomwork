@@ -468,16 +468,6 @@ class Config(BaseModel):
                 "both write sup__* columns, so choose either prepare-stage coordinate rewriting "
                 "or plugin-stage superposition metrics"
             )
-        if "rosetta_preprocess" in prepare_names and "superimpose_to_reference" in prepare_names:
-            raise ValueError(
-                "rosetta_preprocess and superimpose_to_reference cannot both be listed in manipulations; "
-                "rosetta_preprocess already performs superimposition as its final step"
-            )
-        if "rosetta_preprocess" in prepare_names and "superimpose_homology" in self.plugins:
-            raise ValueError(
-                "rosetta_preprocess and superimpose_homology cannot be enabled together; "
-                "rosetta_preprocess already performs superimposition as its final step"
-            )
         return self
 
     def prepare_names_by_grain(self) -> dict[str, list[str]]:

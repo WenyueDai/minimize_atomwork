@@ -14,6 +14,11 @@ from minimum_atw.plugins.dataset.calculation.base import BaseDatasetPlugin
 from minimum_atw.tests.helpers import read_dataset_analysis
 
 
+VH_SEQ_A = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISSGGGNTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCARDRGGYFDYWGQGTLVTVSS"
+VH_SEQ_B = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISSGGSNTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCARDRGGYFDYWGQGTLVTVSS"
+VL_SEQ_A = "DIQMTQSPSSLSASVGDRVTITCRASQSISSSLAWYQQKPGKAPKLLIYDASSLESGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQYNSYPWTFGQGTKVEIK"
+
+
 def _write_test_pdb(
     out_dir: Path,
     *,
@@ -80,9 +85,9 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
                     {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
                 ],
                 role_rows=[
-                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBB", "abseq__cdr3_sequence": "CCC", "rolseq__sequence": "AAABBBCCC"},
-                    {"path": "/tmp/example_2.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBD", "abseq__cdr3_sequence": "CCD", "rolseq__sequence": "AAABBDCCD"},
-                    {"path": "/tmp/example_3.pdb", "assembly_id": "1", "role": "vl", "abseq__cdr1_sequence": "EEE", "abseq__cdr2_sequence": "FFF", "abseq__cdr3_sequence": "GGG", "rolseq__sequence": "EEEFFFGGG"},
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__numbering_scheme": "imgt", "abseq__cdr_definition": "imgt", "abseq__cdr1_sequence": "GFTFSSYA", "abseq__cdr2_sequence": "ISSGGGNT", "abseq__cdr3_sequence": "ARDRGGYFDY", "rolseq__sequence": VH_SEQ_A},
+                    {"path": "/tmp/example_2.pdb", "assembly_id": "1", "role": "vh", "abseq__numbering_scheme": "imgt", "abseq__cdr_definition": "imgt", "abseq__cdr1_sequence": "GFTFSSYA", "abseq__cdr2_sequence": "ISSGGSNT", "abseq__cdr3_sequence": "ARDRGGYFDY", "rolseq__sequence": VH_SEQ_B},
+                    {"path": "/tmp/example_3.pdb", "assembly_id": "1", "role": "vl", "abseq__numbering_scheme": "imgt", "abseq__cdr_definition": "imgt", "abseq__cdr1_sequence": "QSISSS", "abseq__cdr2_sequence": "DAS", "abseq__cdr3_sequence": "QQYNSYPWT", "rolseq__sequence": VL_SEQ_A},
                 ],
             )
 
@@ -92,7 +97,7 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
                 dataset_analysis_params={
                     "cdr_entropy": {
                         "roles": ["vh"],
-                        "regions": ["cdr3"],
+                        "regions": ["cdr2"],
                     }
                 },
             )
@@ -100,9 +105,12 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
             result = read_dataset_analysis(out_dir, "cdr_entropy")
 
             self.assertEqual(summary["dataset_analyses"], "cdr_entropy")
-            self.assertEqual(len(result), 1)
-            self.assertEqual(result.iloc[0]["role"], "vh")
-            self.assertEqual(result.iloc[0]["region"], "cdr3")
+            self.assertEqual(len(result), 8)
+            self.assertEqual(result["role"].unique().tolist(), ["vh"])
+            self.assertEqual(result["region"].unique().tolist(), ["cdr2"])
+            self.assertEqual(result["row_kind"].unique().tolist(), ["position"])
+            changed = result[result["position"] == "H63"].iloc[0]
+            self.assertAlmostEqual(float(changed["shannon_entropy"]), 1.0)
 
     def test_runtime_can_project_missing_interface_metric_columns(self) -> None:
         with tempfile.TemporaryDirectory(prefix="minimum_atw_dataset_analysis_") as tmp_dir:
@@ -138,7 +146,7 @@ class DatasetAnalysisRuntimeTests(unittest.TestCase):
                     {"path": "/tmp/example_1.pdb", "assembly_id": "1", "pair": "vh__antigen", "role_left": "vh", "role_right": "antigen"},
                 ],
                 role_rows=[
-                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__cdr1_sequence": "AAA", "abseq__cdr2_sequence": "BBB", "abseq__cdr3_sequence": "CCC", "rolseq__sequence": "AAABBBCCC"},
+                    {"path": "/tmp/example_1.pdb", "assembly_id": "1", "role": "vh", "abseq__numbering_scheme": "imgt", "abseq__cdr_definition": "imgt", "abseq__cdr1_sequence": "GFTFSSYA", "abseq__cdr2_sequence": "ISSGGGNT", "abseq__cdr3_sequence": "ARDRGGYFDY", "rolseq__sequence": VH_SEQ_A},
                 ],
             )
             (out_dir / "run_metadata.json").write_text(

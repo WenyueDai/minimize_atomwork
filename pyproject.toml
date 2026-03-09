@@ -37,6 +37,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dev = [
+  "pytest>=9.0,<10",
+]
+
 # Compatibility aliases for users who still install via extras.
 antibody = [
   "abnumber>=0.4.4,<0.5",
@@ -89,3 +93,6 @@ minimum_atw = [
   "examples/**/*.md",
   "examples/**/*.ipynb",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["minimum_atw/tests"]

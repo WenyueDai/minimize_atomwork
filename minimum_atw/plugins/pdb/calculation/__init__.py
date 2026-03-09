@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .antibody_analysis import AntibodyCDRLengthsPlugin, AntibodyCDRSequencesPlugin
+from .antibody_analysis import AntibodyCDRSequencesPlugin
 from .interface_analysis.abepitope_score import AbEpiTopeScorePlugin
 from .interface_analysis.dockq_score import DockQPlugin
 from .interface_analysis.interface_contacts import InterfaceContactsPlugin
@@ -15,7 +15,6 @@ def _builtin_pdb_calculations() -> dict[str, object]:
     return {
         "ablang2_score": AbLang2ScorePlugin(),
         "abepitope_score": AbEpiTopeScorePlugin(),
-        "antibody_cdr_lengths": AntibodyCDRLengthsPlugin(),
         "antibody_cdr_sequences": AntibodyCDRSequencesPlugin(),
         "chain_stats": ChainStatsPlugin(),
         "dockq_score": DockQPlugin(),
@@ -41,7 +40,6 @@ PDB_CALCULATION_REGISTRY = load_registry(
 __all__ = [
     "AbLang2ScorePlugin",
     "AbEpiTopeScorePlugin",
-    "AntibodyCDRLengthsPlugin",
     "AntibodyCDRSequencesPlugin",
     "ChainStatsPlugin",
     "DockQPlugin",

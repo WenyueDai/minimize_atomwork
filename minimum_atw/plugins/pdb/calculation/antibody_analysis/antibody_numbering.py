@@ -67,6 +67,35 @@ def cdr_sequences(
     }
 
 
+@lru_cache(maxsize=512)
+def _cached_cdr_position_labels(
+    sequence: str,
+    scheme: str,
+    cdr_definition: str | None,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    numbered = _number_chain(sequence, scheme, cdr_definition)
+    labels: dict[str, list[str]] = {"cdr1": [], "cdr2": [], "cdr3": []}
+    for pos, _aa in numbered:
+        region = str(pos.get_region()).strip().lower()
+        if region in labels:
+            labels[region].append(str(pos))
+    return tuple(tuple(labels[name]) for name in ("cdr1", "cdr2", "cdr3"))
+
+
+def cdr_position_labels(
+    sequence: str,
+    *,
+    scheme: str = "imgt",
+    cdr_definition: str | None = None,
+) -> dict[str, tuple[str, ...]]:
+    cdr1, cdr2, cdr3 = _cached_cdr_position_labels(sequence, scheme, cdr_definition)
+    return {
+        "cdr1": cdr1,
+        "cdr2": cdr2,
+        "cdr3": cdr3,
+    }
+
+
 def cdr_lengths(
     sequence: str,
     *,

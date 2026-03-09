@@ -1,0 +1,191 @@
+# Minimal antibody-antigen profile — interface metrics only, no superimposition.
+# Use this as a starting point when you do not have a reference structure yet
+# or just want basic interface analysis with minimal configuration.
+#
+# For the full profile (CDR plugins, AbEpiTope, superimposition), see:
+#   example_antibody_antigen_pdb.yaml
+#
+# One-shot run:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+#
+# Optional HPC path with the same YAML:
+#   1. add `slurm.chunk_size`
+#   2. python -m minimum_atw.cli submit-slurm \
+#        --config minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
+#
+# Staged workflow:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli prepare          --config <this_file>
+#   conda activate atw_pp
+#   python -m minimum_atw.cli run-plugin       --config <this_file> --plugin interface_contacts
+#   conda activate atw_pp
+#   python -m minimum_atw.cli merge            --config <this_file>
+#   conda activate atw_pp
+#   python -m minimum_atw.cli analyze-dataset  --config <this_file>
+#
+# Scheduler note:
+#   this example is CPU-first. If you later enable abepitope_score,
+#   ablang2_score, or esm_if1_score, keep `device: auto` and let
+#   `submit-slurm` decide whether the plan needs GPU stages.
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "/path/to/your/pdb_files"
+out_dir: "/path/to/your/out_antibody_antigen_light"
+assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
+  antibody: ["B", "C"]
+  # binder: ["B", "C"]   # optional alias
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+  # - name: "superimpose_to_reference"   # enable when you have a reference_path
+  #   grain: "pdb"
+  # Alternative: Rosetta score/repack/relax then superimpose (choose one or the other).
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
+
+# clash_distance: 2.0
+# clash_scope: "all"        # all | inter_chain | interface_only
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  # — structure grain —
+  - "identity"
+  # - "superimpose_homology"    # requires reference_path in plugin_params
+
+  # — chain grain —
+  # - "chain_stats"
+
+  # — role grain —
+  # - "role_sequences"
+  # - "role_stats"
+  # - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "pdockq_score"
+  # - "abepitope_score"         # GPU-preferred; requires abepitope package
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
+
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
+# abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+# plugin_params:
+#   superimpose_to_reference:
+#     reference_path: "/path/to/your/reference.pdb"
+#     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
+#     # anchor_atoms: "CA"          # CA | backbone (default: CA)
+#
+#   rosetta_preprocess:
+#     reference_path: "/path/to/your/reference.pdb"
+#     on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+#     repack: true                  # sidechain-only optimisation (backbone fixed)
+#     relax: false                  # full fast-relax including backbone (expensive)
+#
+#   superimpose_homology:
+#     reference_path: "/path/to/your/reference.pdb"
+#     on_chains: ["A"]              # anchor chains for RMSD alignment
+#     # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
+#
+#   interface_contacts:
+#     include_cdr_fields: true     # annotate interface contacts with CDR region membership (default: true)
+#
+#   pdockq_score:
+#     contact_distance: 8.0        # CB-CB cutoff in Å (default: 8.0)
+#
+#   dockq_score:
+#     reference_path: "/path/to/your/native_complex.pdb"   # required
+#     receptor_role: "antigen"     # role to superimpose on for LRMS (default: right-side role)
+#     contact_distance: 5.0        # Å cutoff for Fnat contacts (default: 5.0)
+#
+#   abepitope_score:
+#     device: auto                 # auto | cpu | cuda | 0 (default: auto)
+#
+#   esm_if1_score:
+#     device: auto                 # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+#     on_roles: []                 # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
+#
+#   ablang2_score:
+#     device: auto                 # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+# Uncomment when enabling antibody_cdr_sequences:
+# numbering_roles: ["vh", "vl"]
+# numbering_scheme: "imgt"   # imgt | chothia | kabat | aho
+# cdr_definition: "imgt"     # imgt | north | kabat
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "post_merge"   # post_merge | per_chunk | both
+
+dataset_analysis_params:
+  cluster:
+    # Two clustering modes (set mode explicitly to enable clustering):
+    #   absolute_interface_ca — "where does it bind?" uses absolute Cα positions from globally
+    #     superimposed structures (superimpose_to_reference in prepare); distinguishes binding sites.
+    #   shape_interface_ca   — "how does it bind?" locally superimposes interface Cα (Kabsch on
+    #     common residues) then computes Chamfer; distinguishes binding geometry.
+    mode: "absolute_interface_ca"    # or "shape_interface_ca"
+    distance_threshold: 2.0           # Å; increase if structures cluster as singletons
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true
+
+dataset_annotations:
+  dataset_id: "antibody_antigen_light"
+  project: "atomworks_example"
+  dataset_name: "antibody_antigen_light"
+  modality: "antibody_antigen"
+# Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25   # resume prepare/plugin runs after interruptions
+# cpu_workers: 4            # optional local override for CPU parallelism
+# gpu_workers: 1            # optional local override when GPU-capable plugins are enabled
+# gpu_devices: ["0"]        # optional visible GPU IDs for local or scheduled GPU runs
+# slurm:
+#   chunk_size: 50          # minimum needed for `submit-slurm --config <this_file>`

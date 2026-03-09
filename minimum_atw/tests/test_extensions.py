@@ -20,14 +20,13 @@ class ExtensionCatalogTests(unittest.TestCase):
 
         self.assertEqual(
             [item.name for item in catalog["pdb_prepare"]],
-            ["center_on_origin", "chain_continuity", "structure_clashes", "superimpose_to_reference"],
+            ["center_on_origin", "chain_continuity", "rosetta_preprocess", "structure_clashes", "superimpose_to_reference"],
         )
         self.assertEqual(
             [item.name for item in catalog["pdb_calculation"]],
             [
                 "abepitope_score",
                 "ablang2_score",
-                "antibody_cdr_lengths",
                 "antibody_cdr_sequences",
                 "chain_stats",
                 "dockq_score",

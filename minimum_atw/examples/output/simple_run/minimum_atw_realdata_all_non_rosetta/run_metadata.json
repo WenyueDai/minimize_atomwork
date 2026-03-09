@@ -1,0 +1,943 @@
+{
+  "config": {
+    "abepitope_atom_radius": 4.0,
+    "assembly_id": "1",
+    "cdr_definition": "imgt",
+    "checkpoint_enabled": false,
+    "checkpoint_interval": 100,
+    "chunk_cpu_capacity": null,
+    "clash_distance": 2.0,
+    "clash_scope": "all",
+    "cleanup_prepared_after_dataset_analysis": false,
+    "contact_distance": 5.0,
+    "cpu_workers": 1,
+    "dataset_analyses": [
+      "dataset_annotations",
+      "interface_summary",
+      "cluster",
+      "cdr_entropy"
+    ],
+    "dataset_analysis_mode": "post_merge",
+    "dataset_analysis_params": {
+      "cdr_entropy": {
+        "regions": [
+          "cdr1",
+          "cdr2",
+          "cdr3",
+          "sequence"
+        ],
+        "roles": [
+          "vh",
+          "vl"
+        ]
+      },
+      "cluster": {
+        "distance_threshold": 5.0
+      }
+    },
+    "dataset_annotations": {
+      "dataset_id": "realdata_all_non_rosetta",
+      "dataset_name": "realdata_all_non_rosetta",
+      "modality": "antibody_antigen",
+      "profile": "all_non_rosetta",
+      "project": "atomworks_example"
+    },
+    "dataset_output_name": "dataset.parquet",
+    "gpu_devices": [
+      "0"
+    ],
+    "gpu_workers": 1,
+    "input_dir": "minimum_atw/examples/data/antibody_antigen",
+    "interface_cell_size": null,
+    "interface_pairs": [
+      [
+        "antibody",
+        "antigen"
+      ]
+    ],
+    "keep_intermediate_outputs": true,
+    "keep_prepared_structures": true,
+    "manipulations": [
+      {
+        "grain": "pdb",
+        "name": "chain_continuity"
+      },
+      {
+        "grain": "pdb",
+        "name": "structure_clashes"
+      },
+      {
+        "grain": "pdb",
+        "name": "center_on_origin"
+      },
+      {
+        "grain": "pdb",
+        "name": "superimpose_to_reference"
+      }
+    ],
+    "numbering_roles": [
+      "vh",
+      "vl"
+    ],
+    "numbering_scheme": "imgt",
+    "out_dir": "/home/eva/20260308_minimum_atomworks/minimum_atw_realdata_all_non_rosetta",
+    "pdb_output_name": "pdb.parquet",
+    "plugin_params": {
+      "abepitope_score": {
+        "device": "auto"
+      },
+      "ablang2_score": {
+        "device": "auto"
+      },
+      "dockq_score": {
+        "contact_distance": 5.0,
+        "receptor_role": "antigen",
+        "reference_path": "minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+      },
+      "esm_if1_score": {
+        "device": "auto",
+        "on_roles": [
+          "vh",
+          "vl",
+          "antibody"
+        ]
+      },
+      "interface_contacts": {
+        "include_cdr_fields": true
+      },
+      "pdockq_score": {
+        "contact_distance": 8.0
+      },
+      "superimpose_to_reference": {
+        "on_chains": [
+          "A",
+          "B",
+          "C",
+          "D",
+          "E"
+        ],
+        "reference_path": "minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+      }
+    },
+    "plugins": [
+      "identity",
+      "chain_stats",
+      "role_sequences",
+      "role_stats",
+      "antibody_cdr_sequences",
+      "esm_if1_score",
+      "ablang2_score",
+      "interface_contacts",
+      "interface_metrics",
+      "abepitope_score",
+      "pdockq_score",
+      "dockq_score"
+    ],
+    "reference_dataset_dir": null,
+    "roles": {
+      "antibody": [
+        "F",
+        "G"
+      ],
+      "antigen": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "vh": [
+        "F"
+      ],
+      "vl": [
+        "G"
+      ]
+    },
+    "rosetta_add_regular_scores_to_scorefile": true,
+    "rosetta_atomic_burial_cutoff": 0.01,
+    "rosetta_compute_packstat": true,
+    "rosetta_database": null,
+    "rosetta_executable": null,
+    "rosetta_interface_cutoff": 8.0,
+    "rosetta_interface_targets": [],
+    "rosetta_pack_input": true,
+    "rosetta_pack_separated": true,
+    "rosetta_packstat_oversample": null,
+    "rosetta_preprocess": true,
+    "rosetta_preprocess_with_score_jd2": false,
+    "rosetta_relax_executable": null,
+    "rosetta_sasa_calculator_probe_radius": 1.4,
+    "rosetta_score_jd2_executable": null,
+    "slurm": {
+      "array_limit": null,
+      "chunk_size": null,
+      "log_dir": null,
+      "mode": "auto",
+      "plan_dir": null,
+      "python_bin": null,
+      "sbatch_common_args": [],
+      "sbatch_cpu_args": [],
+      "sbatch_gpu_args": [],
+      "sbatch_merge_args": [],
+      "sbatch_mixed_args": [],
+      "workdir": null
+    },
+    "superimpose_on_chains": [],
+    "superimpose_reference_path": null
+  },
+  "counts": {
+    "bad": 0,
+    "chains": 70,
+    "interfaces": 10,
+    "pdb": 130,
+    "roles": 40,
+    "status": 160,
+    "structures": 10
+  },
+  "merge_compatibility": {
+    "abepitope_atom_radius": 4.0,
+    "assembly_id": "1",
+    "cdr_definition": "imgt",
+    "clash_distance": 2.0,
+    "clash_scope": "all",
+    "contact_distance": 5.0,
+    "interface_cell_size": null,
+    "interface_pairs": [
+      [
+        "antibody",
+        "antigen"
+      ]
+    ],
+    "manipulations": [
+      {
+        "grain": "pdb",
+        "name": "chain_continuity"
+      },
+      {
+        "grain": "pdb",
+        "name": "structure_clashes"
+      },
+      {
+        "grain": "pdb",
+        "name": "center_on_origin"
+      },
+      {
+        "grain": "pdb",
+        "name": "superimpose_to_reference"
+      }
+    ],
+    "numbering_roles": [
+      "vh",
+      "vl"
+    ],
+    "numbering_scheme": "imgt",
+    "plugins": [
+      "identity",
+      "chain_stats",
+      "role_sequences",
+      "role_stats",
+      "antibody_cdr_sequences",
+      "esm_if1_score",
+      "ablang2_score",
+      "interface_contacts",
+      "interface_metrics",
+      "abepitope_score",
+      "pdockq_score",
+      "dockq_score"
+    ],
+    "roles": {
+      "antibody": [
+        "F",
+        "G"
+      ],
+      "antigen": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "vh": [
+        "F"
+      ],
+      "vl": [
+        "G"
+      ]
+    },
+    "rosetta_add_regular_scores_to_scorefile": true,
+    "rosetta_atomic_burial_cutoff": 0.01,
+    "rosetta_compute_packstat": true,
+    "rosetta_database": null,
+    "rosetta_executable": null,
+    "rosetta_interface_cutoff": 8.0,
+    "rosetta_interface_targets": [],
+    "rosetta_pack_input": true,
+    "rosetta_pack_separated": true,
+    "rosetta_packstat_oversample": null,
+    "rosetta_preprocess": true,
+    "rosetta_preprocess_with_score_jd2": false,
+    "rosetta_relax_executable": null,
+    "rosetta_sasa_calculator_probe_radius": 1.4,
+    "rosetta_score_jd2_executable": null,
+    "superimpose_on_chains": [],
+    "superimpose_reference_path": null
+  },
+  "output_files": {
+    "dataset": "dataset.parquet",
+    "pdb": "pdb.parquet"
+  },
+  "output_kind": "run",
+  "plugin_execution": {
+    "groups": [
+      {
+        "cpu_threads_per_worker": 1,
+        "depends_on_groups": [],
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "gpu_devices_per_worker": 0,
+        "group_id": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "planned_cpu_threads": 1,
+        "planned_gpu_devices": 0,
+        "planned_workers": 1,
+        "plugins": [
+          "identity",
+          "chain_stats",
+          "role_sequences",
+          "role_stats",
+          "antibody_cdr_sequences"
+        ],
+        "wave": 0,
+        "worker_pool": "cpu"
+      },
+      {
+        "cpu_threads_per_worker": 1,
+        "depends_on_groups": [],
+        "device_kind": "cuda",
+        "execution_mode": "batched",
+        "gpu_devices_per_worker": 1,
+        "group_id": 1,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "planned_cpu_threads": 1,
+        "planned_gpu_devices": 1,
+        "planned_workers": 1,
+        "plugins": [
+          "esm_if1_score",
+          "ablang2_score"
+        ],
+        "wave": 0,
+        "worker_pool": "gpu"
+      },
+      {
+        "cpu_threads_per_worker": 1,
+        "depends_on_groups": [],
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "gpu_devices_per_worker": 0,
+        "group_id": 2,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "planned_cpu_threads": 1,
+        "planned_gpu_devices": 0,
+        "planned_workers": 1,
+        "plugins": [
+          "interface_contacts",
+          "interface_metrics"
+        ],
+        "wave": 1,
+        "worker_pool": "cpu"
+      },
+      {
+        "cpu_threads_per_worker": 1,
+        "depends_on_groups": [],
+        "device_kind": "cuda",
+        "execution_mode": "isolated",
+        "gpu_devices_per_worker": 1,
+        "group_id": 3,
+        "input_model": "hybrid",
+        "max_workers": null,
+        "planned_cpu_threads": 1,
+        "planned_gpu_devices": 1,
+        "planned_workers": 1,
+        "plugins": [
+          "abepitope_score"
+        ],
+        "wave": 1,
+        "worker_pool": "gpu"
+      },
+      {
+        "cpu_threads_per_worker": 1,
+        "depends_on_groups": [],
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "gpu_devices_per_worker": 0,
+        "group_id": 4,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "planned_cpu_threads": 1,
+        "planned_gpu_devices": 0,
+        "planned_workers": 1,
+        "plugins": [
+          "pdockq_score",
+          "dockq_score"
+        ],
+        "wave": 2,
+        "worker_pool": "cpu"
+      }
+    ],
+    "plugins": {
+      "abepitope_score": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cuda",
+        "execution_mode": "isolated",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 1,
+        "input_model": "hybrid",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "gpu"
+      },
+      "ablang2_score": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cuda",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 1,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "gpu"
+      },
+      "antibody_cdr_sequences": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "chain_stats": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "dockq_score": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "esm_if1_score": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cuda",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 1,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "gpu"
+      },
+      "identity": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "interface_contacts": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "interface_metrics": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "pdockq_score": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "role_sequences": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      },
+      "role_stats": {
+        "cpu_threads_per_worker": 1,
+        "device_kind": "cpu",
+        "execution_mode": "batched",
+        "failure_policy": "continue",
+        "gpu_devices_per_worker": 0,
+        "input_model": "atom_array",
+        "max_workers": null,
+        "requires": [],
+        "worker_pool": "cpu"
+      }
+    },
+    "runtime": {
+      "cpu_workers": 1,
+      "gpu_devices": [
+        "0"
+      ],
+      "gpu_workers": 1
+    },
+    "scheduler_resources": {
+      "peak_cpu_threads": 2,
+      "peak_gpu_devices": 1,
+      "single_job": {
+        "cpu_threads": 2,
+        "gpu_devices": 1
+      },
+      "submission_plan": {
+        "job_classes": [
+          {
+            "device_kind": "cpu",
+            "peak_cpu_threads": 1,
+            "peak_gpu_devices": 0,
+            "recommended_job": {
+              "cpu_threads": 1,
+              "gpu_devices": 0
+            },
+            "resource_class": "cpu_only",
+            "stages": [
+              0,
+              1,
+              2
+            ],
+            "worker_pool": "cpu"
+          },
+          {
+            "device_kind": "cuda",
+            "peak_cpu_threads": 1,
+            "peak_gpu_devices": 1,
+            "recommended_job": {
+              "cpu_threads": 1,
+              "gpu_devices": 1
+            },
+            "resource_class": "gpu_enabled",
+            "stages": [
+              0,
+              1
+            ],
+            "worker_pool": "gpu"
+          }
+        ],
+        "reason": "CPU-only and GPU-enabled waves are both present, so staged submission can release GPU nodes during CPU-only phases.",
+        "recommended_mode": "split_by_stage",
+        "stages": [
+          {
+            "cpu_threads": 2,
+            "gpu_devices": 1,
+            "jobs": [
+              {
+                "cpu_threads": 1,
+                "device_kind": "cpu",
+                "gpu_devices": 0,
+                "group_ids": [
+                  0
+                ],
+                "job_id": "stage0-cpu",
+                "plugins": [
+                  "identity",
+                  "chain_stats",
+                  "role_sequences",
+                  "role_stats",
+                  "antibody_cdr_sequences"
+                ],
+                "recommended_job": {
+                  "cpu_threads": 1,
+                  "gpu_devices": 0
+                },
+                "resource_class": "cpu_only",
+                "stage": 0,
+                "worker_pool": "cpu"
+              },
+              {
+                "cpu_threads": 1,
+                "device_kind": "cuda",
+                "gpu_devices": 1,
+                "group_ids": [
+                  1
+                ],
+                "job_id": "stage0-gpu",
+                "plugins": [
+                  "esm_if1_score",
+                  "ablang2_score"
+                ],
+                "recommended_job": {
+                  "cpu_threads": 1,
+                  "gpu_devices": 1
+                },
+                "resource_class": "gpu_enabled",
+                "stage": 0,
+                "worker_pool": "gpu"
+              }
+            ],
+            "stage": 0,
+            "worker_pools": [
+              "cpu",
+              "gpu"
+            ]
+          },
+          {
+            "cpu_threads": 2,
+            "gpu_devices": 1,
+            "jobs": [
+              {
+                "cpu_threads": 1,
+                "device_kind": "cpu",
+                "gpu_devices": 0,
+                "group_ids": [
+                  2
+                ],
+                "job_id": "stage1-cpu",
+                "plugins": [
+                  "interface_contacts",
+                  "interface_metrics"
+                ],
+                "recommended_job": {
+                  "cpu_threads": 1,
+                  "gpu_devices": 0
+                },
+                "resource_class": "cpu_only",
+                "stage": 1,
+                "worker_pool": "cpu"
+              },
+              {
+                "cpu_threads": 1,
+                "device_kind": "cuda",
+                "gpu_devices": 1,
+                "group_ids": [
+                  3
+                ],
+                "job_id": "stage1-gpu",
+                "plugins": [
+                  "abepitope_score"
+                ],
+                "recommended_job": {
+                  "cpu_threads": 1,
+                  "gpu_devices": 1
+                },
+                "resource_class": "gpu_enabled",
+                "stage": 1,
+                "worker_pool": "gpu"
+              }
+            ],
+            "stage": 1,
+            "worker_pools": [
+              "cpu",
+              "gpu"
+            ]
+          },
+          {
+            "cpu_threads": 1,
+            "gpu_devices": 0,
+            "jobs": [
+              {
+                "cpu_threads": 1,
+                "device_kind": "cpu",
+                "gpu_devices": 0,
+                "group_ids": [
+                  4
+                ],
+                "job_id": "stage2-cpu",
+                "plugins": [
+                  "pdockq_score",
+                  "dockq_score"
+                ],
+                "recommended_job": {
+                  "cpu_threads": 1,
+                  "gpu_devices": 0
+                },
+                "resource_class": "cpu_only",
+                "stage": 2,
+                "worker_pool": "cpu"
+              }
+            ],
+            "stage": 2,
+            "worker_pools": [
+              "cpu"
+            ]
+          }
+        ]
+      },
+      "waves": [
+        {
+          "cpu_threads": 2,
+          "gpu_devices": 1,
+          "group_ids": [
+            0,
+            1
+          ],
+          "wave": 0,
+          "worker_pools": [
+            "cpu",
+            "gpu"
+          ]
+        },
+        {
+          "cpu_threads": 2,
+          "gpu_devices": 1,
+          "group_ids": [
+            2,
+            3
+          ],
+          "wave": 1,
+          "worker_pools": [
+            "cpu",
+            "gpu"
+          ]
+        },
+        {
+          "cpu_threads": 1,
+          "gpu_devices": 0,
+          "group_ids": [
+            4
+          ],
+          "wave": 2,
+          "worker_pools": [
+            "cpu"
+          ]
+        }
+      ]
+    },
+    "waves": [
+      {
+        "cpu_threads": 2,
+        "gpu_devices": 1,
+        "group_ids": [
+          0,
+          1
+        ],
+        "wave": 0,
+        "worker_pools": [
+          "cpu",
+          "gpu"
+        ]
+      },
+      {
+        "cpu_threads": 2,
+        "gpu_devices": 1,
+        "group_ids": [
+          2,
+          3
+        ],
+        "wave": 1,
+        "worker_pools": [
+          "cpu",
+          "gpu"
+        ]
+      },
+      {
+        "cpu_threads": 1,
+        "gpu_devices": 0,
+        "group_ids": [
+          4
+        ],
+        "wave": 2,
+        "worker_pools": [
+          "cpu"
+        ]
+      }
+    ]
+  },
+  "prepare_execution": {
+    "grains": {
+      "dataset": [],
+      "pdb": [
+        "chain_continuity",
+        "structure_clashes",
+        "center_on_origin",
+        "superimpose_to_reference"
+      ]
+    }
+  },
+  "status_summary": {
+    "ok": 160
+  },
+  "table_columns": {
+    "pdb": [
+      "path",
+      "assembly_id",
+      "grain",
+      "chain_id",
+      "role",
+      "pair",
+      "role_left",
+      "role_right",
+      "sub_id",
+      "source__name",
+      "source__format",
+      "source__size_bytes",
+      "source__mtime_ns",
+      "source__n_atoms_loaded",
+      "source__n_chains_loaded",
+      "continuity__has_break",
+      "continuity__n_breaks",
+      "clash__has_clash",
+      "clash__n_clashing_atom_pairs",
+      "clash__n_clashing_atoms",
+      "center__centroid_x",
+      "center__centroid_y",
+      "center__centroid_z",
+      "sup__reference_path",
+      "sup__on_chains",
+      "sup__anchor_atoms",
+      "sup__alignment_method",
+      "sup__shared_atoms_rmsd",
+      "sup__shared_atoms_count",
+      "sup__coordinates_applied",
+      "sup__rmsd",
+      "sup__matched_atoms",
+      "prepared__path",
+      "id__n_atoms_total",
+      "id__n_chains",
+      "id__has_nan_coord",
+      "id__n_atoms",
+      "chstat__n_residues",
+      "chstat__centroid_x",
+      "chstat__centroid_y",
+      "chstat__centroid_z",
+      "chstat__radius_of_gyration",
+      "rolseq__chain_ids",
+      "rolseq__n_chains",
+      "rolseq__sequence_length_total",
+      "rolseq__sequence",
+      "rolseq__sequence_by_chain",
+      "rolstat__n_residues",
+      "rolstat__centroid_x",
+      "rolstat__centroid_y",
+      "rolstat__centroid_z",
+      "rolstat__radius_of_gyration",
+      "abseq__chain_ids",
+      "abseq__numbering_scheme",
+      "abseq__cdr_definition",
+      "abseq__sequence_length",
+      "abseq__cdr1_sequence",
+      "abseq__cdr2_sequence",
+      "abseq__cdr3_sequence",
+      "esmif1__n_chains",
+      "esmif1__n_residues",
+      "esmif1__ll_fullseq",
+      "ablang2__n_chains",
+      "ablang2__n_residues",
+      "ablang2__ll",
+      "iface__contact_distance",
+      "iface__n_contact_atom_pairs",
+      "iface__n_left_contact_atoms",
+      "iface__n_right_contact_atoms",
+      "iface__n_left_interface_residues",
+      "iface__n_right_interface_residues",
+      "iface__left_interface_residues",
+      "iface__right_interface_residues",
+      "iface__n_left_vh_cdr1_interface_residues",
+      "iface__left_vh_cdr1_interface_residues",
+      "iface__n_left_vh_cdr2_interface_residues",
+      "iface__left_vh_cdr2_interface_residues",
+      "iface__n_left_vh_cdr3_interface_residues",
+      "iface__left_vh_cdr3_interface_residues",
+      "iface__n_left_vl_cdr1_interface_residues",
+      "iface__left_vl_cdr1_interface_residues",
+      "iface__n_left_vl_cdr2_interface_residues",
+      "iface__left_vl_cdr2_interface_residues",
+      "iface__n_left_vl_cdr3_interface_residues",
+      "iface__left_vl_cdr3_interface_residues",
+      "ifm__contact_distance",
+      "ifm__cell_size",
+      "ifm__n_residue_contact_pairs",
+      "ifm__residue_contact_pairs",
+      "ifm__left_interface_residue_labels",
+      "ifm__right_interface_residue_labels",
+      "ifm__left_n_interface_residues",
+      "ifm__left_interface_charge_sum",
+      "ifm__left_interface_hydrophobic_fraction",
+      "ifm__left_interface_polar_fraction",
+      "ifm__left_interface_aromatic_fraction",
+      "ifm__left_interface_glycine_fraction",
+      "ifm__left_interface_proline_fraction",
+      "ifm__right_n_interface_residues",
+      "ifm__right_interface_charge_sum",
+      "ifm__right_interface_hydrophobic_fraction",
+      "ifm__right_interface_polar_fraction",
+      "ifm__right_interface_aromatic_fraction",
+      "ifm__right_interface_glycine_fraction",
+      "ifm__right_interface_proline_fraction",
+      "abepitope__atom_radius",
+      "abepitope__score",
+      "abepitope__target_score",
+      "pdockq__contact_distance",
+      "pdockq__n_contacts",
+      "pdockq__avg_interface_plddt",
+      "pdockq__pdockq",
+      "dockq__contact_distance",
+      "dockq__fnat",
+      "dockq__lrms",
+      "dockq__irms",
+      "dockq__dockq",
+      "dockq__n_ref_contacts",
+      "dataset__id",
+      "dataset__name",
+      "cluster__left_cluster_id",
+      "cluster__left_cluster_size",
+      "cluster__left_representative_path",
+      "cluster__left_distance_to_representative",
+      "cluster__left_n_points",
+      "cluster__left_interface_side",
+      "cluster__left_mode",
+      "cluster__right_cluster_id",
+      "cluster__right_cluster_size",
+      "cluster__right_representative_path",
+      "cluster__right_distance_to_representative",
+      "cluster__right_n_points",
+      "cluster__right_interface_side",
+      "cluster__right_mode"
+    ]
+  }
+}

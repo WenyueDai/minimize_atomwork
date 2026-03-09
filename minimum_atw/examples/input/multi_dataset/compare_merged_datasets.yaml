@@ -1,0 +1,62 @@
+# Compare multiple already-completed dataset out_dirs after `merge-datasets`.
+#
+# Workflow (activate conda env first: conda activate atw_pp):
+#   1. Run dataset A:
+#      python -m minimum_atw.cli run \
+#        --config minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml
+#   2. Run dataset B:
+#      python -m minimum_atw.cli run \
+#        --config minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml
+#   3. Merge those finished out_dirs:
+#      python -m minimum_atw.cli merge-datasets \
+#        --out-dir /path/to/your/out_compare_ab \
+#        --source-out-dir /path/to/your/out_dataset_a \
+#        --source-out-dir /path/to/your/out_dataset_b
+#   4. Analyze the merged output:
+#      python -m minimum_atw.cli analyze-dataset \
+#        --config minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml
+#
+# Note:
+#   `analyze-dataset` only reads `out_dir` plus dataset-analysis settings below.
+#   `input_dir` is still required by the shared config schema, but is not used here.
+#   This merged comparison step is CPU-only in the built-in example stack.
+#   Use your cluster's normal CPU submission path for this file; it is not a
+#   `submit-slurm` chunk-planning input.
+
+input_dir: "JUST_A_PLACEHOLDER_TO_SATISFY_SCHEMA"
+out_dir: "/path/to/your/out_compare_ab"
+
+# These analyses run on the merged pooled interfaces.
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "post_merge"
+
+dataset_analysis_params:
+  cluster:
+    jobs:
+      - name: "cross_dataset_paratope"
+        mode: "absolute_interface_ca"
+        interface_side: "left"
+        distance_threshold: 2.0
+      - name: "cross_dataset_epitope"
+        mode: "absolute_interface_ca"
+        interface_side: "right"
+        distance_threshold: 2.0
+  # cdr_entropy:
+  #   roles: ["vh", "vl"]
+  #   regions: ["cdr1", "cdr2", "cdr3", "sequence"]
+# cleanup_prepared_after_dataset_analysis: true  # no-op unless this out_dir still has a _prepared cache
+
+dataset_annotations:
+  dataset_id: "merged_dataset_pool"
+  project: "cross_dataset_compare"
+  dataset_name: "merged_dataset_pool"
+  analysis_goal: "within_dataset_and_between_dataset_interface_clustering"
+  # Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# reference_dataset_dir: "/path/to/your/reference_dataset_out_dir"
+# Currently none of the built-in dataset analyses consume `reference_dataset_dir`.
+# cpu_workers: 4             # optional local override; merged dataset analysis is CPU-only here

@@ -1,0 +1,121 @@
+# Smoke-test config: rosetta_preprocess skipped (rosetta_preprocess: false) +
+# superimpose_to_reference as a separate manipulation step.
+#
+# With rosetta_preprocess: false the Rosetta scoring/repack/relax steps are
+# skipped; the manipulation writes coordinates through unchanged and records
+# rosetta_steps_applied: false.  superimpose_to_reference runs as a separate
+# step before plugins, giving the full prepare → plugins → dataset analysis
+# pipeline without requiring Rosetta binaries.
+#
+# Run from the repo root:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/test/test_rosetta_preprocess_no_rosetta.yaml
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "minimum_atw/examples/data/antibody_antigen"
+out_dir: "/tmp/minimum_atw_test_rosprep_no_rosetta"
+assembly_id: "1"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A", "B", "C", "D", "E"]
+  vh: ["F"]
+  vl: ["G"]
+  antibody: ["F", "G"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
+  - name: "rosetta_preprocess"
+    grain: "pdb"
+
+# rosetta_preprocess: false → skip Rosetta steps (no binaries required).
+rosetta_preprocess: false
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  - "identity"
+  - "chain_stats"
+  - "role_sequences"
+  - "role_stats"
+  - "antibody_cdr_sequences"
+  - "interface_contacts"
+  - "interface_metrics"
+  - "abepitope_score"
+  - "pdockq_score"
+  - "dockq_score"
+  - "esm_if1_score"
+  - "ablang2_score"
+
+contact_distance: 5.0
+abepitope_atom_radius: 4.0
+gpu_workers: 1
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+plugin_params:
+  superimpose_to_reference:
+    reference_path: "minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+    on_chains: ["A", "B", "C", "D", "E"]
+
+  rosetta_preprocess:
+    repack: false   # no effect when rosetta_preprocess: false at top level
+    relax: false
+
+  dockq_score:
+    reference_path: "minimum_atw/examples/data/antibody_antigen/rank01_design_spec_5.cif"
+    receptor_role: "antigen"
+    contact_distance: 5.0
+
+  abepitope_score:
+    device: auto
+
+  esm_if1_score:
+    device: auto
+    on_roles: []
+
+  ablang2_score:
+    device: auto
+    on_roles: []
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vh", "vl"]
+numbering_scheme: "imgt"
+cdr_definition: "imgt"
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+dataset_analysis_mode: "per_chunk"
+dataset_analysis_params:
+  cluster:
+    # Two clustering modes (set mode explicitly to enable clustering):
+    #   absolute_interface_ca — "where does it bind?" uses absolute Cα positions from globally
+    #     superimposed structures (superimpose_to_reference in prepare); distinguishes binding sites.
+    #   shape_interface_ca   — "how does it bind?" locally superimposes interface Cα (Kabsch on
+    #     common residues) then computes Chamfer; distinguishes binding geometry.
+    mode: "absolute_interface_ca"    # or "shape_interface_ca"
+    distance_threshold: 2.0           # Å; increase if structures cluster as singletons
+
+dataset_annotations:
+  dataset_id: "test_rosprep"
+  dataset_name: "test_rosprep"
+  modality: "antibody_antigen"
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+cpu_workers: 4

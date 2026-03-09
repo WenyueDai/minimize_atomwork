@@ -1,0 +1,177 @@
+# Chunk 01 — antibody-antigen manual chunk workflow.
+#
+# If you do not need fixed hand-written chunk boundaries, prefer
+# `minimum_atw/examples/large_run/*.yaml` plus `minimum_atw.cli submit-slurm`.
+#
+# Run this chunk:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli run \
+#     --config minimum_atw/examples/chunk_run/chunk_antibody_antigen_01.yaml
+#
+# Scheduler note:
+#   each chunk writes `run_metadata.json -> plugin_execution.scheduler_resources`,
+#   so a pilot chunk can tell you whether to request one mixed job or separate
+#   CPU-only and GPU-enabled stages for the full array.
+#
+# Merge manual chunks after both chunks finish:
+#   conda activate atw_pp
+#   python -m minimum_atw.cli merge-datasets \
+#     --out-dir /path/to/your/out_antibody_antigen_merged \
+#     --source-out-dir /path/to/your/out_chunk_antibody_antigen_01 \
+#     --source-out-dir /path/to/your/out_chunk_antibody_antigen_02
+
+# ── Input / output ─────────────────────────────────────────────────────────────
+input_dir: "/path/to/your/structures/chunk_01"
+out_dir: "/path/to/your/out_chunk_antibody_antigen_01"
+assembly_id: "1"
+# pdb_output_name: "pdb.parquet"
+# dataset_output_name: "dataset.parquet"
+
+# ── Roles & interfaces ─────────────────────────────────────────────────────────
+roles:
+  antigen: ["A"]
+  vh: ["C"]
+  vl: ["B"]
+  antibody: ["B", "C"]
+
+interface_pairs:
+  - ["antibody", "antigen"]
+
+# ── Prepare phase ──────────────────────────────────────────────────────────────
+manipulations:
+  - name: "chain_continuity"
+    grain: "pdb"
+  - name: "structure_clashes"
+    grain: "pdb"
+  - name: "center_on_origin"
+    grain: "pdb"
+  - name: "superimpose_to_reference"
+    grain: "pdb"
+  # Alternative: Rosetta score/repack/relax then superimpose (choose one or the other).
+  # - name: "rosetta_preprocess"
+  #   grain: "pdb"
+
+# clash_distance: 2.0
+# clash_scope: "all"
+
+# ── Per-structure calculations ─────────────────────────────────────────────────
+plugins:
+  # — structure grain —
+  - "identity"
+  # - "superimpose_homology"    # legacy metrics-only path; leave off when superimpose_to_reference is enabled
+
+  # — chain grain —
+  - "chain_stats"
+
+  # — role grain —
+  - "role_sequences"
+  - "role_stats"
+  - "antibody_cdr_sequences"  # requires numbering_roles; abnumber package
+  # - "esm_if1_score"           # GPU-preferred; requires torch and fair-esm
+  # - "ablang2_score"           # GPU-preferred AbLang2 antibody LL per role; requires: pip install minimum-atomworks[ablang2]
+
+  # — interface grain —
+  - "interface_contacts"
+  - "interface_metrics"
+  - "abepitope_score"         # GPU-preferred; requires abepitope package
+  - "pdockq_score"
+  # - "dockq_score"             # requires reference_path in plugin_params
+  # - "rosetta_interface_example"   # CPU-oriented; requires Rosetta binaries
+
+contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_score Fnat (default: 5.0)
+abepitope_atom_radius: 4.0
+# interface_cell_size: 5.0
+
+# ── Plugin-specific configuration ──────────────────────────────────────────────
+plugin_params:
+  superimpose_to_reference:
+    reference_path: "/path/to/your/reference.pdb"
+    on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
+    # anchor_atoms: "CA"          # CA | backbone (default: CA)
+  # rosetta_preprocess:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
+  #   repack: true                  # sidechain-only optimisation (backbone fixed)
+  #   relax: false                  # full fast-relax including backbone (expensive)
+  # anchor_atoms: "CA"              # CA | backbone (default: CA)
+
+
+  # superimpose_homology:
+  #   reference_path: "/path/to/your/reference.pdb"
+  #   on_chains: ["A"]              # anchor chains for RMSD alignment
+  #   # persist_transformed_structures: false  # write superimposed structures to out_dir (default: false)
+
+
+  # interface_contacts:
+  #   include_cdr_fields: true   # annotate interface contacts with CDR region membership (default: true)
+  # pdockq_score:
+  #   contact_distance: 8.0      # CB-CB cutoff in Å (default: 8.0)
+
+  # dockq_score:
+  #   reference_path: "/path/to/your/native_complex.pdb"   # required
+  #   receptor_role: "antigen"   # role to superimpose on for LRMS (default: right-side role)
+  #   contact_distance: 5.0      # Å cutoff for Fnat contacts (default: 5.0)
+
+  # abepitope_score:
+  #   device: auto               # auto | cpu | cuda | 0 (default: auto)
+
+  # ablang2_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
+
+  # esm_if1_score:
+  #   device: auto               # auto | cpu | cuda (default: auto); leave on auto unless you need to force CPU or CUDA
+  #   on_roles: []               # restrict scoring to specific roles, e.g. ["vh", "vl"]; [] or omit = all roles
+
+# ── Antibody numbering ─────────────────────────────────────────────────────────
+numbering_roles: ["vh", "vl"]
+numbering_scheme: "imgt"   # imgt | chothia | kabat | aho
+cdr_definition: "imgt"     # imgt | north | kabat
+
+# ── Optional Rosetta scaffold ──────────────────────────────────────────────────
+# rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
+# rosetta_database: "/path/to/rosetta/database"
+# rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
+# rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
+# rosetta_preprocess_with_score_jd2: false
+# rosetta_interface_targets:
+#   - pair: ["antibody", "antigen"]
+#     left_role: "antibody"
+#     right_role: "antigen"
+
+# ── Dataset analyses ───────────────────────────────────────────────────────────
+dataset_analyses:
+  - "dataset_annotations"
+  - "interface_summary"
+  - "cluster"
+  # - "cdr_entropy"
+dataset_analysis_mode: "per_chunk"    # post_merge | per_chunk | both
+dataset_analysis_params:
+  cluster:
+    # Two clustering modes (set mode explicitly to enable clustering):
+    #   absolute_interface_ca — "where does it bind?" uses absolute Cα positions from globally
+    #     superimposed structures (superimpose_to_reference in prepare); distinguishes binding sites.
+    #   shape_interface_ca   — "how does it bind?" locally superimposes interface Cα (Kabsch on
+    #     common residues) then computes Chamfer; distinguishes binding geometry.
+    mode: "absolute_interface_ca"    # or "shape_interface_ca"
+    distance_threshold: 2.0           # Å; increase if structures cluster as singletons
+# cleanup_prepared_after_dataset_analysis: true  # delete _prepared after successful dataset analysis
+
+dataset_annotations:
+  dataset_id: "antibody_antigen_chunk_01"
+  project: "atomworks_chunked_example"
+  dataset_name: "antibody_antigen_chunk_01"
+  modality: "antibody_antigen"
+  chunk_id: "01"
+  # Only dataset_id and dataset_name are copied onto pdb.parquet rows.
+
+# ── Runtime controls ───────────────────────────────────────────────────────────
+keep_intermediate_outputs: false
+keep_prepared_structures: true
+checkpoint_enabled: false
+# checkpoint_interval: 25
+# cpu_workers: 4            # optional override for per-chunk CPU parallelism
+# gpu_workers: 1            # optional override for GPU-capable plugins
+# gpu_devices: ["0"]        # optional visible GPU IDs for one chunk job
+# run_metadata.json will still record the inferred mixed-job and staged-job plans.

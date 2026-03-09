@@ -213,8 +213,8 @@ class AbEpiTopePluginTests(unittest.TestCase):
         fake_process = _FakeProcess()
 
         with patch.object(plugin, "_get_worker", return_value=fake_process) as get_worker:
-            first = plugin._run_backend("MODEL", seq_hash="same-key", atom_radius=4.0)
-            second = plugin._run_backend("MODEL", seq_hash="same-key", atom_radius=4.0)
+            first = plugin._run_backend("MODEL", seq_hash="same-key", atom_radius=4.0, device="cpu")
+            second = plugin._run_backend("MODEL", seq_hash="same-key", atom_radius=4.0, device="cpu")
 
         self.assertEqual(first, {"score": 0.42})
         self.assertEqual(second, {"score": 0.42})

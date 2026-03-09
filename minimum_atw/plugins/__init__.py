@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .pdb.calculation import (
     AbEpiTopeScorePlugin,
-    AntibodyCDRLengthsPlugin,
     AntibodyCDRSequencesPlugin,
     ChainStatsPlugin,
     IdentityPlugin,
@@ -16,7 +15,6 @@ from .pdb.calculation import (
 
 __all__ = [
     "AbEpiTopeScorePlugin",
-    "AntibodyCDRLengthsPlugin",
     "AntibodyCDRSequencesPlugin",
     "ChainStatsPlugin",
     "IdentityPlugin",

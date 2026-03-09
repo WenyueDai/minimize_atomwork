@@ -12,8 +12,9 @@ per-role, and per-interface metrics ready for analysis.
    input_dir: "/path/to/your/pdb_files"
    out_dir:   "/path/to/your/output"
    ```
-3. Run:
+3. Activate the conda environment and run:
    ```bash
+   conda activate atw_pp
    python -m minimum_atw.cli run --config example_antibody_antigen_light.yaml
    ```
 4. Open `out_dir/pdb.parquet` in pandas.
@@ -63,7 +64,8 @@ fixtures.
 
 ## Staged workflow
 
-Every `run` call executes four stages. You can run them separately:
+Every `run` call executes four stages. You can run them separately.
+Activate the conda environment first (`conda activate atw_pp`), then:
 
 ```bash
 CONFIG=minimum_atw/examples/simple_run/example_antibody_antigen_light.yaml
@@ -115,8 +117,7 @@ python -m minimum_atw.cli analyze-dataset  --config "$CONFIG"
 | `interface_metrics` | interface | Residue-pair summaries, physicochemistry |
 | `pdockq_score` | interface | pDockQ confidence |
 | `dockq_score` | interface | DockQ vs native reference |
-| `antibody_cdr_lengths` | role | CDR loop lengths (needs `abnumber`) |
-| `antibody_cdr_sequences` | role | CDR sequences (needs `abnumber`) |
+| `antibody_cdr_sequences` | role | CDR sequences and loop lengths (needs `abnumber`) |
 | `abepitope_score` | interface | AbEpiTope; **GPU-preferred** |
 | `ablang2_score` | role | AbLang2 LL; **GPU-preferred** |
 | `esm_if1_score` | role | ESM-IF1 LL; **GPU-preferred** |
@@ -128,8 +129,8 @@ python -m minimum_atw.cli analyze-dataset  --config "$CONFIG"
 |---|---|
 | `dataset_annotations` | Metadata rows |
 | `interface_summary` | Aggregated interface stats |
-| `cluster` | Cluster labels written back onto interface rows |
-| `cdr_entropy` | CDR sequence entropy |
+| `cluster` | Cluster labels written back onto interface rows; requires explicit `dataset_analysis_params.cluster.mode` |
+| `cdr_entropy` | Position-wise CDR entropy on numbered positions, with optional sequence-level summary rows |
 
 ---
 

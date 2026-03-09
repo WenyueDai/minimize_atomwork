@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest minimum_atw/tests/test_dataset_cluster.py minimum_atw/tests/test_superimpose_features.py -x)",
+      "Bash(/home/eva/miniconda3/envs/atw_pp/bin/python -m pytest minimum_atw/tests/test_dataset_cluster.py minimum_atw/tests/test_superimpose_features.py -x)",
+      "Bash(grep -n 'mode: \"\"interface_ca\"\"' /home/eva/20260308_minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_a_antibody_antigen.yaml /home/eva/20260308_minimum_atomworks/minimum_atw/examples/multi_dataset/dataset_b_antibody_antigen.yaml /home/eva/20260308_minimum_atomworks/minimum_atw/examples/multi_dataset/compare_merged_datasets.yaml)",
+      "Bash(/home/eva/miniconda3/envs/atw_pp/bin/python -m pytest minimum_atw/tests/test_dataset_cluster.py minimum_atw/tests/test_superimpose_features.py -v)",
+      "Bash(/home/eva/miniconda3/envs/atw_pp/bin/python -m pytest minimum_atw/tests/ -x --tb=short)",
+      "Bash(/home/eva/miniconda3/envs/atw_pp/bin/python -m pytest minimum_atw/tests/ --tb=short -q)",
+      "Bash(/home/eva/miniconda3/envs/atw_pp/bin/python -m pytest minimum_atw/tests/ -q --tb=short)"
+    ]
+  }
+}

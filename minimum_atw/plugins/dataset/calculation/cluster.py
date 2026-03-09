@@ -13,19 +13,24 @@ from ....core.tables import empty_pdb_frame, rows_to_pdb_frame
 from .base import BaseDatasetPlugin, DatasetAnalysisContext, DatasetAnalysisResult
 
 
-def _cluster_mode(params: dict[str, object] | None) -> str:
-    mode = str(dict(params or {}).get("mode", "interface_ca") or "interface_ca").strip().lower()
-    aliases = {
-        "interface_ca": "interface_ca",
-        "interface_epitope_ca": "interface_ca",
-        "superimposed_interface_ca": "superimposed_interface_ca",
-    }
-    if mode not in aliases:
+def _cluster_mode(params: dict[str, object] | None) -> str | None:
+    raw_mode = dict(params or {}).get("mode")
+    mode = str(raw_mode or "").strip().lower()
+    if not mode:
+        return None
+    valid = {"absolute_interface_ca", "shape_interface_ca"}
+    if mode not in valid:
         raise ValueError(
-            "cluster.mode must be 'interface_ca', 'superimposed_interface_ca' "
-            "(or legacy alias 'interface_epitope_ca')"
+            "cluster.mode must be:\n"
+            "  'absolute_interface_ca' — binding-site clustering: uses absolute Cα positions from globally\n"
+            "     superimposed structures (superimpose_to_reference in prepare). Two structures binding\n"
+            "     different epitopes on the antigen will land in different clusters even if the binding\n"
+            "     shapes look similar.\n"
+            "  'shape_interface_ca' — binding-shape clustering: locally superimposes interface Cα (Kabsch)\n"
+            "     then computes Chamfer distance. Two structures with the same binding geometry cluster\n"
+            "     together regardless of where on the antigen they bind."
         )
-    return aliases[mode]
+    return mode
 
 
 def _distance_threshold(params: dict[str, object] | None) -> float:
@@ -34,9 +39,6 @@ def _distance_threshold(params: dict[str, object] | None) -> float:
         raise ValueError("cluster.distance_threshold must be non-negative")
     return value
 
-
-def _center_points(params: dict[str, object] | None) -> bool:
-    return bool(dict(params or {}).get("center", True))
 
 
 def _selected_pairs(params: dict[str, object] | None) -> list[str]:
@@ -92,6 +94,61 @@ def _centered(points: np.ndarray, *, center: bool) -> np.ndarray:
     if not center:
         return arr
     return arr - np.mean(arr, axis=0, keepdims=True)
+
+
+def _kabsch_rotation(mobile: np.ndarray, reference: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Kabsch algorithm for optimal rotation of mobile onto reference.
+
+    Returns (R, centroid_mobile, centroid_reference).
+    To transform a cloud: (cloud - centroid_mobile) @ R + centroid_reference
+    """
+    centroid_mobile = np.mean(mobile, axis=0)
+    centroid_ref = np.mean(reference, axis=0)
+    H = (mobile - centroid_mobile).T @ (reference - centroid_ref)
+    U, _, Vt = np.linalg.svd(H)
+    # Correct for improper rotation (reflection)
+    d = np.linalg.det(Vt.T @ U.T)
+    R = Vt.T @ np.diag([1.0, 1.0, d]) @ U.T
+    return R, centroid_mobile, centroid_ref
+
+
+def _align_clouds_shape(records: list[_PointCloudRecord], loader: _StructureLoader) -> list[np.ndarray]:
+    """Locally superimpose all interface Cα clouds onto the first structure using Kabsch.
+
+    Finds the common interface residues (intersection by chain_id:res_id across all structures),
+    computes the optimal rotation/translation for each structure, and applies it to the full
+    interface Cα cloud. Falls back to centroid-centering when fewer than 3 common residues exist.
+    """
+    if not records:
+        return []
+    if len(records) == 1:
+        return [records[0].point_cloud]
+
+    # Intersection of interface residues across all structures
+    common: set[tuple[str, int]] = set(records[0].residues)
+    for rec in records[1:]:
+        common &= set(rec.residues)
+    common_list = sorted(common)
+
+    ref_lookup = loader.ca_lookup(records[0].load_path)
+    ref_common = np.array([ref_lookup[r] for r in common_list if r in ref_lookup], dtype=float)
+
+    if len(ref_common) < 3:
+        # Not enough common atoms for a meaningful superimposition — fall back to centering
+        return [r.point_cloud - np.mean(r.point_cloud, axis=0) if len(r.point_cloud) else r.point_cloud for r in records]
+
+    aligned: list[np.ndarray] = [records[0].point_cloud]
+    for rec in records[1:]:
+        mob_lookup = loader.ca_lookup(rec.load_path)
+        mob_common = np.array([mob_lookup[r] for r in common_list if r in mob_lookup], dtype=float)
+        if len(mob_common) < 3 or len(mob_common) != len(ref_common):
+            # Fallback for this structure
+            cloud = rec.point_cloud
+            aligned.append(cloud - np.mean(cloud, axis=0) if len(cloud) else cloud)
+            continue
+        R, centroid_mob, centroid_ref = _kabsch_rotation(mob_common, ref_common)
+        aligned.append((rec.point_cloud - centroid_mob) @ R + centroid_ref)
+    return aligned
 
 
 def _symmetric_chamfer(left: np.ndarray, right: np.ndarray) -> float:
@@ -183,12 +240,6 @@ def _row_str(row: object, column: str) -> str:
     return str(value or "")
 
 
-def _row_bool(row: object, column: str) -> bool:
-    value = getattr(row, column, False)
-    if _is_missing_scalar(value):
-        return False
-    return bool(value)
-
 
 def _prepared_path_map(out_dir: Path, structures: pd.DataFrame | None = None) -> dict[str, str]:
     out: dict[str, str] = {}
@@ -215,28 +266,6 @@ def _prepared_path_map(out_dir: Path, structures: pd.DataFrame | None = None) ->
     return out
 
 
-def _superimposed_path_map(out_dir: Path, structures: pd.DataFrame | None = None) -> dict[str, str]:
-    if structures is None or structures.empty or "path" not in structures.columns:
-        return {}
-    out: dict[str, str] = {}
-    has_transformed = "sup__transformed_path" in structures.columns
-    has_prepare_superimpose = "sup__coordinates_applied" in structures.columns
-    has_prepared_path = "prepared__path" in structures.columns
-    for row in structures.itertuples(index=False):
-        source_path = _row_str(row, "path")
-        if not source_path:
-            continue
-        if has_transformed:
-            transformed = _resolve_load_path(getattr(row, "sup__transformed_path", ""), out_dir=out_dir)
-            if transformed:
-                out[source_path] = transformed
-                continue
-        if has_prepare_superimpose and has_prepared_path:
-            prepared = _resolve_load_path(getattr(row, "prepared__path", ""), out_dir=out_dir)
-            if prepared and _row_bool(row, "sup__coordinates_applied"):
-                out[source_path] = prepared
-    return out
-
 
 @dataclass
 class _PointCloudRecord:
@@ -244,6 +273,8 @@ class _PointCloudRecord:
     assembly_id: str
     group_key: str
     point_cloud: np.ndarray
+    residues: list[tuple[str, int]]  # interface residues — used by shape_interface_ca for local superimposition
+    load_path: str                   # path to loaded structure file — used by shape_interface_ca for CA lookup
     metadata: dict[str, object]
 
 
@@ -254,7 +285,6 @@ class _ClusterJob:
     mode: str
     interface_side: str
     distance_threshold: float
-    center: bool
     selected_pairs: tuple[str, ...]
 
 
@@ -315,8 +345,11 @@ def _normalize_jobs(params: dict[str, object] | None) -> list[_ClusterJob]:
     if isinstance(raw_jobs, list) and raw_jobs:
         jobs: list[_ClusterJob] = []
         for index, raw_job in enumerate(raw_jobs, start=1):
-            job_params = dict(raw_job or {})
+            job_params = {key: value for key, value in raw_params.items() if key != "jobs"}
+            job_params.update(dict(raw_job or {}))
             mode = _cluster_mode(job_params)
+            if mode is None:
+                continue
             side = _interface_side(job_params)
             selected_pairs = tuple(_selected_pairs(job_params))
             default_name = f"{side}_{index:02d}"
@@ -328,7 +361,6 @@ def _normalize_jobs(params: dict[str, object] | None) -> list[_ClusterJob]:
                     mode=mode,
                     interface_side=side,
                     distance_threshold=_distance_threshold(job_params),
-                    center=_center_points(job_params),
                     selected_pairs=selected_pairs,
                 )
             )
@@ -340,42 +372,24 @@ def _normalize_jobs(params: dict[str, object] | None) -> list[_ClusterJob]:
         return jobs
 
     mode = _cluster_mode(raw_params)
+    if mode is None:
+        return []
     distance_threshold = _distance_threshold(raw_params)
-    center = _center_points(raw_params)
     selected_pairs = tuple(_selected_pairs(raw_params))
     explicit_side = raw_params.get("interface_side")
     if explicit_side is None:
+        # Default: cluster both interface sides independently
         jobs = [
-            _ClusterJob(
-                name="left",
-                column_name="left",
-                mode=mode,
-                interface_side="left",
-                distance_threshold=distance_threshold,
-                center=center,
-                selected_pairs=selected_pairs,
-            ),
-            _ClusterJob(
-                name="right",
-                column_name="right",
-                mode=mode,
-                interface_side="right",
-                distance_threshold=distance_threshold,
-                center=center,
-                selected_pairs=selected_pairs,
-            ),
+            _ClusterJob(name="left", column_name="left", mode=mode, interface_side="left",
+                        distance_threshold=distance_threshold, selected_pairs=selected_pairs),
+            _ClusterJob(name="right", column_name="right", mode=mode, interface_side="right",
+                        distance_threshold=distance_threshold, selected_pairs=selected_pairs),
         ]
     else:
         jobs = [
-            _ClusterJob(
-                name="default",
-                column_name="default",
-                mode=mode,
-                interface_side=_interface_side(raw_params),
-                distance_threshold=distance_threshold,
-                center=center,
-                selected_pairs=selected_pairs,
-            )
+            _ClusterJob(name="default", column_name="default", mode=mode,
+                        interface_side=_interface_side(raw_params),
+                        distance_threshold=distance_threshold, selected_pairs=selected_pairs)
         ]
 
     seen: set[str] = set()
@@ -429,13 +443,12 @@ class ClusterPlugin(BaseDatasetPlugin):
                 *residue_columns,
             ]
         }
-        if any(job.mode == "superimposed_interface_ca" for job in jobs):
-            required["structure"] = [
-                "path",
-                "prepared__path",
-                "sup__coordinates_applied",
-                "sup__transformed_path",
-            ]
+        # Always request prepared structure columns — both modes use them when available
+        required["structure"] = [
+            "path",
+            "prepared__path",
+            "sup__coordinates_applied",
+        ]
         return required
 
     def run(self, ctx: DatasetAnalysisContext) -> pd.DataFrame | DatasetAnalysisResult:
@@ -443,7 +456,6 @@ class ClusterPlugin(BaseDatasetPlugin):
         jobs = _normalize_jobs(params)
         structures = ctx.grains.get("structure", pd.DataFrame())
         prepared_map = _prepared_path_map(ctx.out_dir, structures)
-        superimposed_map = _superimposed_path_map(ctx.out_dir, structures)
         loader = _StructureLoader()
         df = ctx.df_interfaces.copy()
         required_columns = {f"iface__{job.interface_side}_interface_residues" for job in jobs}
@@ -465,17 +477,14 @@ class ClusterPlugin(BaseDatasetPlugin):
                 pair = _row_str(row, "pair")
                 residue_tokens = _row_str(row, residue_column)
                 residues = residue_cache.setdefault(residue_tokens, _parse_residue_tokens(residue_tokens))
-                if job.mode == "superimposed_interface_ca":
-                    load_path = superimposed_map.get(path)
-                    if load_path is None:
-                        raise ValueError(
-                            "cluster.mode='superimposed_interface_ca' requires either "
-                            "`sup__transformed_path` from persisted superimpose_homology outputs "
-                            "or a saved prepared structure produced by `superimpose_to_reference`"
-                        )
-                else:
-                    load_path = prepared_map.get(path, path)
-                point_cloud = _centered(_ca_point_cloud_for_residues(loader, load_path, residues), center=job.center)
+
+                # Load from prepared structures (globally superimposed by superimpose_to_reference)
+                # if available; fall back to source file otherwise.
+                load_path = prepared_map.get(path, path)
+
+                # Raw Cα cloud — no centering; shape_interface_ca will apply local superimposition later
+                point_cloud = _ca_point_cloud_for_residues(loader, load_path, residues)
+
                 if not path or len(point_cloud) == 0:
                     continue
                 records_by_group.setdefault(pair, []).append(
@@ -484,6 +493,8 @@ class ClusterPlugin(BaseDatasetPlugin):
                         assembly_id=assembly_id,
                         group_key=pair,
                         point_cloud=point_cloud,
+                        residues=residues,
+                        load_path=load_path,
                         metadata={
                             "job": job.name,
                             "job_column": job.column_name,
@@ -500,7 +511,25 @@ class ClusterPlugin(BaseDatasetPlugin):
                     )
                 )
             for group_key in sorted(records_by_group):
-                rows.extend(_cluster_rows(records_by_group[group_key], threshold=job.distance_threshold))
+                group_records = records_by_group[group_key]
+                if job.mode == "shape_interface_ca":
+                    # Locally superimpose all interface Cα clouds onto the first structure,
+                    # then update records with aligned clouds
+                    aligned_clouds = _align_clouds_shape(group_records, loader)
+                    group_records = [
+                        _PointCloudRecord(
+                            path=rec.path,
+                            assembly_id=rec.assembly_id,
+                            group_key=rec.group_key,
+                            point_cloud=cloud,
+                            residues=rec.residues,
+                            load_path=rec.load_path,
+                            metadata={**rec.metadata, "n_points": int(len(cloud))},
+                        )
+                        for rec, cloud in zip(group_records, aligned_clouds)
+                        if len(cloud) > 0
+                    ]
+                rows.extend(_cluster_rows(group_records, threshold=job.distance_threshold))
         if not rows:
             return DatasetAnalysisResult(dataset_frame=pd.DataFrame(columns=["analysis"]), pdb_frame=empty_pdb_frame())
 

@@ -148,18 +148,25 @@ class SuperimposeFeatureTests(unittest.TestCase):
             self.assertTrue(str(transformed_path).startswith(str(out_dir.resolve())))
             self.assertTrue(str(prepared_path).startswith(str(out_dir.resolve())))
 
-    def test_cluster_superimposed_interface_ca_uses_transformed_paths(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="minimum_atw_cluster_superimposed_") as tmp_dir:
+    def test_cluster_absolute_interface_ca_uses_prepared_paths(self) -> None:
+        """absolute_interface_ca reads from prepared__path (globally superimposed structures).
+
+        Source files p1/p2 differ significantly, but their prepared (superimposed) versions
+        prep1/prep2 are close → they end up in the same cluster.
+        """
+        with tempfile.TemporaryDirectory(prefix="minimum_atw_cluster_absolute_") as tmp_dir:
             out_dir = Path(tmp_dir)
             p1 = out_dir / "source_1.pdb"
             p2 = out_dir / "source_2.pdb"
-            t1 = out_dir / "aligned_1.pdb"
-            t2 = out_dir / "aligned_2.pdb"
+            prep1 = out_dir / "prepared_1.pdb"
+            prep2 = out_dir / "prepared_2.pdb"
 
+            # Source: very different shapes
             _write_pdb(p1, chain_a_coords=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)])
             _write_pdb(p2, chain_a_coords=[(0.0, 0.0, 0.0), (0.0, 2.0, 0.0)])
-            _write_pdb(t1, chain_a_coords=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)])
-            _write_pdb(t2, chain_a_coords=[(0.1, 0.0, 0.0), (2.1, 0.0, 0.0)])
+            # Prepared (after superimpose_to_reference): nearly identical → same cluster
+            _write_pdb(prep1, chain_a_coords=[(0.0, 0.0, 0.0), (2.0, 0.0, 0.0)])
+            _write_pdb(prep2, chain_a_coords=[(0.1, 0.0, 0.0), (2.1, 0.0, 0.0)])
 
             pd.DataFrame(
                 [
@@ -173,7 +180,8 @@ class SuperimposeFeatureTests(unittest.TestCase):
                         "role_left": "",
                         "role_right": "",
                         "sub_id": "",
-                        "sup__transformed_path": str(t1.resolve()),
+                        "prepared__path": str(prep1.resolve()),
+                        "sup__coordinates_applied": True,
                     },
                     {
                         "path": str(p2.resolve()),
@@ -185,7 +193,8 @@ class SuperimposeFeatureTests(unittest.TestCase):
                         "role_left": "",
                         "role_right": "",
                         "sub_id": "",
-                        "sup__transformed_path": str(t2.resolve()),
+                        "prepared__path": str(prep2.resolve()),
+                        "sup__coordinates_applied": True,
                     },
                     {
                         "path": str(p1.resolve()),
@@ -228,7 +237,7 @@ class SuperimposeFeatureTests(unittest.TestCase):
                 dataset_analyses=("cluster",),
                 dataset_analysis_params={
                     "cluster": {
-                        "mode": "superimposed_interface_ca",
+                        "mode": "absolute_interface_ca",
                         "interface_side": "left",
                         "distance_threshold": 0.3,
                     }
@@ -239,7 +248,7 @@ class SuperimposeFeatureTests(unittest.TestCase):
             cluster_ids = result["cluster__default_cluster_id"].dropna().astype(int).tolist()
             self.assertEqual(len(cluster_ids), 2)
             self.assertEqual(cluster_ids[0], cluster_ids[1])
-            self.assertEqual(result["cluster__default_mode"].dropna().unique().tolist(), ["superimposed_interface_ca"])
+            self.assertEqual(result["cluster__default_mode"].dropna().unique().tolist(), ["absolute_interface_ca"])
 
 
 if __name__ == "__main__":

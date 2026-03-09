@@ -9,7 +9,8 @@ try:
     import pandas as pd
     import yaml
     from minimum_atw.core.config import Config
-    from minimum_atw.core.pipeline import _prepare_execution_metadata, run_pipeline
+    from minimum_atw.core._prepare import prepare_execution_metadata
+    from minimum_atw.core.pipeline import run_pipeline
     from minimum_atw.tests.helpers import read_pdb_grain
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "pydantic", "yaml", "pandas", "pyarrow"}:
@@ -17,7 +18,7 @@ except ModuleNotFoundError as exc:
     pd = None
     yaml = None
     Config = None
-    _prepare_execution_metadata = None
+    prepare_execution_metadata = None
     run_pipeline = None
     read_pdb_grain = None
 
@@ -34,7 +35,7 @@ class PrepareSectionsTests(unittest.TestCase):
             ],
         )
 
-        metadata = _prepare_execution_metadata(cfg)
+        metadata = prepare_execution_metadata(cfg)
         self.assertEqual(metadata["grains"]["pdb"], ["chain_continuity", "center_on_origin"])
 
     def test_quality_control_stage_writes_continuity_and_clash_fields(self) -> None:
