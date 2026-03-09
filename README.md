@@ -848,7 +848,7 @@ Most dataset analyses write a second parquet, usually `dataset.parquet`, with an
 The recommended way to reproduce the environment is with conda. The project was developed using the `atw_pp` conda environment with Python 3.12.
 
 ```bash
-# 1. Create a fresh conda environment (Python 3.12 required)
+# 1. Create a fresh conda environment (Python 3.12 recommended)
 conda create -n atw_pp python=3.12 -y
 conda activate atw_pp
 
@@ -860,24 +860,38 @@ cd minimum_atomworks
 pip install -e ".[dev]"
 ```
 
-That installs the full non-Rosetta Python stack declared in `pyproject.toml`:
+`pip install -e .` (or `.[dev]`) installs all **core** dependencies from PyPI:
+`biotite`, `numpy`, `pandas`, `pydantic`, `pyarrow`, `pyyaml`, `abnumber`, `anarcii`, `biopython`.
 
-- core runtime dependencies: `biotite`, `numpy`, `pandas`, `pydantic`, `pyarrow`, `pyyaml`
-- antibody numbering: `abnumber`, `anarcii`
-- GPU/model plugins: `torch`, `fair-esm`, `ablang2`
-- AbEpiTope: `abepitope`
+All GPU/model plugins are **optional extras** installed on top.
+
+### Optional GPU/model plugins
+
+> **Important:** `abepitope` is **not on PyPI** and must be installed from GitHub before the extras.
+
+```bash
+# abepitope_score — install the package from GitHub first, then the extras
+pip install git+https://github.com/mnielLab/AbEpiTope-1.0.git
+pip install -e ".[abepitope]"   # pulls in torch and fair-esm
+
+# ablang2_score
+pip install -e ".[ablang2]"     # pulls in ablang2 and torch
+
+# esm_if1_score
+pip install -e ".[esm]"         # pulls in torch and fair-esm
+
+# all PyPI-installable extras at once (abepitope GitHub step still required separately)
+pip install -e ".[all]"
+```
 
 ### External binary dependency
 
-The only non-pip dependency is `hmmsearch` (from HMMER):
+`abepitope_score` also requires `hmmsearch` (HMMER) on your `PATH`:
 
 ```bash
-which hmmsearch || echo "hmmsearch not found"
+conda install -c bioconda hmmer
+which hmmsearch   # should print a path
 ```
-
-`abepitope_score` can often run without it when antibody/antigen chains are
-clear from your YAML roles, but `hmmsearch` is the supported setup.
-Install via conda: `conda install -c bioconda hmmer`
 
 ### Verify the environment
 
@@ -900,8 +914,8 @@ python -c "import torch; print(torch.cuda.is_available())"
 
 Notes:
 
-- `pip install -e .` is the intended install path for the built-in non-Rosetta plugins
-- `abepitope_score` needs both the Python package and the external `hmmsearch` binary
+- `abepitope` is GitHub-only; `pip install -e ".[abepitope]"` will **not** install it — that GitHub step is required first
+- `abepitope_score` also needs the `hmmsearch` binary (see above)
 - `esm_if1_score` needs `torch` and `fair-esm`
 - `ablang2_score` needs `ablang2`
 - Rosetta is not installed by this package
