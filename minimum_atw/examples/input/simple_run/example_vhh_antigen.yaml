@@ -93,10 +93,10 @@ plugin_params:
     on_chains: ["A", "B", "C"]   # chains to superimpose on; full complex is transformed
     # anchor_atoms: "CA"          # CA | backbone (default: CA)
   # rosetta_preprocess:
-  #   reference_path: "/path/to/your/reference.pdb"
-  #   on_chains: ["A", "B", "C"]   # chains to superimpose on after Rosetta steps
   #   repack: true                  # sidechain-only optimisation (backbone fixed)
   #   relax: false                  # full fast-relax including backbone (expensive)
+  # Note: rosetta_preprocess does not superimpose. Add superimpose_to_reference
+  # as a separate manipulation (before or after) to align to a reference.
   # anchor_atoms: "CA"              # CA | backbone (default: CA)
 
   # interface_contacts:
@@ -127,9 +127,11 @@ cdr_definition: "imgt"     # imgt | north | kabat
 
 # ── Optional Rosetta scaffold ──────────────────────────────────────────────────
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-# rosetta_database: "/path/to/rosetta/database"
+# rosetta_database: "/path/to/rosetta/database"   # folder from Rosetta GitHub; contains scoring/, sequence/, ...
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
 # rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# Singularity: set each executable to a wrapper script that calls
+#   singularity exec --bind /scratch:/scratch <sif> <tool> "$@"
 # rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
 # rosetta_preprocess_with_score_jd2: false
 # rosetta_interface_targets:

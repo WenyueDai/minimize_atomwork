@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+import subprocess as _subprocess
+import threading
+import traceback as _traceback_mod
 from pathlib import Path
 from typing import Any
 
@@ -176,6 +179,47 @@ def base_rows_for_context(ctx: Context) -> list[dict[str, Any]]:
     return rows
 
 
+_TRACEBACK_LOG_LOCK = threading.Lock()
+_LOGGED_TRACEBACK_KEYS: set[tuple[str, str]] = set()
+
+
+def _format_exception(exc: Exception) -> str:
+    """Format an exception for status messages.
+
+    For CalledProcessError the default str() only shows the return code and
+    command; the actual error lives in exc.stderr.  Extract the last few
+    meaningful lines so the real failure reason appears in parquet and console.
+    """
+    if isinstance(exc, _subprocess.CalledProcessError):
+        stderr = str(exc.stderr or "").strip()
+        if stderr:
+            lines = [ln for ln in stderr.splitlines() if ln.strip()]
+            tail = "\n".join(lines[-5:]) if lines else stderr
+            return f"{type(exc).__name__}:\n{tail}"
+        return f"{type(exc).__name__}: {exc}"
+    return f"{type(exc).__name__}: {exc}"
+
+
+def _log_traceback_once(plugin_name: str, exc: Exception) -> None:
+    """Print the full traceback the first time a given (plugin, exc_type) pair fails.
+
+    Keyed by (plugin_name, exception_type) so repeat failures of the same kind
+    only print once, avoiding log spam when every structure fails the same way.
+    Each worker process maintains its own seen-set, which is intentional — a
+    subprocess printing once is better than never printing.
+    """
+    key = (plugin_name, type(exc).__name__)
+    with _TRACEBACK_LOG_LOCK:
+        if key in _LOGGED_TRACEBACK_KEYS:
+            return
+        _LOGGED_TRACEBACK_KEYS.add(key)
+    tb = _traceback_mod.format_exc()
+    print(
+        f"[plugin:{plugin_name}] first traceback ({type(exc).__name__}):\n{tb.rstrip()}",
+        flush=True,
+    )
+
+
 def run_unit(
     ctx: Context,
     unit: Any,
@@ -211,13 +255,14 @@ def run_unit(
         )
         return True
     except Exception as exc:
+        _log_traceback_once(str(getattr(unit, "name", "?")), exc)
         status_rows.append(
             {
                 "path": ctx.path,
                 "assembly_id": ctx.assembly_id,
                 "plugin": unit.name,
                 "status": "failed",
-                "message": f"{type(exc).__name__}: {exc}",
+                "message": _format_exception(exc),
             }
         )
         return False

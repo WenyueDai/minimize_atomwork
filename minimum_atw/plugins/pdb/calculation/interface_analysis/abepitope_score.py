@@ -10,7 +10,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
@@ -170,8 +169,10 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
         return scheduling
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
-        if find_spec("abepitope") is None:
-            return False, "abepitope is not installed"
+        try:
+            import abepitope  # noqa: F401
+        except ImportError as exc:
+            return False, f"abepitope is not importable: {exc}"
         if ctx is not None:
             hints = None
             for left_role, right_role, left, right in self.iter_role_pairs(ctx):

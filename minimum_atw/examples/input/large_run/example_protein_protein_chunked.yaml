@@ -118,9 +118,11 @@ contact_distance: 5.0           # Å cutoff for interface_contacts and dockq_sco
 
 # ── Optional Rosetta scaffold ──────────────────────────────────────────────────
 # rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-# rosetta_database: "/path/to/rosetta/database"
+# rosetta_database: "/path/to/rosetta/database"   # folder from Rosetta GitHub; contains scoring/, sequence/, ...
 # rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
 # rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+# Singularity: set each executable to a wrapper script that calls
+#   singularity exec --bind /scratch:/scratch <sif> <tool> "$@"
 # rosetta_preprocess: true   # false → skip Rosetta steps; only superimpose
 # rosetta_preprocess_with_score_jd2: false
 # rosetta_interface_targets:

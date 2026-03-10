@@ -5,7 +5,7 @@ from __future__ import annotations
 import concurrent.futures
 from contextlib import ExitStack
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import threading
 from typing import Any
@@ -58,6 +58,27 @@ _WORKER_STATE = threading.local()
 def _log(message: str) -> None:
     with _LOG_LOCK:
         print(message, flush=True)
+
+
+def _log_plugin_preflight(specs: list[PluginExecutionSpec]) -> None:
+    """Log availability of each plugin before processing begins.
+
+    Calls available(None) which checks package imports without needing a
+    structure, giving early feedback about missing optional dependencies.
+    """
+    for spec in specs:
+        ok, reason = (
+            spec.plugin.available(None)
+            if hasattr(spec.plugin, "available")
+            else (True, "")
+        )
+        if ok:
+            _log(
+                f"[plugin:{spec.name}] preflight ok "
+                f"pool={spec.worker_pool} mode={spec.execution_mode}"
+            )
+        else:
+            _log(f"[plugin:{spec.name}] WARN preflight_unavailable: {reason}")
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +143,7 @@ class PluginRunState:
     pdb_writer: BufferedTableWriter
     status_writer: BufferedTableWriter
     bad_writer: BufferedTableWriter
+    warned_statuses: set[str] = field(default_factory=set)
 
     @classmethod
     def from_out_dir(
@@ -548,6 +570,12 @@ def _record_plugin_result(
     if local_status:
         status = str(local_status[-1].get("status", "unknown"))
     counts[status] = int(counts.get(status, 0)) + 1
+    if status in ("skipped_preflight", "failed"):
+        state = states[spec.name]
+        if status not in state.warned_statuses:
+            msg = str(local_status[-1].get("message", "")) if local_status else ""
+            _log(f"[plugin:{spec.name}] WARN first_{status} ({source_path.name}): {msg}")
+            state.warned_statuses.add(status)
     if _should_log_progress(
         done=group_progress[spec.name],
         total=int(group_targets[spec.name]),
@@ -833,6 +861,7 @@ def run_plugin(cfg: Config, plugin_name: str) -> dict[str, int]:
 def run_plugins(cfg: Config, plugin_names: list[str]) -> dict[str, int]:
     """Run multiple plugins against prepared structures."""
     specs = _resolve_plugin_specs(plugin_names, cfg)
+    _log_plugin_preflight(specs)
 
     out_dir = Path(cfg.out_dir).resolve()
     manifest = _load_prepared_manifest(out_dir)

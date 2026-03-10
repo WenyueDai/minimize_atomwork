@@ -104,8 +104,6 @@ class AbLang2ScorePlugin(RolePlugin):
         return scheduling
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
-        if ctx is None:
-            return True, ""
         try:
             import ablang2  # noqa: F401
         except ImportError:

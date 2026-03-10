@@ -974,6 +974,58 @@ conda install -c bioconda hmmer
 which hmmsearch   # should print a path
 ```
 
+### Rosetta via Singularity (HPC)
+
+If Rosetta is installed as a Singularity image on your HPC, create thin wrapper
+scripts that call the executables inside the container.  A helper script is
+provided:
+
+```bash
+bash scripts/make_rosetta_singularity_wrappers.sh \
+    --sif  /apps/.images/rosetta/rosetta_2025.sif \
+    --bind /scratch:/scratch \
+    --out-dir "$HOME/bin"
+```
+
+This creates three executable wrappers in `~/bin`:
+
+| Wrapper | Rosetta tool |
+|---|---|
+| `~/bin/InterfaceAnalyzer` | `InterfaceAnalyzer.static.linuxgccrelease` |
+| `~/bin/score_jd2` | `score_jd2.static.linuxgccrelease` |
+| `~/bin/relax` | `relax.static.linuxgccrelease` |
+
+Each wrapper tries the `.static.`, `.linuxgccrelease`, and `.default.` build
+variants in order, so it works regardless of which variant shipped in your SIF.
+
+Point your YAML config at the wrappers and your downloaded database:
+
+```yaml
+rosetta_executable:           /home/youruser/bin/InterfaceAnalyzer
+rosetta_score_jd2_executable: /home/youruser/bin/score_jd2
+rosetta_relax_executable:     /home/youruser/bin/relax
+# Rosetta database cloned from https://github.com/RosettaCommons/rosetta
+# contains subdirectories like scoring/, sequence/, ...
+rosetta_database: /scratch/scratch01/youruser/Rosetta_database/rosetta/database
+```
+
+The `--bind /scratch:/scratch` flag is necessary so that paths inside
+`/scratch` (temp files, the database) are visible to the container.
+
+You can also write the wrapper scripts by hand.  Here is the template for
+`InterfaceAnalyzer` — repeat for `score_jd2` and `relax`:
+
+```bash
+#!/usr/bin/env bash
+# ~/bin/InterfaceAnalyzer
+exec singularity exec \
+    --bind /scratch:/scratch \
+    /apps/.images/rosetta/rosetta_2025.sif \
+    InterfaceAnalyzer.static.linuxgccrelease "$@"
+```
+
+Make each wrapper executable: `chmod +x ~/bin/InterfaceAnalyzer`.
+
 ### Verify the environment
 
 ```bash

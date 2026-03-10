@@ -5,6 +5,8 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+import sys
+import types
 from unittest.mock import patch
 
 try:
@@ -124,8 +126,9 @@ class AbEpiTopePluginTests(unittest.TestCase):
 
     def test_abepitope_preflight_requires_hmmsearch(self) -> None:
         plugin = AbEpiTopeScorePlugin()
+        _fake_abepitope = types.ModuleType("abepitope")
         with (
-            patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score.find_spec", return_value=object()),
+            patch.dict(sys.modules, {"abepitope": _fake_abepitope}),
             patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score._resolve_hmmsearch", return_value=None),
         ):
             available, message = plugin.available(None)
@@ -159,8 +162,9 @@ class AbEpiTopePluginTests(unittest.TestCase):
             ctx = self._toy_abag_context(Path(tmp_dir))
 
         plugin = AbEpiTopeScorePlugin()
+        _fake_abepitope = types.ModuleType("abepitope")
         with (
-            patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score.find_spec", return_value=object()),
+            patch.dict(sys.modules, {"abepitope": _fake_abepitope}),
             patch("minimum_atw.plugins.pdb.calculation.interface_analysis.abepitope_score._resolve_hmmsearch", return_value=None),
         ):
             available, message = plugin.available(ctx)

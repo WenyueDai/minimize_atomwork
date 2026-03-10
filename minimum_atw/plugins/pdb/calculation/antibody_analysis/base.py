@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from importlib.util import find_spec
 
 from ...annotations import role_sequences_by_chain
 from ....base import BasePlugin, Context
@@ -66,8 +65,10 @@ class AntibodyPluginBase(BasePlugin):
         return tuple(role_name for role_name, _chain_ids, _sequence in self._antibody_role_sequences(ctx))
 
     def available(self, ctx: Context) -> tuple[bool, str]:
-        if find_spec("abnumber") is None:
-            return False, "abnumber is not installed"
+        try:
+            import abnumber  # noqa: F401
+        except ImportError as exc:
+            return False, f"abnumber is not importable: {exc}"
         configured = self.antibody_role_names(ctx)
         if not configured:
             return False, "no antibody numbering roles found; set numbering_roles or use roles such as vh, vl, or vhh"
