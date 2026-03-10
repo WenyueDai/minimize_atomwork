@@ -1054,6 +1054,49 @@ Notes:
 - Rosetta is not installed by this package
 - example YAMLs usually need path edits (`input_dir`, `out_dir`) before reuse on another machine
 
+## Testing
+
+Run the full test suite as a sanity check after installation and before any
+production run:
+
+```bash
+cd /path/to/minimum_atomworks   # repo root
+pytest -v
+```
+
+All 100+ tests should pass with no errors.  Any failure means the environment
+is not correctly set up — fix it before running on real data.
+
+### What the tests cover
+
+| Category | Key files |
+|---|---|
+| Core pipeline (config, tables, registry) | `test_config`, `test_tables`, `test_registry` |
+| Prepare phase | `test_prepare_sections`, `test_quality_control_clashes` |
+| Plugins | `test_plugin_execution`, `test_superimpose_features`, `test_interface_metrics_plugin` |
+| Antibody analysis | `test_antibody_numbering`, `test_cdr_entropy`, `test_abepitope_plugin` |
+| Rosetta | `test_rosetta_interface` |
+| Dataset merge & analysis | `test_dataset_merge`, `test_dataset_analysis_runtime`, `test_dataset_cluster` |
+| End-to-end smoke | `test_integration_smoke` |
+
+### Quick targeted checks
+
+After changing a specific subsystem, run the relevant file before the full suite:
+
+```bash
+# After changing a plugin
+pytest minimum_atw/tests/test_plugin_execution.py -v
+
+# After changing superimpose logic
+pytest minimum_atw/tests/test_superimpose_features.py -v
+
+# After changing merge/tables logic
+pytest minimum_atw/tests/test_tables.py minimum_atw/tests/test_dataset_merge.py -v
+```
+
+See [`minimum_atw/tests/README.md`](minimum_atw/tests/README.md) for the full
+guide including how to run a single test method.
+
 ## Common Commands
 
 One-shot run:
