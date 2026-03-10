@@ -983,7 +983,7 @@ provided:
 ```bash
 bash scripts/make_rosetta_singularity_wrappers.sh \
     --sif  /apps/.images/rosetta/rosetta_2025.sif \
-    --bind /scratch:/scratch \
+    --bind /home:/home \
     --out-dir "$HOME/bin"
 ```
 
@@ -1006,11 +1006,12 @@ rosetta_score_jd2_executable: /home/youruser/bin/score_jd2
 rosetta_relax_executable:     /home/youruser/bin/relax
 # Rosetta database cloned from https://github.com/RosettaCommons/rosetta
 # contains subdirectories like scoring/, sequence/, ...
-rosetta_database: /scratch/scratch01/youruser/Rosetta_database/rosetta/database
+rosetta_database: /home/youruser/Rosetta_database/rosetta/database
 ```
 
-The `--bind /scratch:/scratch` flag is necessary so that paths inside
-`/scratch` (temp files, the database) are visible to the container.
+The `--bind /home:/home` flag makes your entire home directory (wrappers,
+database, input files) visible inside the container — simpler than binding
+individual subdirectories.
 
 You can also write the wrapper scripts by hand.  Here is the template for
 `InterfaceAnalyzer` — repeat for `score_jd2` and `relax`:
@@ -1019,7 +1020,7 @@ You can also write the wrapper scripts by hand.  Here is the template for
 #!/usr/bin/env bash
 # ~/bin/InterfaceAnalyzer
 exec singularity exec \
-    --bind /scratch:/scratch \
+    --bind /home:/home \
     /apps/.images/rosetta/rosetta_2025.sif \
     InterfaceAnalyzer.static.linuxgccrelease "$@"
 ```

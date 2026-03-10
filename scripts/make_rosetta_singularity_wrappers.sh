@@ -12,7 +12,7 @@
 #   --sif PATH        Path to the Rosetta SIF image
 #                     (default: /apps/.images/rosetta/rosetta_2025.sif)
 #   --bind PATHS      Extra --bind mounts, comma-separated
-#                     (default: /scratch:/scratch)
+#                     (default: /home:/home)
 #   --out-dir DIR     Directory to write the wrapper scripts
 #                     (default: $HOME/bin)
 #
@@ -26,7 +26,7 @@
 set -euo pipefail
 
 SIF="/apps/.images/rosetta/rosetta_2025.sif"
-BIND="/scratch:/scratch"
+BIND="/home:/home"
 OUT_DIR="$HOME/bin"
 
 while [[ $# -gt 0 ]]; do
