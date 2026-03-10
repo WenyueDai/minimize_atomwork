@@ -17,6 +17,7 @@ import biotite.structure as struc
 from biotite.structure.io.pdb import PDBFile
 
 from ....base import Context, InterfacePlugin
+from ..._utils import _gpu_scheduling, _resolve_device
 
 
 _HEAVY_ROLE_HINTS = {"vh", "vhh", "heavy", "heavy_chain", "hc"}
@@ -129,20 +130,6 @@ def _resolve_hmmsearch() -> str | None:
     return None
 
 
-def _resolve_device(param: str) -> str:
-    normalized = str(param or "auto").strip().lower()
-    if normalized == "auto":
-        try:
-            import torch
-
-            return "cuda" if torch.cuda.is_available() else "cpu"
-        except ImportError:
-            return "cpu"
-    if normalized.isdigit():
-        return f"cuda:{normalized}"
-    return normalized or "cpu"
-
-
 class AbEpiTopeScorePlugin(InterfacePlugin):
     name = "abepitope_score"
     prefix = "abepitope"
@@ -157,16 +144,7 @@ class AbEpiTopeScorePlugin(InterfacePlugin):
     _metrics_cache: dict[str, dict[str, float]] = {}
 
     def scheduling(self, cfg: Any | None = None) -> dict[str, Any]:
-        scheduling = super().scheduling(cfg)
-        params = dict(getattr(cfg, "plugin_params", {}).get(self.name, {})) if cfg is not None else {}
-        device = str(params.get("device", "auto") or "auto").strip().lower()
-        gpu_budget = 0
-        if cfg is not None:
-            gpu_budget = max(int(getattr(cfg, "gpu_workers", 0)), len(getattr(cfg, "gpu_devices", []) or []))
-        use_gpu_pool = device.startswith("cuda") or device.isdigit() or (device == "auto" and gpu_budget > 0)
-        scheduling["device_kind"] = "cuda" if use_gpu_pool else (device or "auto")
-        scheduling["worker_pool"] = "gpu" if use_gpu_pool else "cpu"
-        return scheduling
+        return _gpu_scheduling(super().scheduling(cfg), cfg, self.name)
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
         try:

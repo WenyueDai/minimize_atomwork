@@ -9,7 +9,6 @@ from ....base import Context, RolePlugin
 class RoleSequencesPlugin(RolePlugin):
     name = "role_sequences"
     prefix = "rolseq"
-    analysis_category = "structure_analysis"
 
     def run(self, ctx: Context):
         for role_name, role_aa in self.iter_roles(ctx):

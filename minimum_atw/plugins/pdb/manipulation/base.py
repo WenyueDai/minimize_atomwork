@@ -13,3 +13,6 @@ class BaseStructureManipulation:
 
     def available(self, _ctx) -> tuple[bool, str]:
         return True, ""
+
+    def plugin_params(self, ctx) -> dict:
+        return dict(getattr(ctx.config, "plugin_params", {}).get(self.name, {}))

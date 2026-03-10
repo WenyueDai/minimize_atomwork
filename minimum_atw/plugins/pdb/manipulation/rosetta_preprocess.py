@@ -42,9 +42,6 @@ class RosettaPreprocessManipulation(BaseStructureManipulation):
     name = "rosetta_preprocess"
     prefix = "rosprep"
 
-    def _params(self, ctx) -> dict:
-        return dict(getattr(ctx.config, "plugin_params", {}).get(self.name, {}))
-
     def available(self, ctx) -> tuple[bool, str]:
         if ctx is None:
             return True, ""
@@ -57,7 +54,7 @@ class RosettaPreprocessManipulation(BaseStructureManipulation):
         database = resolve_database(score_jd2, ctx.config)
         if not database:
             return False, "Rosetta database not found"
-        params = self._params(ctx)
+        params = self.plugin_params(ctx)
         do_repack = params.get("repack", True)
         do_relax = params.get("relax", False)
         if do_repack or do_relax:
@@ -67,7 +64,7 @@ class RosettaPreprocessManipulation(BaseStructureManipulation):
         return True, ""
 
     def run(self, ctx):
-        params = self._params(ctx)
+        params = self.plugin_params(ctx)
         do_rosetta = getattr(ctx.config, "rosetta_preprocess", True)
         pre_scores: dict = {}
         post_scores: dict = {}

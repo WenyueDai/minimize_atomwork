@@ -14,8 +14,8 @@ try:
         _build_fixedchains_pose,
         _build_interface_analyzer_command,
         _parse_scorefile,
-        _build_score_jd2_command,
     )
+    from minimum_atw.plugins.pdb.rosetta_common import run_score_jd2 as _run_score_jd2
 except ModuleNotFoundError as exc:
     if exc.name not in {"biotite", "numpy", "pydantic"}:
         raise
@@ -66,13 +66,23 @@ class RosettaInterfacePluginTests(unittest.TestCase):
         self.assertEqual(command[command.index("-packstat::oversample") + 1], "100")
 
     def test_score_jd2_command_uses_expected_fixup_flags(self) -> None:
-        command = _build_score_jd2_command(
-            "score_jd2.static.linuxgccrelease",
-            "/rosetta/database",
-            Path("/tmp/input.pdb"),
-            Path("/tmp/preprocessed"),
-        )
+        captured: list[list[str]] = []
 
+        def fake_run(command, **_kwargs):
+            captured.append(list(command))
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+        with mock.patch("minimum_atw.plugins.pdb.rosetta_common.subprocess.run", side_effect=fake_run):
+            _run_score_jd2(
+                executable="score_jd2.static.linuxgccrelease",
+                database="/rosetta/database",
+                input_path=Path("/tmp/input.pdb"),
+                score_path=Path("/tmp/dummy.sc"),
+                output_pdb_dir=Path("/tmp/preprocessed"),
+            )
+
+        self.assertEqual(len(captured), 1)
+        command = captured[0]
         self.assertEqual(command[0], "score_jd2.static.linuxgccrelease")
         self.assertIn("-ignore_unrecognized_res", command)
         self.assertEqual(command[command.index("-no_optH") + 1], "false")

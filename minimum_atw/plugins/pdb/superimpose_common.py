@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Iterator
 
 import biotite.structure as struc
 import numpy as np
@@ -99,3 +100,31 @@ def superimpose_complex(
         fixed_idx=fixed_idx,
         mobile_idx=mobile_idx,
     )
+
+
+def iter_chain_rmsd(
+    fixed: struc.AtomArray,
+    mobile: struc.AtomArray,
+    fixed_idx: np.ndarray,
+    mobile_idx: np.ndarray,
+    *,
+    path: str,
+    assembly_id: str,
+) -> Iterator[dict]:
+    """Yield per-chain RMSD rows for matching chains between fixed and mobile."""
+    fixed_chain = fixed.chain_id[fixed_idx].astype(str)
+    mobile_chain = mobile.chain_id[mobile_idx].astype(str)
+    for chain_id in sorted(set(fixed_chain) & set(mobile_chain)):
+        chain_mask = (fixed_chain == chain_id) & (mobile_chain == chain_id)
+        cf_idx = fixed_idx[chain_mask]
+        cm_idx = mobile_idx[chain_mask]
+        if len(cf_idx) == 0:
+            continue
+        yield {
+            "grain": "chain",
+            "path": path,
+            "assembly_id": assembly_id,
+            "chain_id": str(chain_id),
+            "rmsd": float(struc.rmsd(fixed[cf_idx], mobile[cm_idx])),
+            "matched_atoms": int(len(cf_idx)),
+        }

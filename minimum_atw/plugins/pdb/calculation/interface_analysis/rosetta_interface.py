@@ -11,9 +11,11 @@ from biotite.structure.io import save_structure
 
 from ....base import Context, InterfacePlugin
 from ...rosetta_common import (
+    _parse_scorefile_raw,
     resolve_database as _resolve_database,
     resolve_executable as _resolve_executable,
     resolve_score_jd2_executable as _resolve_score_jd2_executable,
+    run_score_jd2 as _run_score_jd2,
 )
 
 
@@ -70,29 +72,6 @@ def _build_interface_analyzer_command(
     return command
 
 
-def _build_score_jd2_command(
-    executable: str,
-    database: str,
-    input_path: Path,
-    output_dir: Path,
-) -> list[str]:
-    return [
-        executable,
-        "-database",
-        database,
-        "-in:file:s",
-        str(input_path),
-        "-no_optH",
-        "false",
-        "-ignore_unrecognized_res",
-        "-out:pdb",
-        "-out:path:all",
-        str(output_dir),
-        "-mute",
-        "all",
-    ]
-
-
 def _preprocess_input_with_score_jd2(
     *,
     score_jd2_executable: str,
@@ -102,12 +81,12 @@ def _preprocess_input_with_score_jd2(
 ) -> Path:
     output_dir = tmp_path / "score_jd2"
     output_dir.mkdir(parents=True, exist_ok=True)
-    command = _build_score_jd2_command(score_jd2_executable, database, input_path, output_dir)
-    subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=True,
+    _run_score_jd2(
+        executable=score_jd2_executable,
+        database=database,
+        input_path=input_path,
+        score_path=output_dir / "dummy.sc",
+        output_pdb_dir=output_dir,
     )
     outputs = sorted(output_dir.glob("*.pdb"))
     if len(outputs) != 1:
@@ -117,66 +96,44 @@ def _preprocess_input_with_score_jd2(
     return outputs[0]
 
 
+_ROSETTA_INTERFACE_WANTED = {
+    "interface_dG": "interface_dg",
+    "dG_separated": "interface_dg_separated",
+    "dG_separated/dSASAx100": "interface_dg_separated_per_dsasa_x100",
+    "dSASA_int": "interface_dsasa",
+    "dSASA_hphobic": "interface_dsasa_hydrophobic",
+    "dSASA_polar": "interface_dsasa_polar",
+    "packstat": "interface_packstat",
+    "sc_value": "interface_sc_value",
+    "dG_cross": "interface_dg_cross",
+    "dG_cross/dSASAx100": "interface_dg_cross_per_dsasa_x100",
+    "cen_dG": "interface_cen_dg",
+    "delta_unsatHbonds": "interface_delta_unsat_hbonds",
+    "hbonds_int": "interface_hbonds",
+    "nres_int": "interface_nres",
+    "per_residue_energy_int": "interface_per_residue_energy",
+    "side1_score": "interface_side1_score",
+    "side2_score": "interface_side2_score",
+    "nres_all": "complex_nres",
+    "side1_normalized": "interface_side1_normalized",
+    "side2_normalized": "interface_side2_normalized",
+    "complex_normalized": "complex_normalized",
+    "hbond_E_fraction": "interface_hbond_e_fraction",
+}
+_ROSETTA_INTERFACE_INTEGER_KEYS = {"interface_delta_unsat_hbonds", "interface_hbonds", "interface_nres", "complex_nres"}
+
+
 def _parse_scorefile(score_path: Path) -> dict[str, float | int]:
-    # Rosetta scorefiles contain a header row and one or more SCORE rows; the
-    # final SCORE row is the actual result we want.
-    if not score_path.exists():
-        return {}
-
-    lines = [line.strip() for line in score_path.read_text().splitlines() if line.strip()]
-    header = next((line for line in lines if line.startswith("SCORE:") and "description" in line), None)
-    values = None
-    for line in reversed(lines):
-        if line.startswith("SCORE:") and "description" not in line:
-            values = line
-            break
-    if header is None or values is None:
-        return {}
-
-    keys = header.split()[1:]
-    vals = values.split()[1:]
-    if len(keys) != len(vals):
-        return {}
-
-    wanted = {
-        # Map Rosetta's native column names to the output schema used by this
-        # package.
-        "interface_dG": "interface_dg",
-        "dG_separated": "interface_dg_separated",
-        "dG_separated/dSASAx100": "interface_dg_separated_per_dsasa_x100",
-        "dSASA_int": "interface_dsasa",
-        "dSASA_hphobic": "interface_dsasa_hydrophobic",
-        "dSASA_polar": "interface_dsasa_polar",
-        "packstat": "interface_packstat",
-        "sc_value": "interface_sc_value",
-        "dG_cross": "interface_dg_cross",
-        "dG_cross/dSASAx100": "interface_dg_cross_per_dsasa_x100",
-        "cen_dG": "interface_cen_dg",
-        "delta_unsatHbonds": "interface_delta_unsat_hbonds",
-        "hbonds_int": "interface_hbonds",
-        "nres_int": "interface_nres",
-        "per_residue_energy_int": "interface_per_residue_energy",
-        "side1_score": "interface_side1_score",
-        "side2_score": "interface_side2_score",
-        "nres_all": "complex_nres",
-        "side1_normalized": "interface_side1_normalized",
-        "side2_normalized": "interface_side2_normalized",
-        "complex_normalized": "complex_normalized",
-        "hbond_E_fraction": "interface_hbond_e_fraction",
-    }
     parsed: dict[str, float | int] = {}
-    for key, value in zip(keys, vals):
-        out_key = wanted.get(key)
+    for key, value in zip(*_parse_scorefile_raw(score_path)):
+        out_key = _ROSETTA_INTERFACE_WANTED.get(key)
         if out_key is None:
             continue
         try:
             num = float(value)
         except Exception:
             continue
-        if out_key in {"interface_delta_unsat_hbonds", "interface_hbonds", "interface_nres", "complex_nres"}:
-            parsed[out_key] = int(round(num))
-        else:
-            parsed[out_key] = num
+        parsed[out_key] = int(round(num)) if out_key in _ROSETTA_INTERFACE_INTEGER_KEYS else num
     return parsed
 
 

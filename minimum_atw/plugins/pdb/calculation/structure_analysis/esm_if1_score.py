@@ -6,6 +6,7 @@ import biotite.structure as struc
 import numpy as np
 
 from ....base import Context, RolePlugin
+from ..._utils import _gpu_scheduling, _resolve_device
 
 
 _MODEL_CACHE: dict[str, tuple[Any, Any]] = {}
@@ -17,17 +18,6 @@ def _patch_biotite() -> None:
     """Add filter_backbone alias required by ESM with biotite >= 1.0."""
     if not hasattr(struc, "filter_backbone"):
         struc.filter_backbone = struc.filter_peptide_backbone  # type: ignore[attr-defined]
-
-
-def _resolve_device(param: str) -> str:
-    if param != "auto":
-        return param
-    try:
-        import torch
-
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
 
 
 def _load_model(device: str) -> tuple[Any, Any]:
@@ -183,16 +173,7 @@ class EsmIf1ScorePlugin(RolePlugin):
     prefix = "esmif1"
 
     def scheduling(self, cfg: Any | None = None) -> dict[str, Any]:
-        scheduling = super().scheduling(cfg)
-        params = dict(getattr(cfg, "plugin_params", {}).get(self.name, {})) if cfg is not None else {}
-        device = str(params.get("device", "auto") or "auto").strip().lower()
-        gpu_budget = 0
-        if cfg is not None:
-            gpu_budget = max(int(getattr(cfg, "gpu_workers", 0)), len(getattr(cfg, "gpu_devices", []) or []))
-        use_gpu_pool = device.startswith("cuda") or (device == "auto" and gpu_budget > 0)
-        scheduling["device_kind"] = "cuda" if use_gpu_pool else (device or "auto")
-        scheduling["worker_pool"] = "gpu" if use_gpu_pool else "cpu"
-        return scheduling
+        return _gpu_scheduling(super().scheduling(cfg), cfg, self.name)
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
         try:

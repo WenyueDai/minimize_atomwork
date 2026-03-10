@@ -3,20 +3,10 @@ from __future__ import annotations
 from typing import Any
 
 from ....base import Context, RolePlugin
+from ..._utils import _gpu_scheduling, _resolve_device
 
 
 _MODEL_CACHE: dict[str, Any] = {}
-
-
-def _resolve_device(param: str) -> str:
-    if param != "auto":
-        return param
-    try:
-        import torch
-
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except ImportError:
-        return "cpu"
 
 
 def _load_model(device: str) -> Any:
@@ -92,16 +82,7 @@ class AbLang2ScorePlugin(RolePlugin):
     prefix = "ablang2"
 
     def scheduling(self, cfg: Any | None = None) -> dict[str, Any]:
-        scheduling = super().scheduling(cfg)
-        params = dict(getattr(cfg, "plugin_params", {}).get(self.name, {})) if cfg is not None else {}
-        device = str(params.get("device", "auto") or "auto").strip().lower()
-        gpu_budget = 0
-        if cfg is not None:
-            gpu_budget = max(int(getattr(cfg, "gpu_workers", 0)), len(getattr(cfg, "gpu_devices", []) or []))
-        use_gpu_pool = device.startswith("cuda") or (device == "auto" and gpu_budget > 0)
-        scheduling["device_kind"] = "cuda" if use_gpu_pool else (device or "auto")
-        scheduling["worker_pool"] = "gpu" if use_gpu_pool else "cpu"
-        return scheduling
+        return _gpu_scheduling(super().scheduling(cfg), cfg, self.name)
 
     def available(self, ctx: Context | None) -> tuple[bool, str]:
         try:
@@ -113,7 +94,6 @@ class AbLang2ScorePlugin(RolePlugin):
     def run(self, ctx: Context):
         params = self.plugin_params(ctx)
         device = _resolve_device(str(params.get("device", "auto")))
-
         model = _load_model(device)
 
         for role_name, _role_aa in self.iter_roles(ctx):
@@ -137,12 +117,10 @@ class AbLang2ScorePlugin(RolePlugin):
                 continue
 
             ll, _ = _score_role(model, seqs, device)
-            n_residues = sum(len(s) for s in seqs)
-
             yield {
                 "grain": "role",
                 **self.role_identity_row(ctx, role_name=role_name),
                 "n_chains": len(seqs),
-                "n_residues": n_residues,
+                "n_residues": sum(len(s) for s in seqs),
                 "ll": ll,
             }

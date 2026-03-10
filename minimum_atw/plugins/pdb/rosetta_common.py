@@ -41,99 +41,79 @@ def _candidate_bin_dirs(config: Any | None = None, executable: str | None = None
     return unique
 
 
-def resolve_executable(config: Any | None = None) -> str | None:
-    """Resolve the Rosetta InterfaceAnalyzer executable."""
-    configured = _existing_path(getattr(config, "rosetta_executable", None))
+def _resolve_rosetta_executable(
+    config: Any | None,
+    *,
+    config_attr: str,
+    env_var: str,
+    name_variants: tuple[str, ...],
+    anchor_executable: str | None = None,
+) -> str | None:
+    configured = _existing_path(getattr(config, config_attr, None))
     if configured:
         return configured
-
-    env_explicit = _existing_path(os.environ.get("ROSETTA_INTERFACE_ANALYZER"))
+    env_explicit = _existing_path(os.environ.get(env_var))
     if env_explicit:
         return env_explicit
-
-    for bin_path in _candidate_bin_dirs(config):
-        for name in (
-            "InterfaceAnalyzer.static.linuxgccrelease",
-            "InterfaceAnalyzer.linuxgccrelease",
-            "InterfaceAnalyzer.default.linuxgccrelease",
-        ):
+    for bin_path in _candidate_bin_dirs(config, executable=anchor_executable):
+        for name in name_variants:
             candidate = bin_path / name
             if candidate.exists():
                 return str(candidate)
-
-    for name in (
-        "InterfaceAnalyzer.static.linuxgccrelease",
-        "InterfaceAnalyzer.linuxgccrelease",
-        "InterfaceAnalyzer.default.linuxgccrelease",
-    ):
+    for name in name_variants:
         found = shutil.which(name)
         if found:
             return found
     return None
+
+
+_INTERFACE_ANALYZER_VARIANTS = (
+    "InterfaceAnalyzer.static.linuxgccrelease",
+    "InterfaceAnalyzer.linuxgccrelease",
+    "InterfaceAnalyzer.default.linuxgccrelease",
+)
+_SCORE_JD2_VARIANTS = (
+    "score_jd2.static.linuxgccrelease",
+    "score_jd2.linuxgccrelease",
+    "score_jd2.default.linuxgccrelease",
+)
+_RELAX_VARIANTS = (
+    "relax.static.linuxgccrelease",
+    "relax.linuxgccrelease",
+    "relax.default.linuxgccrelease",
+)
+
+
+def resolve_executable(config: Any | None = None) -> str | None:
+    """Resolve the Rosetta InterfaceAnalyzer executable."""
+    return _resolve_rosetta_executable(
+        config,
+        config_attr="rosetta_executable",
+        env_var="ROSETTA_INTERFACE_ANALYZER",
+        name_variants=_INTERFACE_ANALYZER_VARIANTS,
+    )
 
 
 def resolve_score_jd2_executable(config: Any | None = None) -> str | None:
     """Resolve the Rosetta score_jd2 executable."""
-    configured = _existing_path(getattr(config, "rosetta_score_jd2_executable", None))
-    if configured:
-        return configured
-
-    env_explicit = _existing_path(os.environ.get("ROSETTA_SCORE_JD2"))
-    if env_explicit:
-        return env_explicit
-
-    interface_executable = resolve_executable(config)
-    for bin_path in _candidate_bin_dirs(config, executable=interface_executable):
-        for name in (
-            "score_jd2.static.linuxgccrelease",
-            "score_jd2.linuxgccrelease",
-            "score_jd2.default.linuxgccrelease",
-        ):
-            candidate = bin_path / name
-            if candidate.exists():
-                return str(candidate)
-
-    for name in (
-        "score_jd2.static.linuxgccrelease",
-        "score_jd2.linuxgccrelease",
-        "score_jd2.default.linuxgccrelease",
-    ):
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+    return _resolve_rosetta_executable(
+        config,
+        config_attr="rosetta_score_jd2_executable",
+        env_var="ROSETTA_SCORE_JD2",
+        name_variants=_SCORE_JD2_VARIANTS,
+        anchor_executable=resolve_executable(config),
+    )
 
 
 def resolve_relax_executable(config: Any | None = None) -> str | None:
     """Resolve the Rosetta relax executable."""
-    configured = _existing_path(getattr(config, "rosetta_relax_executable", None))
-    if configured:
-        return configured
-
-    env_explicit = _existing_path(os.environ.get("ROSETTA_RELAX"))
-    if env_explicit:
-        return env_explicit
-
-    interface_executable = resolve_executable(config)
-    for bin_path in _candidate_bin_dirs(config, executable=interface_executable):
-        for name in (
-            "relax.static.linuxgccrelease",
-            "relax.linuxgccrelease",
-            "relax.default.linuxgccrelease",
-        ):
-            candidate = bin_path / name
-            if candidate.exists():
-                return str(candidate)
-
-    for name in (
-        "relax.static.linuxgccrelease",
-        "relax.linuxgccrelease",
-        "relax.default.linuxgccrelease",
-    ):
-        found = shutil.which(name)
-        if found:
-            return found
-    return None
+    return _resolve_rosetta_executable(
+        config,
+        config_attr="rosetta_relax_executable",
+        env_var="ROSETTA_RELAX",
+        name_variants=_RELAX_VARIANTS,
+        anchor_executable=resolve_executable(config),
+    )
 
 
 def resolve_database(executable: str | None, config: Any | None = None) -> str | None:
@@ -213,11 +193,10 @@ def run_relax(
     return outputs[0]
 
 
-def parse_score_jd2_scorefile(score_path: Path) -> dict[str, float | int]:
-    """Parse a score_jd2 scorefile and return all numeric energy terms."""
+def _parse_scorefile_raw(score_path: Path) -> tuple[list[str], list[str]]:
+    """Return (keys, values) from a Rosetta scorefile, or ([], []) if not parseable."""
     if not score_path.exists():
-        return {}
-
+        return [], []
     lines = [line.strip() for line in score_path.read_text().splitlines() if line.strip()]
     header = next((line for line in lines if line.startswith("SCORE:") and "description" in line), None)
     values = None
@@ -226,16 +205,19 @@ def parse_score_jd2_scorefile(score_path: Path) -> dict[str, float | int]:
             values = line
             break
     if header is None or values is None:
-        return {}
-
+        return [], []
     keys = header.split()[1:]
     vals = values.split()[1:]
     if len(keys) != len(vals):
-        return {}
+        return [], []
+    return keys, vals
 
+
+def parse_score_jd2_scorefile(score_path: Path) -> dict[str, float | int]:
+    """Parse a score_jd2 scorefile and return all numeric energy terms."""
     integer_terms = {"nres_all", "nres_int"}
     parsed: dict[str, float | int] = {}
-    for key, val in zip(keys, vals):
+    for key, val in zip(*_parse_scorefile_raw(score_path)):
         if key == "description":
             continue
         try:
