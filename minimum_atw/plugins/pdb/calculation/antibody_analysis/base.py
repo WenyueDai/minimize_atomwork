@@ -21,10 +21,12 @@ def cdr_definition_from_config(config) -> str | None:
 
 
 def antibody_role_names(ctx: Context) -> tuple[str, ...]:
+    if ctx is None:
+        return ()
     configured = tuple(str(role_name) for role_name in getattr(ctx.config, "numbering_roles", []) if str(role_name))
     if configured:
         return configured
-    return tuple(role_name for role_name in DEFAULT_NUMBERING_ROLES if role_name in ctx.roles)
+    return tuple(role_name for role_name in DEFAULT_NUMBERING_ROLES if role_name in (ctx.roles or {}))
 
 
 def antibody_role_sequences(ctx: Context) -> list[tuple[str, list[str], str]]:
@@ -64,11 +66,13 @@ class AntibodyPluginBase(BasePlugin):
     def eligible_antibody_role_names(self, ctx: Context) -> tuple[str, ...]:
         return tuple(role_name for role_name, _chain_ids, _sequence in self._antibody_role_sequences(ctx))
 
-    def available(self, ctx: Context) -> tuple[bool, str]:
+    def available(self, ctx: Context | None) -> tuple[bool, str]:
         try:
             import abnumber  # noqa: F401
         except ImportError as exc:
             return False, f"abnumber is not importable: {exc}"
+        if ctx is None:
+            return True, ""
         configured = self.antibody_role_names(ctx)
         if not configured:
             return False, "no antibody numbering roles found; set numbering_roles or use roles such as vh, vl, or vhh"

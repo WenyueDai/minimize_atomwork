@@ -42,6 +42,8 @@ dev = [
 #   pip install git+https://github.com/mnielLab/AbEpiTope-1.0.git
 # Then install this extra for the remaining runtime deps.
 # The external `hmmsearch` binary from HMMER is also required on PATH.
+# NOTE: torch-scatter must be installed separately due to build isolation;
+#   see README "esm_if1_score / abepitope_score on HPC" for the correct command.
 abepitope = [
   "torch>=2.0",
   "fair-esm>=2.0",
@@ -53,6 +55,11 @@ ablang2 = [
   "torch>=2.0",
 ]
 
+# NOTE: fair-esm requires torch-scatter at runtime, which cannot be declared
+# here because its wheel must be built against the already-installed PyTorch.
+# Install torch-scatter separately after installing this extra:
+#   pip install torch-scatter --no-build-isolation
+# or use a prebuilt wheel from https://data.pyg.org/whl/
 esm = [
   "torch>=2.0",
   "fair-esm>=2.0",
@@ -60,6 +67,7 @@ esm = [
 
 # All PyPI-installable optional deps.
 # abepitope itself must still be installed from GitHub separately.
+# torch-scatter still requires separate install; see README.
 all = [
   "ablang2>=0.2.1",
   "torch>=2.0",

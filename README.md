@@ -315,7 +315,7 @@ Enable only the plugins you need. Each plugin appends prefixed columns to the ou
 | `dockq_score` | interface | `dockq__` | DockQ Fnat/LRMS/iRMS vs native | reference PDB |
 | `abepitope_score` | interface | `abepitope__` | epitope probability score | `abepitope`, `hmmsearch` |
 | `ablang2_score` | role | `ablang2__` | antibody log-likelihood per role | `ablang2`, `torch` |
-| `esm_if1_score` | role | `esm__` | ESM-IF1 log-likelihood per role | `fair-esm`, `torch` |
+| `esm_if1_score` | role | `esm__` | ESM-IF1 log-likelihood per role | `fair-esm`, `torch`, `torch-scatter` |
 | `rosetta_interface_example` | interface | `rosetta__` | dG, dSASA, packstat, hbonds | Rosetta binaries |
 | `structure_rmsd` | structure + chain | `rmsd__` | All-atom RMSD vs reference after Kabsch fit; per-chain breakdown | — |
 
@@ -960,9 +960,14 @@ pip install -e ".[ablang2]"     # pulls in ablang2 and torch
 
 # esm_if1_score
 pip install -e ".[esm]"         # pulls in torch and fair-esm
+# fair-esm requires torch-scatter, which cannot be declared as a normal dependency
+# because its wheel must be compiled against the already-installed PyTorch.
+# Install it separately after the above:
+pip install torch-scatter --no-build-isolation
 
 # all PyPI-installable extras at once (abepitope GitHub step still required separately)
 pip install -e ".[all]"
+pip install torch-scatter --no-build-isolation   # still required for esm_if1_score / abepitope_score
 ```
 
 ### External binary dependency
@@ -1050,7 +1055,7 @@ Notes:
 
 - `abepitope` is GitHub-only; `pip install -e ".[abepitope]"` will **not** install it — that GitHub step is required first
 - `abepitope_score` also needs the `hmmsearch` binary (see above)
-- `esm_if1_score` needs `torch` and `fair-esm`
+- `esm_if1_score` (and `abepitope_score`) needs `torch-scatter` — install with `pip install torch-scatter --no-build-isolation` after PyTorch is in place; on HPC without internet access, download the matching prebuilt wheel from `https://data.pyg.org/whl/torch-{VERSION}+{CUDA}.html` and transfer it
 - `ablang2_score` needs `ablang2`
 - Rosetta is not installed by this package
 - example YAMLs usually need path edits (`input_dir`, `out_dir`) before reuse on another machine

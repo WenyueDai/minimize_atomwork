@@ -181,6 +181,10 @@ class EsmIf1ScorePlugin(RolePlugin):
         except ImportError:
             return False, "esm_if1_score requires torch (pip install torch)"
         try:
+            import torch_scatter  # noqa: F401
+        except ImportError:
+            return False, "esm_if1_score requires torch_scatter (pip install torch-scatter)"
+        try:
             _patch_biotite()
             import esm  # noqa: F401
         except ImportError:

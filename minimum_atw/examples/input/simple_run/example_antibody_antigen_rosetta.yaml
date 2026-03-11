@@ -124,10 +124,10 @@ numbering_scheme: "imgt"
 cdr_definition: "imgt"
 
 # ── Rosetta configuration ──────────────────────────────────────────────────────
-rosetta_executable: "/path/to/InterfaceAnalyzer.static.linuxgccrelease"
-rosetta_database: "/path/to/rosetta/database"   # folder from Rosetta GitHub; contains scoring/, sequence/, ...
-rosetta_score_jd2_executable: "/path/to/score_jd2.static.linuxgccrelease"
-rosetta_relax_executable: "/path/to/relax.static.linuxgccrelease"
+rosetta_executable: /home/youruser/bin/InterfaceAnalyzer
+rosetta_database: /home/youruser/Rosetta_database/rosetta/database
+rosetta_score_jd2_executable: /home/youruser/bin/score_jd2
+rosetta_relax_executable: /home/youruser/bin/relax
 # Singularity: set each executable to a wrapper script that calls
 #   singularity exec --bind /home:/home <sif> <tool> "$@"
 rosetta_preprocess: true
